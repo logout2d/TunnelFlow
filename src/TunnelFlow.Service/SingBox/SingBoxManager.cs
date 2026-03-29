@@ -35,6 +35,11 @@ public sealed class SingBoxManager : ISingBoxManager
 
         SetStatus(SingBoxStatus.Starting);
 
+        // Kill any leftover sing-box processes from a previous (unclean) run before
+        // starting a fresh one; otherwise the SOCKS port stays in use.
+        KillOrphanedSingBoxProcesses(config.BinaryPath);
+        await Task.Delay(500, ct);
+
         var configJson = _configBuilder.Build(profile, config);
         var configDir = Path.GetDirectoryName(config.ConfigOutputPath);
         if (configDir is not null)
@@ -81,19 +86,12 @@ public sealed class SingBoxManager : ISingBoxManager
         {
             try
             {
-                _process.CloseMainWindow();
+                // Force-kill with entire process tree so child processes (if any) are also gone.
+                _process.Kill(entireProcessTree: true);
                 await _process.WaitForExitAsync(ct)
-                    .WaitAsync(TimeSpan.FromSeconds(3), ct);
+                    .WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
             }
-            catch
-            {
-                // Fallback: force kill
-            }
-
-            if (!_process.HasExited)
-            {
-                try { _process.Kill(); } catch { }
-            }
+            catch { }
         }
 
         CleanupProcess();
@@ -182,6 +180,26 @@ public sealed class SingBoxManager : ISingBoxManager
         _process.Exited -= OnProcessExited;
         try { _process.Dispose(); } catch { }
         _process = null;
+    }
+
+    private static void KillOrphanedSingBoxProcesses(string binaryPath)
+    {
+        try
+        {
+            var exeName = Path.GetFileNameWithoutExtension(binaryPath);
+            var processes = Process.GetProcessesByName(exeName);
+            foreach (var p in processes)
+            {
+                try
+                {
+                    p.Kill(entireProcessTree: true);
+                    p.WaitForExit(2000);
+                }
+                catch { }
+                finally { p.Dispose(); }
+            }
+        }
+        catch { }
     }
 
     private static async Task<bool> WaitForSocksPortAsync(int port, CancellationToken ct)

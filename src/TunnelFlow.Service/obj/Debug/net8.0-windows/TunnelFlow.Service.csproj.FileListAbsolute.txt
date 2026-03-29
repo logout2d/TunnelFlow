@@ -58,3 +58,4 @@ D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\System.Ser
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\runtimes\win\lib\net8.0\System.ServiceProcess.ServiceController.dll
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\NdisApiDotNet.dll
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\NdisApiDotNet.pdb
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\ndisapi.dll

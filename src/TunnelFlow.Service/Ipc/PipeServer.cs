@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
+using System.Net;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -21,13 +22,21 @@ public sealed class PipeServer
     private static readonly JsonSerializerOptions _serializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
+            new IPEndPointJsonConverter()
+        }
     };
 
     private static readonly JsonSerializerOptions _compactOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
+            new IPEndPointJsonConverter()
+        }
     };
 
     private readonly ILogger<PipeServer> _logger;
@@ -360,4 +369,27 @@ public sealed class PipeServer
     }
 
     private sealed record ConnectedClient(int Id, Channel<string> Outbound);
+}
+
+internal sealed class IPEndPointJsonConverter : JsonConverter<IPEndPoint>
+{
+    public override IPEndPoint? Read(
+        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var root = doc.RootElement;
+        var address = IPAddress.Parse(
+            root.GetProperty("address").GetString() ?? "0.0.0.0");
+        var port = root.GetProperty("port").GetInt32();
+        return new IPEndPoint(address, port);
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer, IPEndPoint value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("address", value.Address.ToString());
+        writer.WriteNumber("port", value.Port);
+        writer.WriteEndObject();
+    }
 }
