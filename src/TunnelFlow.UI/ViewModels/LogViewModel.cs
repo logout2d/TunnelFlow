@@ -16,15 +16,15 @@ public partial class LogViewModel : ObservableObject
     public LogViewModel()
     {
         ClearCommand = new RelayCommand(() =>
-            Application.Current.Dispatcher.Invoke(() => Lines.Clear()));
+            Application.Current.Dispatcher.InvokeAsync(() => Lines.Clear()));
     }
 
     public void AddLine(string source, string level, string message)
     {
         var line = new LogLineViewModel(source, level, message);
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            while (Lines.Count >= MaxLines)
+            if (Lines.Count >= MaxLines)
                 Lines.RemoveAt(0);
             Lines.Add(line);
         });

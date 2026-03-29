@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -50,12 +52,32 @@ public sealed class PipeServer
 
         while (!ct.IsCancellationRequested)
         {
-            var pipe = new NamedPipeServerStream(
+
+            // Apply PipeSecurity to every instance.
+            // WorldSid:ReadWrite    — lets the non-elevated UI connect.
+            // Current user FullControl — lets the elevated service create additional
+            //   instances. Without FullControl for the creator the explicit DACL
+            //   strips CreateNewInstance rights and every instance after the first
+            //   throws UnauthorizedAccessException.
+            var security = new PipeSecurity();
+            security.AddAccessRule(new PipeAccessRule(
+                new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+            security.AddAccessRule(new PipeAccessRule(
+                WindowsIdentity.GetCurrent().User!,
+                PipeAccessRights.FullControl,
+                AccessControlType.Allow));
+
+            var pipe = NamedPipeServerStreamAcl.Create(
                 PipeName,
                 PipeDirection.InOut,
                 NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous,
+                inBufferSize: 0,
+                outBufferSize: 0,
+                pipeSecurity: security);
 
             try
             {
@@ -136,6 +158,7 @@ public sealed class PipeServer
     private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken ct)
     {
         int id = Interlocked.Increment(ref _nextClientId);
+
         var outbound = Channel.CreateBounded<string>(new BoundedChannelOptions(256)
         {
             FullMode = BoundedChannelFullMode.DropOldest
@@ -144,20 +167,26 @@ public sealed class PipeServer
         _clients.TryAdd(id, client);
         _logger.LogDebug("Pipe client {Id} connected", id);
 
-        var writerTask = ClientWriterAsync(pipe, outbound, ct);
-        var readerTask = ClientReaderAsync(pipe, outbound, ct);
+        using var clientLifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        try
+        var readerTask = Task.Run(async () =>
         {
-            await Task.WhenAny(writerTask, readerTask);
-        }
-        finally
+            try { await ClientReaderAsync(pipe, outbound, clientLifetime.Token); }
+            finally { clientLifetime.Cancel(); }
+        });
+
+        var writerTask = Task.Run(async () =>
         {
-            _clients.TryRemove(id, out _);
-            outbound.Writer.TryComplete();
-            _logger.LogDebug("Pipe client {Id} disconnected", id);
-            pipe.Dispose();
-        }
+            try { await ClientWriterAsync(pipe, outbound, clientLifetime.Token); }
+            finally { clientLifetime.Cancel(); }
+        });
+
+        await Task.WhenAll(readerTask, writerTask);
+
+        _clients.TryRemove(id, out _);
+        outbound.Writer.TryComplete();
+        _logger.LogDebug("Pipe client {Id} disconnected", id);
+        pipe.Dispose();
     }
 
     private static async Task ClientWriterAsync(
@@ -165,7 +194,7 @@ public sealed class PipeServer
         Channel<string> outbound,
         CancellationToken ct)
     {
-        var writer = new StreamWriter(pipe, Encoding.UTF8) { AutoFlush = true };
+        var writer = new StreamWriter(pipe, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
         await foreach (var msg in outbound.Reader.ReadAllAsync(ct))
         {
             await writer.WriteAsync(msg + "\n");
@@ -177,7 +206,7 @@ public sealed class PipeServer
         Channel<string> outbound,
         CancellationToken ct)
     {
-        var reader = new StreamReader(pipe, Encoding.UTF8);
+        var reader = new StreamReader(pipe, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         try
         {
             while (!ct.IsCancellationRequested && pipe.IsConnected)

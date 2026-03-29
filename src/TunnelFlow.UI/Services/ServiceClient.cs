@@ -14,6 +14,9 @@ public sealed class ServiceClient : IDisposable
 {
     private const string PipeName = "TunnelFlowService";
 
+    private static readonly Encoding _utf8NoBom =
+        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     private readonly JsonSerializerOptions _options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -24,26 +27,44 @@ public sealed class ServiceClient : IDisposable
         }
     };
 
-    private NamedPipeClientStream? _pipe;
-    private StreamWriter? _writer;
     private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement?>> _pending = new();
 
+    private CancellationTokenSource? _connectionCts;
+    private NamedPipeClientStream? _pipe;
+    private StreamWriter? _writer;
+
     public event EventHandler<EventMessage>? EventReceived;
     public event EventHandler? Disconnected;
     public event EventHandler? Connected;
+    public event EventHandler<string>? DiagnosticMessage;
 
     public bool IsConnected { get; private set; }
 
-    /// <summary>Connect to the service pipe with exponential-backoff retry until cancelled.</summary>
+    public void Dispose()
+    {
+        _lifetimeCts.Cancel();
+        _connectionCts?.Dispose();
+        _pipe?.Dispose();
+        _lifetimeCts.Dispose();
+        _writeLock.Dispose();
+    }
+
+    /// <summary>
+    /// Connect and start the read loop. Returns only after the connection
+    /// is established AND ReadLoopAsync is actively reading.
+    /// Retries indefinitely with exponential backoff until connected or ct is cancelled.
+    /// </summary>
     public async Task ConnectAsync(CancellationToken ct)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetimeCts.Token);
+        // Do NOT use 'using' — this CTS must stay alive for the ReadLoopAsync lifetime.
+        // It is stored in _connectionCts and disposed when ServiceClient is disposed.
+        var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetimeCts.Token);
+        _connectionCts = linked;
         await ConnectWithRetryAsync(linked.Token);
     }
 
-    /// <summary>Send a command and return the Ok payload, or throw on ErrorResponse.</summary>
     public async Task<JsonElement?> SendCommandAsync(string type, object? payload, CancellationToken ct)
     {
         if (!IsConnected || _writer is null)
@@ -51,7 +72,7 @@ public sealed class ServiceClient : IDisposable
 
         var id = Guid.NewGuid().ToString();
         var tcs = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pending.TryAdd(id, tcs);
+        _pending[id] = tcs;
 
         try
         {
@@ -65,25 +86,15 @@ public sealed class ServiceClient : IDisposable
             try { await _writer.WriteAsync(line.AsMemory(), ct); }
             finally { _writeLock.Release(); }
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(30));
-            timeout.Token.Register(() => tcs.TrySetCanceled());
-
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(15));
+            await using var reg = cts.Token.Register(() => tcs.TrySetCanceled());
             return await tcs.Task;
         }
-        catch
+        finally
         {
             _pending.TryRemove(id, out _);
-            throw;
         }
-    }
-
-    public void Dispose()
-    {
-        _lifetimeCts.Cancel();
-        _pipe?.Dispose();
-        _lifetimeCts.Dispose();
-        _writeLock.Dispose();
     }
 
     private async Task ConnectWithRetryAsync(CancellationToken ct)
@@ -93,36 +104,56 @@ public sealed class ServiceClient : IDisposable
         {
             try
             {
-                var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-                using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                connectCts.CancelAfter(TimeSpan.FromSeconds(5));
+                var pipe = new NamedPipeClientStream(".", PipeName,
+                    PipeDirection.InOut, PipeOptions.Asynchronous);
 
-                await pipe.ConnectAsync(connectCts.Token);
+                using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                connectTimeout.CancelAfter(TimeSpan.FromSeconds(5));
+                await pipe.ConnectAsync(connectTimeout.Token);
 
                 _pipe = pipe;
-                _writer = new StreamWriter(pipe, Encoding.UTF8) { AutoFlush = true };
+                _writer = new StreamWriter(pipe, _utf8NoBom) { AutoFlush = true };
+
+                // Start the read loop and wait until it signals that it is actively
+                // reading — only then is it safe to send commands and fire Connected.
+                var readLoopReady = new TaskCompletionSource();
+                _ = ReadLoopAsync(pipe, readLoopReady, ct);
+                await readLoopReady.Task;
+
                 IsConnected = true;
                 Connected?.Invoke(this, EventArgs.Empty);
-
-                _ = ReadLoopAsync(pipe, ct);
                 return;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
-                // Service not available yet — wait and retry
+                _pipe?.Dispose();
+                _pipe = null;
+                _writer = null;
+                DiagnosticMessage?.Invoke(this,
+                    $"Connect failed (retry in {delaySec}s): {ex.GetType().Name}: {ex.Message}");
                 await Task.Delay(TimeSpan.FromSeconds(delaySec), ct);
                 delaySec = Math.Min(delaySec * 2, 30);
             }
         }
     }
 
-    private async Task ReadLoopAsync(NamedPipeClientStream pipe, CancellationToken ct)
+    private async Task ReadLoopAsync(
+        NamedPipeClientStream pipe,
+        TaskCompletionSource readLoopReady,
+        CancellationToken ct)
     {
-        var reader = new StreamReader(pipe, Encoding.UTF8);
+        var reader = new StreamReader(pipe, _utf8NoBom);
+
+        // Signal before entering the loop: the reader is positioned and waiting.
+        // ConnectWithRetryAsync awaits this before firing Connected, guaranteeing
+        // that any SendCommandAsync call triggered by Connected will have its
+        // response picked up by this reader.
+        readLoopReady.TrySetResult();
+
         try
         {
             while (!ct.IsCancellationRequested && pipe.IsConnected)
@@ -134,15 +165,19 @@ public sealed class ServiceClient : IDisposable
             }
         }
         catch (OperationCanceledException) { }
-        catch { }
+        catch (Exception ex)
+        {
+            DiagnosticMessage?.Invoke(this, $"ReadLoop error: {ex.GetType().Name}: {ex.Message}");
+        }
         finally
         {
             IsConnected = false;
-            Disconnected?.Invoke(this, EventArgs.Empty);
 
-            foreach (var (_, pending) in _pending)
-                pending.TrySetCanceled();
+            foreach (var (_, tcs) in _pending)
+                tcs.TrySetCanceled();
             _pending.Clear();
+
+            Disconnected?.Invoke(this, EventArgs.Empty);
 
             if (!ct.IsCancellationRequested)
                 _ = ConnectWithRetryAsync(ct);
@@ -161,12 +196,13 @@ public sealed class ServiceClient : IDisposable
 
             if (type is "Ok" or "Error")
             {
-                var id = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                if (!root.TryGetProperty("id", out var idEl)) return;
+                var id = idEl.GetString();
                 if (id is null || !_pending.TryRemove(id, out var tcs)) return;
 
                 if (type == "Error")
                 {
-                    var msg = "Service returned an error";
+                    var msg = "Service error";
                     if (root.TryGetProperty("payload", out var ep) &&
                         ep.TryGetProperty("message", out var mel))
                         msg = mel.GetString() ?? msg;
@@ -175,9 +211,9 @@ public sealed class ServiceClient : IDisposable
                 else
                 {
                     JsonElement? payload = null;
-                    if (root.TryGetProperty("payload", out var payloadEl) &&
-                        payloadEl.ValueKind != JsonValueKind.Null)
-                        payload = payloadEl.Clone();
+                    if (root.TryGetProperty("payload", out var p) &&
+                        p.ValueKind != JsonValueKind.Null)
+                        payload = p.Clone();
                     tcs.TrySetResult(payload);
                 }
             }
@@ -188,36 +224,29 @@ public sealed class ServiceClient : IDisposable
                     payloadEl.ValueKind != JsonValueKind.Null)
                     payload = payloadEl.Clone();
 
-                var evt = new EventMessage { Type = type!, Payload = payload };
-                EventReceived?.Invoke(this, evt);
+                EventReceived?.Invoke(this, new EventMessage { Type = type!, Payload = payload });
             }
         }
         catch { }
     }
 
-    // --- Nested converter ---
-
     private sealed class IPEndPointJsonConverter : JsonConverter<IPEndPoint>
     {
-        public override IPEndPoint? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override IPEndPoint? Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions o)
         {
             using var doc = JsonDocument.ParseValue(ref reader);
             var root = doc.RootElement;
-            if (!root.TryGetProperty("address", out var addrEl) ||
-                !root.TryGetProperty("port", out var portEl))
+            if (!root.TryGetProperty("address", out var a) || !root.TryGetProperty("port", out var p))
                 return new IPEndPoint(IPAddress.Any, 0);
-
-            return new IPEndPoint(
-                IPAddress.Parse(addrEl.GetString() ?? "0.0.0.0"),
-                portEl.GetInt32());
+            return new IPEndPoint(IPAddress.Parse(a.GetString() ?? "0.0.0.0"), p.GetInt32());
         }
 
-        public override void Write(Utf8JsonWriter writer, IPEndPoint value, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter w, IPEndPoint v, JsonSerializerOptions o)
         {
-            writer.WriteStartObject();
-            writer.WriteString("address", value.Address.ToString());
-            writer.WriteNumber("port", value.Port);
-            writer.WriteEndObject();
+            w.WriteStartObject();
+            w.WriteString("address", v.Address.ToString());
+            w.WriteNumber("port", v.Port);
+            w.WriteEndObject();
         }
     }
 }

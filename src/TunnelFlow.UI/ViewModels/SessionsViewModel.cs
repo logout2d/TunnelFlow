@@ -11,30 +11,35 @@ public partial class SessionsViewModel : ObservableObject
 
     public void AddSessionFromJson(JsonElement payload)
     {
-        ulong flowId = payload.TryGetProperty("flowId", out var fi) ? fi.GetUInt64() : 0;
-        string processPath = payload.TryGetProperty("processPath", out var pp) ? pp.GetString() ?? "" : "";
-        string protocol = payload.TryGetProperty("protocol", out var pr) ? pr.GetString() ?? "" : "";
-        string state = payload.TryGetProperty("state", out var st) ? st.GetString() ?? "" : "";
-
-        string destination = "";
-        if (payload.TryGetProperty("originalDestination", out var dest))
+        // Clone before capture: JsonElement references the underlying JsonDocument
+        // which may be disposed after this call returns (background thread).
+        var captured = payload.Clone();
+        Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            string addr = dest.TryGetProperty("address", out var a) ? a.GetString() ?? "" : "";
-            int port = dest.TryGetProperty("port", out var p) ? p.GetInt32() : 0;
-            destination = $"{addr}:{port}";
-        }
+            ulong flowId = captured.TryGetProperty("flowId", out var fi) ? fi.GetUInt64() : 0;
+            string processPath = captured.TryGetProperty("processPath", out var pp) ? pp.GetString() ?? "" : "";
+            string protocol = captured.TryGetProperty("protocol", out var pr) ? pr.GetString() ?? "" : "";
+            string state = captured.TryGetProperty("state", out var st) ? st.GetString() ?? "" : "";
 
-        DateTime createdAt = DateTime.UtcNow;
-        if (payload.TryGetProperty("createdAt", out var ca) && ca.GetString() is string caStr)
-            DateTime.TryParse(caStr, out createdAt);
+            string destination = "";
+            if (captured.TryGetProperty("originalDestination", out var dest))
+            {
+                string addr = dest.TryGetProperty("address", out var a) ? a.GetString() ?? "" : "";
+                int port = dest.TryGetProperty("port", out var p) ? p.GetInt32() : 0;
+                destination = $"{addr}:{port}";
+            }
 
-        var item = new SessionItemViewModel(flowId, processPath, protocol, destination, state, createdAt);
-        Application.Current.Dispatcher.Invoke(() => Sessions.Add(item));
+            DateTime createdAt = DateTime.UtcNow;
+            if (captured.TryGetProperty("createdAt", out var ca) && ca.GetString() is string caStr)
+                DateTime.TryParse(caStr, out createdAt);
+
+            Sessions.Add(new SessionItemViewModel(flowId, processPath, protocol, destination, state, createdAt));
+        });
     }
 
     public void RemoveSession(ulong flowId)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.InvokeAsync(() =>
         {
             var item = Sessions.FirstOrDefault(s => s.FlowId == flowId);
             if (item is not null) Sessions.Remove(item);

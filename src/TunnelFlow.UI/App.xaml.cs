@@ -9,7 +9,7 @@ public partial class App : Application
     private ServiceClient? _serviceClient;
     private MainViewModel? _mainViewModel;
 
-    protected override async void OnStartup(StartupEventArgs e)
+    protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
@@ -19,7 +19,8 @@ public partial class App : Application
         var window = new MainWindow { DataContext = _mainViewModel };
         window.Show();
 
-        await _mainViewModel.InitializeAsync();
+        // Never block the UI thread — run the retry/connect loop on a background thread.
+        Task.Run(() => _mainViewModel.InitializeAsync());
     }
 
     protected override void OnExit(ExitEventArgs e)

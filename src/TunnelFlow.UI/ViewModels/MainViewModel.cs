@@ -79,66 +79,76 @@ public partial class MainViewModel : ObservableObject
         _client.Connected += OnClientConnected;
         _client.Disconnected += OnClientDisconnected;
         _client.EventReceived += OnEventReceived;
+        _client.DiagnosticMessage += (_, msg) => Log.AddLine("client", "Debug", msg);
 
+        // ConnectAsync blocks until first connection (runs on background thread via Task.Run).
+        // OnClientConnected fires during ConnectAsync and calls LoadStateAsync — do NOT call it here.
         await _client.ConnectAsync(CancellationToken.None);
-        await LoadStateAsync();
     }
 
-    private async void OnClientConnected(object? sender, EventArgs e)
+    private void OnClientConnected(object? sender, EventArgs e)
     {
-        IsConnected = true;
-        ConnectionStatus = "Connected";
-        await LoadStateAsync();
+        // Runs on the pipe background thread — marshal ALL property sets to the UI thread.
+        Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            IsConnected = true;
+            ConnectionStatus = "Connected";
+            await LoadStateAsync();
+        });
     }
 
     private void OnClientDisconnected(object? sender, EventArgs e)
     {
-        IsConnected = false;
-        CaptureRunning = false;
-        ConnectionStatus = "Disconnected — reconnecting...";
+        Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            IsConnected = false;
+            CaptureRunning = false;
+            ConnectionStatus = "Reconnecting...";
+        });
     }
 
     private void OnEventReceived(object? sender, EventMessage evt)
     {
         if (!evt.Payload.HasValue) return;
-        var payload = evt.Payload.Value;
+        // Clone before capture: the JsonElement is backed by a pooled buffer on the read thread.
+        var payload = evt.Payload.Value.Clone();
+        var type = evt.Type;
 
-        switch (evt.Type)
+        // Always dispatch: this handler runs on the pipe read thread.
+        Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            case "StatusChanged":
-                bool running = payload.TryGetProperty("captureRunning", out var cr) && cr.GetBoolean();
-                string status = payload.TryGetProperty("singboxStatus", out var ss)
-                    ? ss.GetString() ?? "Unknown" : "Unknown";
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    CaptureRunning = running;
-                    SingBoxStatus = status;
-                });
-                break;
+            switch (type)
+            {
+                case "StatusChanged":
+                    CaptureRunning = payload.TryGetProperty("captureRunning", out var cr) && cr.GetBoolean();
+                    SingBoxStatus = payload.TryGetProperty("singboxStatus", out var ss)
+                        ? ss.GetString() ?? "Unknown" : "Unknown";
+                    break;
 
-            case "SessionCreated":
-                Sessions.AddSessionFromJson(payload);
-                break;
+                case "SessionCreated":
+                    Sessions.AddSessionFromJson(payload);
+                    break;
 
-            case "SessionClosed":
-                ulong flowId = payload.TryGetProperty("flowId", out var fi) ? fi.GetUInt64() : 0;
-                Sessions.RemoveSession(flowId);
-                break;
+                case "SessionClosed":
+                    ulong flowId = payload.TryGetProperty("flowId", out var fi) ? fi.GetUInt64() : 0;
+                    Sessions.RemoveSession(flowId);
+                    break;
 
-            case "LogLine":
-                string source = payload.TryGetProperty("source", out var src) ? src.GetString() ?? "" : "";
-                string level = payload.TryGetProperty("level", out var lvl) ? lvl.GetString() ?? "Info" : "Info";
-                string message = payload.TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
-                Log.AddLine(source, level, message);
-                break;
+                case "LogLine":
+                    string source = payload.TryGetProperty("source", out var src) ? src.GetString() ?? "" : "";
+                    string level = payload.TryGetProperty("level", out var lvl) ? lvl.GetString() ?? "Info" : "Info";
+                    string message = payload.TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
+                    Log.AddLine(source, level, message);
+                    break;
 
-            case "SingBoxCrashed":
-                int attempt = payload.TryGetProperty("attempt", out var at) ? at.GetInt32() : 0;
-                int retrying = payload.TryGetProperty("retryingIn", out var ri) ? ri.GetInt32() : 0;
-                Log.AddLine("service", "Warning",
-                    $"sing-box crashed (attempt {attempt}) — retrying in {retrying}s");
-                break;
-        }
+                case "SingBoxCrashed":
+                    int attempt = payload.TryGetProperty("attempt", out var at) ? at.GetInt32() : 0;
+                    int retrying = payload.TryGetProperty("retryingIn", out var ri) ? ri.GetInt32() : 0;
+                    Log.AddLine("service", "Warning",
+                        $"sing-box crashed (attempt {attempt}) — retrying in {retrying}s");
+                    break;
+            }
+        });
     }
 
     private async Task LoadStateAsync()
@@ -151,7 +161,7 @@ public partial class MainViewModel : ObservableObject
             var state = JsonSerializer.Deserialize<StatePayload>(result.Value, _jsonOptions);
             if (state is null) return;
 
-            Application.Current.Dispatcher.Invoke(() =>
+            await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 CaptureRunning = state.CaptureRunning;
                 SingBoxStatus = state.SingBoxStatus.ToString();
@@ -163,7 +173,8 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            ConnectionStatus = $"Error: {ex.Message}";
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+                ConnectionStatus = $"Error: {ex.Message}");
         }
     }
 
