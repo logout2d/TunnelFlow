@@ -140,3 +140,4 @@ D:\Develop\TunnelFlow\src\TunnelFlow.Tests\obj\Debug\net8.0-windows\refint\Tunne
 D:\Develop\TunnelFlow\src\TunnelFlow.Tests\obj\Debug\net8.0-windows\TunnelFlow.Tests.pdb
 D:\Develop\TunnelFlow\src\TunnelFlow.Tests\obj\Debug\net8.0-windows\TunnelFlow.Tests.genruntimeconfig.cache
 D:\Develop\TunnelFlow\src\TunnelFlow.Tests\obj\Debug\net8.0-windows\ref\TunnelFlow.Tests.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Tests\bin\Debug\net8.0-windows\System.Diagnostics.DiagnosticSource.dll
