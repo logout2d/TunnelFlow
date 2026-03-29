@@ -31,8 +31,8 @@ Version 0.2 · Based on spec v0.1 + decisions from concept phase
 │               ┌─────────▼──────┐    ┌──────────▼────────┐ │
 │               │ TunnelFlow     │    │   sing-box         │ │
 │               │ .Capture       │    │   (child process)  │ │
-│               │ (WinpkFilter   │    │                    │ │
-│               │  wrapper)      │    │  SOCKS5 inbound    │ │
+│               │ (ndisapi.net   │    │                    │ │
+│               │  MIT wrapper)  │    │  SOCKS5 inbound    │ │
 │               └─────────┬──────┘    │  VLESS outbound    │ │
 │                         │           └──────────┬─────────┘ │
 └─────────────────────────┼──────────────────────┼───────────┘
@@ -41,7 +41,7 @@ Version 0.2 · Based on spec v0.1 + decisions from concept phase
 │  Kernel space                                  │           │
 │                                                │           │
 │  ┌──────────────────────────────────────────┐  │           │
-│  │  WinpkFilter NDIS driver                 │  │           │
+│  │  WinpkFilter NDIS driver (runtime, freely redistributable) ││           │
 │  │  - intercepts packets by process PID     │  │           │
 │  │  - redirects matching flows to loopback  │  │           │
 │  └──────────────────────────────────────────┘  │           │
@@ -71,7 +71,7 @@ Version 0.2 · Based on spec v0.1 + decisions from concept phase
 - Persists configuration to `%ProgramData%\TunnelFlow\`.
 
 ### TunnelFlow.Capture (.NET 8 class library)
-- Wraps WinpkFilter managed API.
+- Wraps ndisapi.net (MIT, github.com/wiresock/ndisapi.net) for packet interception.
 - Resolves active TCP/UDP connections to process paths via `GetExtendedTcpTable` / `GetExtendedUdpTable` → `QueryFullProcessImageName`.
 - Maintains Session Registry (see COMPONENTS.md).
 - Applies Policy Engine rules: proxy / direct / block per process.

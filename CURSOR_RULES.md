@@ -8,7 +8,7 @@ This file is the primary context document for Cursor and any AI assistant workin
 
 TunnelFlow is a Windows application that transparently routes selected applications' network traffic through a VLESS proxy using WinpkFilter (packet interception) and sing-box (VLESS transport). It is NOT a VPN — there is no virtual adapter. It is a per-app transparent socksifier.
 
-**Stack**: C# / .NET 8, WPF (UI), Windows Service (backend), WinpkFilter NDIS driver (packet capture), sing-box (proxy core).
+**Stack**: C# / .NET 8, WPF (UI), Windows Service (backend), ndisapi.net (MIT) for packet interception (TunnelFlow.Capture), WinpkFilter NDIS driver (runtime, freely redistributable), sing-box (proxy core).
 
 **Repo layout**:
 ```

@@ -2,23 +2,37 @@
 
 ---
 
-## ADR-001: WinpkFilter over TDI / WFP
+## ADR-001: ndisapi.net (MIT) over WinpkFilter commercial SDK
 
-**Status**: Accepted
+**Status**: Accepted (supersedes draft decision to use WinpkFilter commercial)
 
-**Context**: Need packet-level interception with per-process filtering on Windows 10/11. Options: WFP (Windows Filtering Platform, built-in), TDI (deprecated), LSP (deprecated and blocked in Win10), WinpkFilter (commercial NDIS driver SDK).
+**Context**: Need packet-level interception with per-process filtering on
+Windows 10/11. Original plan used WinpkFilter commercial SDK. License review
+found that WinpkFilter requires a commercial license for redistribution in
+open-source projects.
 
-**Decision**: WinpkFilter.
+The same author (Vadim Smirnov / wiresock) publishes ndisapi.net on GitHub
+under MIT license — a C# wrapper around the same WinpkFilter NDIS driver,
+but with open redistribution terms.
+
+Additionally, the WinpkFilter driver itself (the .sys file) is freely
+redistributable as a runtime component per NT Kernel Resources terms —
+only the SDK (managed wrappers, samples) has commercial restrictions.
+
+**Decision**: Use ndisapi.net (MIT) as the C# interface layer.
+Reference: https://github.com/wiresock/ndisapi.net
 
 **Rationale**:
-- WFP supports traffic inspection but not transparent TCP redirection without a TUN adapter.
-- WFP `FWPM_LAYER_ALE_CONNECT_REDIRECT_V4` can redirect, but requires complex callout driver development and signing — effectively building our own driver from scratch.
-- WinpkFilter provides a ready-made NDIS intermediate driver with a managed .NET wrapper, packet-level redirect, and proven per-process filtering used by commercial products.
-- Time-to-working-prototype dramatically lower.
+- MIT license — compatible with our Apache 2.0, no copyleft restrictions
+- Same underlying NDIS driver as WinpkFilter (same author)
+- C# native — integrates directly into TunnelFlow.Capture, no C++ interop
+- Active maintenance, NuGet package available
+- ProxiFyre (AGPL, same author) confirms the approach works for per-app SOCKS5
 
 **Tradeoffs**:
-- WinpkFilter is a commercial SDK. Must verify license for open-source distribution before first release. License review is RISKS.md item R-005.
-- Driver is signed by Windows Hardware Quality Labs (WHQL) — no test signing required for end users.
+- ndisapi.net is a lower-level API than the full WinpkFilter SDK — we
+  implement our own session tracking and process resolution on top of it
+- Driver installer must be included in distribution (separate from SDK)
 
 ---
 

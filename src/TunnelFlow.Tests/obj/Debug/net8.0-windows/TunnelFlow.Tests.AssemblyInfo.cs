@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TunnelFlow.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c2835c535300182750b7e039dc362defab5b61bb")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dce739fbb2800f41742737c83a6ec57dfe861089")]
 [assembly: System.Reflection.AssemblyProductAttribute("TunnelFlow.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TunnelFlow.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

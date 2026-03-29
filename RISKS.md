@@ -78,10 +78,8 @@ Probability: **High** / Medium / Low
 **Description**: WinpkFilter is a commercial product. Bundling its driver and managed wrapper in an open-source repository may violate the license terms.
 
 **Mitigation**:
-- **Must be resolved before first public commit containing WinpkFilter binaries.**
-- Contact NT Kernel Resources (WinpkFilter vendor) about open-source redistribution.
-- Alternative if blocked: evaluate **npcap** (open-source, but different interception model requiring more custom code) or WFP callout (complex, requires driver signing, but 100% Microsoft stack).
-- Document license decision in DECISIONS.md as ADR-008 once resolved.
+- **RESOLVED**: Using ndisapi.net (MIT license). Driver runtime redistribution
+  confirmed permissible per NT Kernel Resources terms. See ADR-001.
 
 ---
 
@@ -133,8 +131,8 @@ Probability: **High** / Medium / Low
 
 | # | Question | Impact |
 |---|----------|--------|
-| OQ-1 | WinpkFilter license for open-source — see R-005 | Blocks entire project |
-| OQ-2 | Does WinpkFilter managed wrapper support .NET 8 out of the box, or needs recompile? | Affects Capture project setup |
+| OQ-1 | ~~WinpkFilter license for open-source — see R-005~~ **RESOLVED** — using ndisapi.net (MIT). See ADR-001. | ~~Blocks entire project~~ |
+| OQ-2 | ~~Does WinpkFilter managed wrapper support .NET 8?~~ **RESOLVED** — ndisapi.net is a C# NuGet package targeting .NET Standard 2.0+, works with .NET 8 out of the box. | ~~Affects Capture project setup~~ |
 | OQ-3 | sing-box UDP ASSOCIATE over SOCKS5 — does it actually work for DNS/non-QUIC UDP? | Affects Phase 2 UDP scope |
 | OQ-4 | Windows Service installer strategy — NSIS, WiX, or self-installing exe? | Affects Phase 3 distribution |
 | OQ-5 | Code signing certificate for installer — required for SmartScreen pass | Affects Phase 4 |
