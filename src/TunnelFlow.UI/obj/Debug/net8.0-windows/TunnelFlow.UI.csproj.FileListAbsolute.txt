@@ -23,3 +23,14 @@ D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\refint\TunnelFl
 D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\TunnelFlow.UI.pdb
 D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\TunnelFlow.UI.genruntimeconfig.cache
 D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\ref\TunnelFlow.UI.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\LogView.baml
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\SessionsView.baml
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\AppRulesView.g.cs
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\LogView.g.cs
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\ProfileView.g.cs
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\SessionsView.g.cs
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\GeneratedInternalTypeHelper.g.cs
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\bin\Debug\net8.0-windows\CommunityToolkit.Mvvm.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\App.baml
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\AppRulesView.baml
+D:\Develop\TunnelFlow\src\TunnelFlow.UI\obj\Debug\net8.0-windows\Views\ProfileView.baml

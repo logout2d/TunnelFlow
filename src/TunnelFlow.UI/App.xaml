@@ -1,9 +1,33 @@
-﻿<Application x:Class="TunnelFlow.UI.App"
+<Application x:Class="TunnelFlow.UI.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:TunnelFlow.UI"
-             StartupUri="MainWindow.xaml">
+             xmlns:vm="clr-namespace:TunnelFlow.UI.ViewModels"
+             xmlns:v="clr-namespace:TunnelFlow.UI.Views"
+             xmlns:conv="clr-namespace:TunnelFlow.UI.Converters">
     <Application.Resources>
-         
+        <ResourceDictionary>
+
+            <!-- Converters -->
+            <conv:BoolToColorConverter x:Key="BoolToColorConverter"/>
+            <conv:EnumToStringConverter x:Key="EnumToStringConverter"/>
+
+            <!-- DataTemplates: ViewModel → View mapping for ContentControl -->
+            <DataTemplate DataType="{x:Type vm:AppRulesViewModel}">
+                <v:AppRulesView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:ProfileViewModel}">
+                <v:ProfileView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:SessionsViewModel}">
+                <v:SessionsView/>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:LogViewModel}">
+                <v:LogView/>
+            </DataTemplate>
+
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

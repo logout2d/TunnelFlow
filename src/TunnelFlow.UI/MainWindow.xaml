@@ -1,12 +1,144 @@
-﻿<Window x:Class="TunnelFlow.UI.MainWindow"
+<Window x:Class="TunnelFlow.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:TunnelFlow.UI"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        xmlns:conv="clr-namespace:TunnelFlow.UI.Converters"
+        Title="TunnelFlow" Height="620" Width="960"
+        MinHeight="480" MinWidth="720"
+        WindowStartupLocation="CenterScreen"
+        Background="#F8FAFC">
 
+    <Window.Resources>
+        <conv:BoolToColorConverter x:Key="BoolToColorConverter"/>
+
+        <!-- Sidebar button style -->
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#334155"/>
+                                <Setter Property="Foreground" Value="#E2E8F0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#475569"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#475569"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Action button style -->
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}"
+                                Opacity="{TemplateBinding Opacity}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="180"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== Sidebar ===== -->
+        <Border Grid.Column="0" Background="#1E293B">
+            <DockPanel LastChildFill="False">
+
+                <!-- App title + status -->
+                <StackPanel DockPanel.Dock="Top" Margin="12,20,12,0">
+                    <TextBlock Text="TunnelFlow" FontSize="18" FontWeight="Bold"
+                               Foreground="White" Margin="0,0,0,12"/>
+
+                    <!-- Status dot -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <Ellipse Width="9" Height="9" VerticalAlignment="Center" Margin="0,0,8,0"
+                                 Fill="{Binding CaptureRunning, Converter={StaticResource BoolToColorConverter}}"/>
+                        <TextBlock Text="{Binding SingBoxStatus}"
+                                   Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Connection status -->
+                    <TextBlock Text="{Binding ConnectionStatus}"
+                               Foreground="#64748B" FontSize="10" Margin="0,0,0,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <Separator DockPanel.Dock="Top" Background="#334155" Margin="12,16,12,8"/>
+
+                <!-- Navigation -->
+                <StackPanel DockPanel.Dock="Top" Margin="8,0">
+                    <Button Content="📋  App Rules"
+                            Command="{Binding NavigateToRulesCommand}"
+                            Style="{StaticResource NavButton}"/>
+                    <Button Content="⚙  Profile"
+                            Command="{Binding NavigateToProfileCommand}"
+                            Style="{StaticResource NavButton}"/>
+                    <Button Content="🔗  Sessions"
+                            Command="{Binding NavigateToSessionsCommand}"
+                            Style="{StaticResource NavButton}"/>
+                    <Button Content="📄  Log"
+                            Command="{Binding NavigateToLogCommand}"
+                            Style="{StaticResource NavButton}"/>
+                </StackPanel>
+
+                <!-- Start / Stop at bottom -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="12,0,12,20">
+                    <Button Content="▶  Start Tunnel"
+                            Command="{Binding StartCommand}"
+                            Style="{StaticResource ActionButton}"
+                            Background="#22C55E" Foreground="White"/>
+                    <Button Content="■  Stop Tunnel"
+                            Command="{Binding StopCommand}"
+                            Style="{StaticResource ActionButton}"
+                            Background="#EF4444" Foreground="White"
+                            Margin="0,6,0,0"/>
+                </StackPanel>
+
+            </DockPanel>
+        </Border>
+
+        <!-- ===== Content area ===== -->
+        <ContentControl Grid.Column="1" Content="{Binding CurrentView}"/>
     </Grid>
 </Window>
