@@ -12,6 +12,8 @@ public record SingBoxConfig
 
     public string ConfigOutputPath { get; init; } = string.Empty;
 
+    public string LogOutputPath { get; init; } = string.Empty;
+
     public TimeSpan RestartDelay { get; init; }
 
     public int MaxRestartAttempts { get; init; }

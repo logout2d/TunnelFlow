@@ -52,3 +52,7 @@ D:\Develop\TunnelFlow\src\TunnelFlow.Service\obj\Debug\net8.0-windows\TunnelFlow
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\obj\Debug\net8.0-windows\TunnelFlow.Service.genruntimeconfig.cache
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\obj\Debug\net8.0-windows\ref\TunnelFlow.Service.dll
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\System.Diagnostics.DiagnosticSource.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\Microsoft.Extensions.Hosting.WindowsServices.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\System.Security.Cryptography.ProtectedData.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\System.ServiceProcess.ServiceController.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\runtimes\win\lib\net8.0\System.ServiceProcess.ServiceController.dll

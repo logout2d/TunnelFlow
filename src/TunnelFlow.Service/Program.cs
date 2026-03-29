@@ -1,7 +1,29 @@
+using TunnelFlow.Capture;
+using TunnelFlow.Capture.Interop;
+using TunnelFlow.Capture.Policy;
+using TunnelFlow.Capture.ProcessResolver;
+using TunnelFlow.Capture.SessionRegistry;
+using TunnelFlow.Core;
 using TunnelFlow.Service;
+using TunnelFlow.Service.Configuration;
+using TunnelFlow.Service.Ipc;
+using TunnelFlow.Service.SingBox;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddHostedService<Worker>();
+
+builder.Services.AddWindowsService(options =>
+    options.ServiceName = "TunnelFlow");
+
+builder.Services.AddSingleton<ConfigStore>();
+builder.Services.AddSingleton<SingBoxConfigBuilder>();
+builder.Services.AddSingleton<ISingBoxManager, SingBoxManager>();
+builder.Services.AddSingleton<IPacketDriver, StubPacketDriver>();
+builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
+builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
+builder.Services.AddSingleton<IPolicyEngine>(_ => new PolicyEngine([]));
+builder.Services.AddSingleton<ICaptureEngine, CaptureEngine>();
+builder.Services.AddSingleton<PipeServer>();
+builder.Services.AddHostedService<OrchestratorService>();
 
 var host = builder.Build();
 host.Run();

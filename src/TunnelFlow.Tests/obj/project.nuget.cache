@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "uIUJRN46CHA=",
+  "dgSpecHash": "Ll5iOC1l1sc=",
   "success": true,
   "projectFilePath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Tests\\TunnelFlow.Tests.csproj",
   "expectedPackageFiles": [
@@ -23,6 +23,7 @@
     "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.filesystemglobbing\\8.0.0\\microsoft.extensions.filesystemglobbing.8.0.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.hosting\\8.0.1\\microsoft.extensions.hosting.8.0.1.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.hosting.abstractions\\8.0.1\\microsoft.extensions.hosting.abstractions.8.0.1.nupkg.sha512",
+    "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.hosting.windowsservices\\8.0.0\\microsoft.extensions.hosting.windowsservices.8.0.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.logging\\8.0.1\\microsoft.extensions.logging.8.0.1.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\10.0.5\\microsoft.extensions.logging.abstractions.10.0.5.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\microsoft.extensions.logging.configuration\\8.0.1\\microsoft.extensions.logging.configuration.8.0.1.nupkg.sha512",
@@ -103,7 +104,9 @@
     "C:\\Users\\Dogan\\.nuget\\packages\\system.security.cryptography.encoding\\4.3.0\\system.security.cryptography.encoding.4.3.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\system.security.cryptography.openssl\\4.3.0\\system.security.cryptography.openssl.4.3.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\system.security.cryptography.primitives\\4.3.0\\system.security.cryptography.primitives.4.3.0.nupkg.sha512",
+    "C:\\Users\\Dogan\\.nuget\\packages\\system.security.cryptography.protecteddata\\8.0.0\\system.security.cryptography.protecteddata.8.0.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\system.security.cryptography.x509certificates\\4.3.0\\system.security.cryptography.x509certificates.4.3.0.nupkg.sha512",
+    "C:\\Users\\Dogan\\.nuget\\packages\\system.serviceprocess.servicecontroller\\8.0.0\\system.serviceprocess.servicecontroller.8.0.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\system.text.encoding\\4.3.0\\system.text.encoding.4.3.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\system.text.encoding.extensions\\4.3.0\\system.text.encoding.extensions.4.3.0.nupkg.sha512",
     "C:\\Users\\Dogan\\.nuget\\packages\\system.text.regularexpressions\\4.3.0\\system.text.regularexpressions.4.3.0.nupkg.sha512",

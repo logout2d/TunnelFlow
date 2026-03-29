@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TunnelFlow.Service")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e3f54a95298f3a1f17aab287fe54dfdbafb6562a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c893e4ac3fb661cc8dc56e1570af739abefc103a")]
 [assembly: System.Reflection.AssemblyProductAttribute("TunnelFlow.Service")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TunnelFlow.Service")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
