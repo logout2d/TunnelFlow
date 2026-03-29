@@ -227,7 +227,7 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Dogan\\.nuget\\packages\\": {},
+    "C:\\Users\\Vatman\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
@@ -236,14 +236,14 @@
       "projectUniqueName": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Capture\\TunnelFlow.Capture.csproj",
       "projectName": "TunnelFlow.Capture",
       "projectPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Capture\\TunnelFlow.Capture.csproj",
-      "packagesPath": "C:\\Users\\Dogan\\.nuget\\packages\\",
+      "packagesPath": "C:\\Users\\Vatman\\.nuget\\packages\\",
       "outputPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Capture\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\Dogan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\Vatman\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
