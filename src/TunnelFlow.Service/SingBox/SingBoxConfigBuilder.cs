@@ -23,6 +23,32 @@ public class SingBoxConfigBuilder
         var root = new JsonObject
         {
             ["log"] = logNode,
+            ["dns"] = new JsonObject
+            {
+                ["servers"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["tag"] = "remote-dns",
+                        ["address"] = "https://1.1.1.1/dns-query",
+                        ["detour"] = "vless-out"
+                    },
+                    new JsonObject
+                    {
+                        ["tag"] = "local-dns",
+                        ["address"] = "local"
+                    }
+                },
+                ["rules"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["outbound"] = "any",
+                        ["server"] = "local-dns"
+                    }
+                },
+                ["final"] = "remote-dns"
+            },
             ["inbounds"] = new JsonArray
             {
                 new JsonObject
@@ -31,7 +57,8 @@ public class SingBoxConfigBuilder
                     ["tag"] = "socks-in",
                     ["listen"] = "127.0.0.1",
                     ["listen_port"] = config.SocksPort,
-                    ["sniff"] = false
+                    ["sniff"] = true,
+                    ["sniff_override_destination"] = true
                 }
             },
             ["outbounds"] = new JsonArray
@@ -61,7 +88,16 @@ public class SingBoxConfigBuilder
             },
             ["route"] = new JsonObject
             {
-                ["final"] = "vless-out"
+                ["rules"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["protocol"] = "dns",
+                        ["outbound"] = "vless-out"
+                    }
+                },
+                ["final"] = "vless-out",
+                ["auto_detect_interface"] = true
             }
         };
 

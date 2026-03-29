@@ -66,6 +66,51 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
+    public void Build_SniffEnabled_OnSocksInbound()
+    {
+        var json = _builder.Build(MakeProfile(), MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        var inbound = doc.RootElement.GetProperty("inbounds")[0];
+        Assert.True(inbound.GetProperty("sniff").GetBoolean());
+        Assert.True(inbound.GetProperty("sniff_override_destination").GetBoolean());
+    }
+
+    [Fact]
+    public void Build_DnsSectionIsPresent()
+    {
+        var json = _builder.Build(MakeProfile(), MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        Assert.True(root.TryGetProperty("dns", out var dns));
+
+        // remote-dns server routes through vless-out
+        var servers = dns.GetProperty("servers");
+        Assert.True(servers.GetArrayLength() >= 2);
+        Assert.Equal("remote-dns", servers[0].GetProperty("tag").GetString());
+        Assert.Equal("vless-out", servers[0].GetProperty("detour").GetString());
+
+        // route has dns protocol rule
+        var routeRules = root.GetProperty("route").GetProperty("rules");
+        Assert.True(routeRules.GetArrayLength() >= 1);
+        Assert.Equal("dns", routeRules[0].GetProperty("protocol").GetString());
+        Assert.Equal("vless-out", routeRules[0].GetProperty("outbound").GetString());
+    }
+
+    [Fact]
+    public void Build_RouteHasAutoDetectInterface()
+    {
+        var json = _builder.Build(MakeProfile(), MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.True(doc.RootElement
+            .GetProperty("route")
+            .GetProperty("auto_detect_interface")
+            .GetBoolean());
+    }
+
+    [Fact]
     public void Build_TlsDisabled_WhenSecurityIsNone()
     {
         var json = _builder.Build(MakeProfile(security: "none"), MakeConfig());
