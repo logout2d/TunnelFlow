@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0-windows7.0": {
+      "TunnelFlow.Core/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/TunnelFlow.Core.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/TunnelFlow.Core.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "TunnelFlow.Core/1.0.0": {
+      "type": "project",
+      "path": "../TunnelFlow.Core/TunnelFlow.Core.csproj",
+      "msbuildProject": "../TunnelFlow.Core/TunnelFlow.Core.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0-windows7.0": [
+      "TunnelFlow.Core >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Dogan\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.UI\\TunnelFlow.UI.csproj",
+      "projectName": "TunnelFlow.UI",
+      "projectPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.UI\\TunnelFlow.UI.csproj",
+      "packagesPath": "C:\\Users\\Dogan\\.nuget\\packages\\",
+      "outputPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.UI\\obj\\",
+      "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
+      "configFilePaths": [
+        "C:\\Users\\Dogan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0-windows"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "projectReferences": {
+            "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Core\\TunnelFlow.Core.csproj": {
+              "projectPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Core\\TunnelFlow.Core.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.300"
+    },
+    "frameworks": {
+      "net8.0-windows7.0": {
+        "targetAlias": "net8.0-windows",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App.WPF": {
+            "privateAssets": "none"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.311/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\bin\Debug\net8.0-windows\TunnelFlow.Capture.deps.json
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\bin\Debug\net8.0-windows\TunnelFlow.Capture.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\bin\Debug\net8.0-windows\TunnelFlow.Capture.pdb
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\bin\Debug\net8.0-windows\TunnelFlow.Core.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\bin\Debug\net8.0-windows\TunnelFlow.Core.pdb
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.csproj.AssemblyReference.cache
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.GeneratedMSBuildEditorConfig.editorconfig
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.AssemblyInfoInputs.cache
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.AssemblyInfo.cs
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.csproj.CoreCompileInputs.cache
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.sourcelink.json
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFl.92BF6EFD.Up2Date
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\refint\TunnelFlow.Capture.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\TunnelFlow.Capture.pdb
+D:\Develop\TunnelFlow\src\TunnelFlow.Capture\obj\Debug\net8.0-windows\ref\TunnelFlow.Capture.dll
