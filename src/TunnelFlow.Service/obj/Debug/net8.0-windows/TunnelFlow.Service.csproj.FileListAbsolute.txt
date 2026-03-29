@@ -56,3 +56,5 @@ D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\Microsoft.
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\System.Security.Cryptography.ProtectedData.dll
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\System.ServiceProcess.ServiceController.dll
 D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\runtimes\win\lib\net8.0\System.ServiceProcess.ServiceController.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\NdisApiDotNet.dll
+D:\Develop\TunnelFlow\src\TunnelFlow.Service\bin\Debug\net8.0-windows\NdisApiDotNet.pdb

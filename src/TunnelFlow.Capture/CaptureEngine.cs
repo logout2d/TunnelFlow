@@ -54,6 +54,16 @@ public sealed class CaptureEngine : ICaptureEngine
 
         _socksEndpoint = new IPEndPoint(config.SocksAddress, config.SocksPort);
 
+        if (_driver is WinpkFilterPacketDriver wpfDriver)
+        {
+            var includedPaths = config.Rules
+                .Where(r => r.Mode == RuleMode.Proxy && r.IsEnabled)
+                .Select(r => r.ExePath)
+                .ToList();
+
+            wpfDriver.Configure(_socksEndpoint, includedPaths, config.ExcludedProcessPaths.ToList());
+        }
+
         _readLoopTask = RunReadLoopAsync(_cts.Token);
         _purgeLoopTask = RunPurgeLoopAsync(_cts.Token);
 
@@ -185,6 +195,9 @@ public sealed class CaptureEngine : ICaptureEngine
             case PolicyAction.Proxy:
                 _driver.RedirectFlow(packet.FlowId, _socksEndpoint!);
 
+                if (_driver is WinpkFilterPacketDriver wpf)
+                    wpf.AddNatEntry(packet.Source, packet.Destination);
+
                 var entry = new SessionEntry
                 {
                     FlowId = packet.FlowId,
@@ -217,6 +230,9 @@ public sealed class CaptureEngine : ICaptureEngine
     {
         if (_registry.TryGet(packet.FlowId, out var entry) && entry is not null)
         {
+            if (_driver is WinpkFilterPacketDriver wpf)
+                wpf.RemoveNatEntry(entry.OriginalSource);
+
             _registry.Remove(packet.FlowId);
             SessionClosed?.Invoke(this, entry);
         }

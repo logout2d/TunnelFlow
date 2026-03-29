@@ -1457,9 +1457,18 @@
         }
       },
       "xunit.runner.visualstudio/2.5.3": {},
+      "NdisApiDotNet/1.0.0": {
+        "runtime": {
+          "NdisApiDotNet.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
       "TunnelFlow.Capture/1.0.0": {
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "10.0.5",
+          "NdisApiDotNet": "1.0.0",
           "TunnelFlow.Core": "1.0.0"
         },
         "runtime": {
@@ -2361,6 +2370,11 @@
       "sha512": "sha512-HFFL6O+QLEOfs555SqHii48ovVa4CqGYanY+B32BjLpPptdE+wEJmCFNXlLHdEOD5LYeayb9EroaUpydGpcybg==",
       "path": "xunit.runner.visualstudio/2.5.3",
       "hashPath": "xunit.runner.visualstudio.2.5.3.nupkg.sha512"
+    },
+    "NdisApiDotNet/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
     },
     "TunnelFlow.Capture/1.0.0": {
       "type": "project",

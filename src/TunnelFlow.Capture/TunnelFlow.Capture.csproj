@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TunnelFlow.Core\TunnelFlow.Core.csproj" />
+    <ProjectReference Include="..\..\third_party\ndisapi.net\NdisApiDotNet\NdisApiDotNet.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -12,6 +13,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
 </Project>

@@ -17,7 +17,9 @@ builder.Services.AddWindowsService(options =>
 builder.Services.AddSingleton<ConfigStore>();
 builder.Services.AddSingleton<SingBoxConfigBuilder>();
 builder.Services.AddSingleton<ISingBoxManager, SingBoxManager>();
-builder.Services.AddSingleton<IPacketDriver, StubPacketDriver>();
+// Fallback: use StubPacketDriver if WinpkFilter driver is not installed.
+// builder.Services.AddSingleton<IPacketDriver, StubPacketDriver>();
+builder.Services.AddSingleton<IPacketDriver, WinpkFilterPacketDriver>();
 builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
 builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
 builder.Services.AddSingleton<IPolicyEngine>(_ => new PolicyEngine([]));

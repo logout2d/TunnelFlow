@@ -9,6 +9,7 @@
       "TunnelFlow.Capture/1.0.0": {
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "10.0.5",
+          "NdisApiDotNet": "1.0.0",
           "TunnelFlow.Core": "1.0.0"
         },
         "runtime": {
@@ -40,6 +41,14 @@
           "lib/net8.0/System.Diagnostics.DiagnosticSource.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.526.15411"
+          }
+        }
+      },
+      "NdisApiDotNet/1.0.0": {
+        "runtime": {
+          "NdisApiDotNet.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
           }
         }
       },
@@ -79,6 +88,11 @@
       "sha512": "sha512-CCbzHQ26L3jskdwHh+4bxxW84lUMIrAAmeSlpO69AlrQV0DKbj1/I+feLaLSuZeqXPr9UlSy0OcgZoXOk2a6/g==",
       "path": "system.diagnostics.diagnosticsource/10.0.5",
       "hashPath": "system.diagnostics.diagnosticsource.10.0.5.nupkg.sha512"
+    },
+    "NdisApiDotNet/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
     },
     "TunnelFlow.Core/1.0.0": {
       "type": "project",
