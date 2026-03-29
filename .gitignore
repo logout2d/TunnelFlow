@@ -482,3 +482,7 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# sing-box binary (not committed)
+third_party/singbox/sing-box.exe
+third_party/singbox/*.exe

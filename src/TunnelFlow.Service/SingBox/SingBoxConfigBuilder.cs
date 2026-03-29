@@ -16,13 +16,13 @@ public class SingBoxConfigBuilder
         bool utlsEnabled = profile.Tls?.Fingerprint is not null;
         string fingerprint = profile.Tls?.Fingerprint ?? "chrome";
 
+        var logNode = new JsonObject { ["level"] = "info" };
+        if (!string.IsNullOrEmpty(config.LogOutputPath))
+            logNode["output"] = config.LogOutputPath;
+
         var root = new JsonObject
         {
-            ["log"] = new JsonObject
-            {
-                ["level"] = "info",
-                ["output"] = config.LogOutputPath
-            },
+            ["log"] = logNode,
             ["inbounds"] = new JsonArray
             {
                 new JsonObject

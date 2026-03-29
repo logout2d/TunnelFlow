@@ -19,6 +19,7 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private string _sni = "";
     [ObservableProperty] private string _fingerprint = "chrome";
     [ObservableProperty] private bool _isActive;
+    [ObservableProperty] private string _saveStatus = "";
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -29,13 +30,24 @@ public partial class ProfileViewModel : ObservableObject
     public static IReadOnlyList<string> Securities { get; } = ["tls", "reality", "none"];
     public static IReadOnlyList<string> Fingerprints { get; } = ["chrome", "firefox", "safari", "random"];
 
+    private readonly RelayCommand _saveCmd;
+
     public ProfileViewModel(ServiceClient client)
     {
         _client = client;
 
-        SaveCommand = new RelayCommand(async () => await SaveAsync());
+        _saveCmd = new RelayCommand(
+            async () => await SaveAsync(),
+            () => !string.IsNullOrWhiteSpace(ServerAddress) &&
+                  !string.IsNullOrWhiteSpace(UserId) &&
+                  ServerPort > 0 && ServerPort <= 65535);
+        SaveCommand = _saveCmd;
         ActivateCommand = new RelayCommand(async () => await ActivateAsync());
     }
+
+    partial void OnServerAddressChanged(string value) => _saveCmd.NotifyCanExecuteChanged();
+    partial void OnUserIdChanged(string value) => _saveCmd.NotifyCanExecuteChanged();
+    partial void OnServerPortChanged(int value) => _saveCmd.NotifyCanExecuteChanged();
 
     public void LoadProfile(IReadOnlyList<VlessProfile> profiles, Guid? activeProfileId)
     {
@@ -62,26 +74,28 @@ public partial class ProfileViewModel : ObservableObject
         try
         {
             await _client.SendCommandAsync("UpsertProfile", profile, CancellationToken.None);
+            SaveStatus = "Saved \u2713";
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to save profile: {ex.Message}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            SaveStatus = $"Error: {ex.Message}";
         }
     }
 
     private async Task ActivateAsync()
     {
         await SaveAsync();
+        if (SaveStatus.StartsWith("Error")) return;
+
         try
         {
             await _client.SendCommandAsync("ActivateProfile", new { profileId = Id }, CancellationToken.None);
             IsActive = true;
+            SaveStatus = "Activated \u2713";
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to activate profile: {ex.Message}", "Error",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            SaveStatus = $"Error: {ex.Message}";
         }
     }
 

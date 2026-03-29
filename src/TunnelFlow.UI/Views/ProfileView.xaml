@@ -66,10 +66,25 @@
                 <!-- User ID -->
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="User ID (UUID)" VerticalAlignment="Center"
                            Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium" TextWrapping="Wrap"/>
-                <PasswordBox Grid.Row="3" Grid.Column="1"
-                             x:Name="UserIdBox"
-                             PasswordChanged="UserIdBox_PasswordChanged"
-                             Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"/>
+                <Grid Grid.Row="3" Grid.Column="1" Margin="0,0,0,12">
+                    <PasswordBox x:Name="UserIdBox"
+                                 PasswordChanged="UserIdBox_PasswordChanged"
+                                 Padding="8,5" BorderBrush="#CBD5E1"/>
+                    <TextBlock Text="e.g. 110263b3-0a2c-4c95-b831-..." IsHitTestVisible="False"
+                               Foreground="#94A3B8" FontSize="11" Padding="10,7"
+                               VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding UserId}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
 
                 <!-- Network -->
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Network" VerticalAlignment="Center"
@@ -113,6 +128,10 @@
                         Background="#22C55E" Foreground="White"
                         BorderThickness="0" Cursor="Hand"/>
             </StackPanel>
+
+            <!-- Save status -->
+            <TextBlock Text="{Binding SaveStatus}" Margin="0,8,0,0"
+                       FontSize="12" Foreground="#64748B"/>
 
         </StackPanel>
     </ScrollViewer>

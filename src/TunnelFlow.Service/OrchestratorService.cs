@@ -24,6 +24,7 @@ public sealed class OrchestratorService : BackgroundService
     private bool _captureRunning;
     private int _singBoxRestartAttempts;
     private readonly SemaphoreSlim _captureLock = new(1, 1);
+    private CancellationToken _stoppingToken;
 
     private static readonly string DataDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TunnelFlow");
@@ -50,6 +51,8 @@ public sealed class OrchestratorService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _stoppingToken = stoppingToken;
+
         _config = await _configStore.LoadAsync();
         _logger.LogInformation("Config loaded: {RuleCount} rules, {ProfileCount} profiles",
             _config.Rules.Count, _config.Profiles.Count);
@@ -60,7 +63,7 @@ public sealed class OrchestratorService : BackgroundService
 
         if (_config.StartCaptureOnServiceStart && _config.ActiveProfileId is not null)
         {
-            try { await StartCaptureAsync(stoppingToken); }
+            try { await StartCaptureAsync(); }
             catch (Exception ex) { _logger.LogError(ex, "Auto-start capture failed"); }
         }
 
@@ -68,34 +71,118 @@ public sealed class OrchestratorService : BackgroundService
         await pipeTask;
     }
 
-    public async Task StartCaptureAsync(CancellationToken ct = default)
+    public async Task StartCaptureAsync()
     {
-        await _captureLock.WaitAsync(ct);
+        await _captureLock.WaitAsync(_stoppingToken);
         try
         {
             if (_captureRunning)
             {
-                _logger.LogWarning("StartCapture called but capture already running");
+                _pipeServer.PushLogLine("service", "Warning", "Tunnel is already running.");
                 return;
             }
 
-            var profile = _config.Profiles.FirstOrDefault(p => p.Id == _config.ActiveProfileId);
+            _pipeServer.PushLogLine("service", "Info", "Starting tunnel...");
+
+            var config = await _configStore.LoadAsync();
+            _config = config;
+
+            if (config.ActiveProfileId is null)
+            {
+                _pipeServer.PushLogLine("service", "Error",
+                    "Cannot start: no active VLESS profile selected.");
+                return;
+            }
+
+            var profile = config.Profiles.FirstOrDefault(p => p.Id == config.ActiveProfileId);
             if (profile is null)
             {
-                _logger.LogError("No active profile configured");
+                _pipeServer.PushLogLine("service", "Error",
+                    "Cannot start: active profile not found in config.");
                 return;
             }
 
-            var singBoxConfig = BuildSingBoxConfig();
-            await _singBoxManager.StartAsync(profile, singBoxConfig, ct);
+            if (string.IsNullOrWhiteSpace(profile.ServerAddress) ||
+                string.IsNullOrWhiteSpace(profile.UserId))
+            {
+                _pipeServer.PushLogLine("service", "Error",
+                    "Cannot start: profile is missing ServerAddress or UserId.");
+                return;
+            }
 
-            var captureConfig = await BuildCaptureConfigAsync(profile, singBoxConfig, ct);
-            await _captureEngine.StartAsync(captureConfig, ct);
+            // Resolve server IP for self-exclusion (non-negotiable per CURSOR_RULES.md §1)
+            IPAddress[] serverAddresses;
+            try
+            {
+                serverAddresses = await Dns.GetHostAddressesAsync(profile.ServerAddress);
+            }
+            catch (Exception ex)
+            {
+                _pipeServer.PushLogLine("service", "Error",
+                    $"Cannot start: failed to resolve {profile.ServerAddress}: {ex.Message}");
+                return;
+            }
+
+            _pipeServer.PushLogLine("service", "Info",
+                $"Resolved {profile.ServerAddress} → {string.Join(", ", serverAddresses.Select(a => a.ToString()))}");
+
+            Directory.CreateDirectory(DataDir);
+
+            var singBoxExe = ResolveSingBoxPath();
+
+            if (!File.Exists(singBoxExe))
+            {
+                _pipeServer.PushLogLine("service", "Error",
+                    $"sing-box binary not found at: {singBoxExe}");
+                _pipeServer.PushLogLine("service", "Error",
+                    "Download sing-box.exe and place it in third_party/singbox/");
+                return;
+            }
+
+            var logDir = Path.Combine(DataDir, "logs");
+            Directory.CreateDirectory(logDir);
+
+            var singBoxConfig = new SingBoxConfig
+            {
+                SocksPort = config.SocksPort,
+                BinaryPath = singBoxExe,
+                ConfigOutputPath = Path.Combine(DataDir, "singbox_last.json"),
+                LogOutputPath = Path.Combine(logDir, "singbox.log"),
+                RestartDelay = TimeSpan.FromSeconds(3),
+                MaxRestartAttempts = 5
+            };
+
+            _pipeServer.PushLogLine("service", "Info", $"Starting sing-box: {singBoxExe}");
+            await _singBoxManager.StartAsync(profile, singBoxConfig, _stoppingToken);
+
+            // Self-exclusion: sing-box binary + this service binary (non-negotiable per CURSOR_RULES.md §1)
+            var excludedPaths = new List<string> { singBoxExe };
+            var servicePath = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(servicePath))
+                excludedPaths.Add(servicePath);
+
+            var captureConfig = new CaptureConfig
+            {
+                SocksPort = config.SocksPort,
+                SocksAddress = IPAddress.Loopback,
+                Rules = config.Rules,
+                ExcludedProcessPaths = excludedPaths,
+                ExcludedDestinations = serverAddresses.ToList()
+            };
+
+            await _captureEngine.StartAsync(captureConfig, _stoppingToken);
 
             _captureRunning = true;
             _singBoxRestartAttempts = 0;
-            _logger.LogInformation("Capture started");
+            _pipeServer.PushLogLine("service", "Info", "Tunnel started successfully.");
             PushCurrentStatus();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "StartCaptureAsync failed");
+            _pipeServer.PushLogLine("service", "Error",
+                $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
+            _pipeServer.PushStatusChanged(captureRunning: false, SingBoxStatus.Stopped);
         }
         finally
         {
@@ -103,20 +190,27 @@ public sealed class OrchestratorService : BackgroundService
         }
     }
 
-    public async Task StopCaptureAsync(CancellationToken ct = default)
+    public async Task StopCaptureAsync()
     {
-        await _captureLock.WaitAsync(ct);
+        await _captureLock.WaitAsync(_stoppingToken);
         try
         {
             if (!_captureRunning)
                 return;
 
-            await _captureEngine.StopAsync(ct);
-            await _singBoxManager.StopAsync(ct);
+            _pipeServer.PushLogLine("service", "Info", "Stopping tunnel...");
+            await _captureEngine.StopAsync(_stoppingToken);
+            await _singBoxManager.StopAsync(_stoppingToken);
 
             _captureRunning = false;
-            _logger.LogInformation("Capture stopped");
+            _pipeServer.PushLogLine("service", "Info", "Tunnel stopped.");
             PushCurrentStatus();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "StopCaptureAsync failed");
+            _pipeServer.PushLogLine("service", "Error",
+                $"StopCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
@@ -128,13 +222,13 @@ public sealed class OrchestratorService : BackgroundService
     {
         _singBoxManager.StatusChanged += (_, status) =>
         {
+            _pipeServer.PushLogLine("service", "Info", $"sing-box status changed: {status}");
+
             switch (status)
             {
                 case SingBoxStatus.Restarting:
                     _singBoxRestartAttempts++;
-                    _pipeServer.PushSingBoxCrashed(
-                        _singBoxRestartAttempts,
-                        retryingInSeconds: (int)(_config.StartCaptureOnServiceStart ? 3 : 3));
+                    _pipeServer.PushSingBoxCrashed(_singBoxRestartAttempts, retryingInSeconds: 3);
                     break;
 
                 case SingBoxStatus.Running:
@@ -228,48 +322,17 @@ public sealed class OrchestratorService : BackgroundService
     private void PushCurrentStatus() =>
         _pipeServer.PushStatusChanged(_captureRunning, _singBoxManager.GetStatus());
 
-    private SingBoxConfig BuildSingBoxConfig() => new()
+    private static string ResolveSingBoxPath()
     {
-        SocksPort = _config.SocksPort,
-        BinaryPath = Path.Combine(AppContext.BaseDirectory, "third_party", "singbox", "sing-box.exe"),
-        ConfigOutputPath = Path.Combine(DataDir, "singbox-config.json"),
-        LogOutputPath = Path.Combine(DataDir, "singbox.log"),
-        RestartDelay = TimeSpan.FromSeconds(3),
-        MaxRestartAttempts = 5
-    };
+        // In development: AppContext.BaseDirectory is bin/Debug/net8.0-windows/
+        // Walk up to repo root and into third_party/singbox/
+        var candidate = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "third_party", "singbox", "sing-box.exe"));
+        if (File.Exists(candidate))
+            return candidate;
 
-    private async Task<CaptureConfig> BuildCaptureConfigAsync(
-        VlessProfile profile,
-        SingBoxConfig singBoxConfig,
-        CancellationToken ct)
-    {
-        // Self-exclusion: sing-box binary + this service binary (non-negotiable per CURSOR_RULES.md §1)
-        var excludedPaths = new List<string>
-        {
-            singBoxConfig.BinaryPath,
-            Environment.ProcessPath ?? string.Empty
-        };
-
-        // Excluded destinations: VLESS server IP(s)
-        var excludedDestinations = new List<IPAddress>();
-        try
-        {
-            var addresses = await Dns.GetHostAddressesAsync(profile.ServerAddress, ct);
-            excludedDestinations.AddRange(addresses);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not resolve server address {Address} for exclusion list",
-                profile.ServerAddress);
-        }
-
-        return new CaptureConfig
-        {
-            SocksPort = _config.SocksPort,
-            SocksAddress = IPAddress.Loopback,
-            Rules = _config.Rules,
-            ExcludedProcessPaths = excludedPaths,
-            ExcludedDestinations = excludedDestinations
-        };
+        // In deployed/installed scenarios the binary may sit next to the service exe
+        return Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
     }
 }
