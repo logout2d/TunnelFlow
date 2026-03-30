@@ -23,7 +23,14 @@ builder.Services.AddSingleton<IPacketDriver, WinpkFilterPacketDriver>();
 builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
 builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
 builder.Services.AddSingleton<IPolicyEngine>(_ => new PolicyEngine([]));
-builder.Services.AddSingleton<ICaptureEngine, CaptureEngine>();
+builder.Services.AddSingleton<ICaptureEngine>(sp =>
+    new CaptureEngine(
+        sp.GetRequiredService<IPacketDriver>(),
+        sp.GetRequiredService<IProcessResolver>(),
+        sp.GetRequiredService<ISessionRegistry>(),
+        sp.GetRequiredService<IPolicyEngine>(),
+        sp.GetRequiredService<ILogger<CaptureEngine>>(),
+        sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddSingleton<PipeServer>();
 builder.Services.AddHostedService<OrchestratorService>();
 

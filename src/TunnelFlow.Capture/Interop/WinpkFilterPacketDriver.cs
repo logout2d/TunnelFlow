@@ -26,6 +26,7 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     private NdisApiDotNet.NdisApi? _api;
 
     private IPEndPoint _socksEndpoint = new(IPAddress.Loopback, 2080);
+    private IPEndPoint _relayEndpoint = new(IPAddress.Loopback, 2070);
     private IReadOnlyList<string> _includedProcessPaths = [];
     private IReadOnlyList<string> _excludedProcessPaths = [];
 
@@ -52,15 +53,26 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     }
 
     /// <summary>
+    /// Read-only snapshot of the current NAT table for LocalRelay to consume.
+    /// Key: "srcIP:srcPort", Value: original destination IPEndPoint.
+    /// </summary>
+    public IReadOnlyDictionary<string, IPEndPoint> NatTableSnapshot =>
+        _natTable.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.OriginalDestination);
+
+    /// <summary>
     /// Configure the driver with redirect target and process lists.
     /// Must be called before <see cref="ReadLoopAsync"/>.
     /// </summary>
     public void Configure(
         IPEndPoint socksEndpoint,
+        IPEndPoint relayEndpoint,
         IReadOnlyList<string> includedPaths,
         IReadOnlyList<string> excludedPaths)
     {
         _socksEndpoint = socksEndpoint;
+        _relayEndpoint = relayEndpoint;
         _includedProcessPaths = includedPaths;
         _excludedProcessPaths = excludedPaths;
     }
@@ -297,6 +309,14 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         var srcIp = new IPAddress(new ReadOnlySpan<byte>(ip + 12, 4));
         var dstIp = new IPAddress(new ReadOnlySpan<byte>(ip + 16, 4));
 
+        // Never intercept loopback traffic — prevents infinite loop
+        // (app → WinpkFilter → LocalRelay → sing-box → WinpkFilter → ...)
+        if (IPAddress.IsLoopback(dstIp))
+        {
+            ReinjectPacket(ref ethRequest);
+            return;
+        }
+
         byte* transport = ip + ihl;
         ushort srcPort = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(transport, 2));
         ushort dstPort = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(transport + 2, 2));
@@ -405,8 +425,8 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         ushort srcPort = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(transport, 2));
         ushort dstPort = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(transport + 2, 2));
 
-        // Response from SOCKS endpoint → rewrite source back to original destination
-        if (srcIp.Equals(_socksEndpoint.Address) && srcPort == _socksEndpoint.Port)
+        // Response from LocalRelay endpoint → rewrite source back to original destination
+        if (srcIp.Equals(_relayEndpoint.Address) && srcPort == _relayEndpoint.Port)
         {
             var dstIp = new IPAddress(new ReadOnlySpan<byte>(ip + 16, 4));
             string natKey = $"{dstIp}:{dstPort}";
@@ -441,8 +461,10 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
 
     private void RewriteDestination(byte* raw, byte* ip, byte* transport, byte proto, byte ihl, int packetLen)
     {
-        var socksAddrBytes = _socksEndpoint.Address.GetAddressBytes();
-        ushort socksPort = (ushort)_socksEndpoint.Port;
+        // Redirect to LocalRelay, not sing-box directly. LocalRelay performs
+        // the SOCKS5 CONNECT handshake on behalf of the original client.
+        var socksAddrBytes = _relayEndpoint.Address.GetAddressBytes();
+        ushort socksPort = (ushort)_relayEndpoint.Port;
 
         // Rewrite IP destination
         Marshal.Copy(socksAddrBytes, 0, (IntPtr)(ip + 16), 4);

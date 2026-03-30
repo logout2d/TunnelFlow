@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TunnelFlow.Capture.Interop;
 using TunnelFlow.Capture.Policy;
 using TunnelFlow.Capture.ProcessResolver;
+using TunnelFlow.Capture.TransparentProxy;
 using TunnelFlow.Core;
 using TunnelFlow.Core.Models;
 
@@ -10,16 +11,20 @@ namespace TunnelFlow.Capture;
 
 public sealed class CaptureEngine : ICaptureEngine
 {
+    private const int RelayPort = 2070;
+
     private readonly IPacketDriver _driver;
     private readonly IProcessResolver _processResolver;
     private readonly ISessionRegistry _registry;
     private readonly IPolicyEngine _policyEngine;
     private readonly ILogger<CaptureEngine> _logger;
+    private readonly ILoggerFactory? _loggerFactory;
 
     private CancellationTokenSource? _cts;
     private Task? _readLoopTask;
     private Task? _purgeLoopTask;
     private IPEndPoint? _socksEndpoint;
+    private LocalRelay? _localRelay;
     private bool _disposed;
 
     public event EventHandler<SessionEntry>? SessionCreated;
@@ -31,13 +36,15 @@ public sealed class CaptureEngine : ICaptureEngine
         IProcessResolver processResolver,
         ISessionRegistry registry,
         IPolicyEngine policyEngine,
-        ILogger<CaptureEngine> logger)
+        ILogger<CaptureEngine> logger,
+        ILoggerFactory? loggerFactory = null)
     {
         _driver = driver;
         _processResolver = processResolver;
         _registry = registry;
         _policyEngine = policyEngine;
         _logger = logger;
+        _loggerFactory = loggerFactory;
     }
 
     public Task StartAsync(CaptureConfig config, CancellationToken ct)
@@ -53,6 +60,7 @@ public sealed class CaptureEngine : ICaptureEngine
         _policyEngine.UpdateRules(config.Rules);
 
         _socksEndpoint = new IPEndPoint(config.SocksAddress, config.SocksPort);
+        var relayEndpoint = new IPEndPoint(IPAddress.Loopback, RelayPort);
 
         if (_driver is WinpkFilterPacketDriver wpfDriver)
         {
@@ -61,7 +69,21 @@ public sealed class CaptureEngine : ICaptureEngine
                 .Select(r => r.ExePath)
                 .ToList();
 
-            wpfDriver.Configure(_socksEndpoint, includedPaths, config.ExcludedProcessPaths.ToList());
+            wpfDriver.Configure(
+                _socksEndpoint,
+                relayEndpoint,
+                includedPaths,
+                config.ExcludedProcessPaths.ToList());
+
+            if (_loggerFactory is not null)
+            {
+                _localRelay = new LocalRelay(
+                    relayEndpoint,
+                    _socksEndpoint,
+                    () => wpfDriver.NatTableSnapshot,
+                    _loggerFactory.CreateLogger<LocalRelay>());
+                _ = _localRelay.StartAsync(_cts.Token);
+            }
         }
 
         _readLoopTask = RunReadLoopAsync(_cts.Token);
@@ -76,6 +98,12 @@ public sealed class CaptureEngine : ICaptureEngine
             return;
 
         _cts.Cancel();
+
+        if (_localRelay is not null)
+        {
+            await _localRelay.DisposeAsync();
+            _localRelay = null;
+        }
 
         try
         {

@@ -45,7 +45,7 @@ public class SingBoxConfigBuilder
             {
                 new JsonObject
                 {
-                    ["type"] = "mixed",
+                    ["type"] = "socks",
                     ["tag"] = "socks-in",
                     ["listen"] = "127.0.0.1",
                     ["listen_port"] = config.SocksPort

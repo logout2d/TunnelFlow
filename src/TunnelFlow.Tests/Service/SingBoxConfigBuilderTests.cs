@@ -66,6 +66,18 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
+    public void Build_InboundType_IsSocks()
+    {
+        var json = _builder.Build(MakeProfile(), MakeConfig());
+        using var doc = JsonDocument.Parse(json);
+        var inboundType = doc.RootElement
+            .GetProperty("inbounds")[0]
+            .GetProperty("type")
+            .GetString();
+        Assert.Equal("socks", inboundType);
+    }
+
+    [Fact]
     public void Build_SniffEnabled_OnSocksInbound()
     {
         var json = _builder.Build(MakeProfile(), MakeConfig());
