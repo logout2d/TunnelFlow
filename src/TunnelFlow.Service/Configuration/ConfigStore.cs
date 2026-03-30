@@ -96,6 +96,7 @@ public class ConfigStore
         EncryptedUserId = string.IsNullOrEmpty(p.UserId) ? string.Empty : EncryptField(p.UserId),
         Network = p.Network,
         Security = p.Security,
+        Flow = p.Flow,
         Tls = p.Tls,
         IsActive = p.IsActive
     };
@@ -109,6 +110,7 @@ public class ConfigStore
         UserId = string.IsNullOrEmpty(p.EncryptedUserId) ? string.Empty : DecryptField(p.EncryptedUserId),
         Network = p.Network,
         Security = p.Security,
+        Flow = p.Flow,
         Tls = p.Tls,
         IsActive = p.IsActive
     };
@@ -158,6 +160,9 @@ public class ConfigStore
 
         [JsonPropertyName("security")]
         public string Security { get; set; } = string.Empty;
+
+        [JsonPropertyName("flow")]
+        public string Flow { get; set; } = string.Empty;
 
         [JsonPropertyName("tls")]
         public TlsOptions? Tls { get; set; }

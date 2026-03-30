@@ -50,6 +50,7 @@ public class ConfigStoreTests : IDisposable
                     ServerAddress = "vpn.example.com",
                     ServerPort = 443,
                     UserId = originalUserId,
+                    Flow = "xtls-rprx-vision",
                     Network = "tcp",
                     Security = "tls",
                     Tls = new TlsOptions { Sni = "sni.example.com", AllowInsecure = false }
@@ -71,6 +72,7 @@ public class ConfigStoreTests : IDisposable
         Assert.Equal(config.Profiles[0].ServerAddress, loaded.Profiles[0].ServerAddress);
         Assert.Equal(config.Profiles[0].Security, loaded.Profiles[0].Security);
         Assert.Equal(config.Profiles[0].Tls?.Sni, loaded.Profiles[0].Tls?.Sni);
+        Assert.Equal(config.Profiles[0].Flow, loaded.Profiles[0].Flow);
 
         // UserId must survive the roundtrip (decrypted correctly)
         Assert.Equal(originalUserId, loaded.Profiles[0].UserId);

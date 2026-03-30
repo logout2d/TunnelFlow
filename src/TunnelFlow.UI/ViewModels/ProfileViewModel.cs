@@ -14,10 +14,13 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private string _serverAddress = "";
     [ObservableProperty] private int _serverPort = 443;
     [ObservableProperty] private string _userId = "";
+    [ObservableProperty] private string _flow = "";
     [ObservableProperty] private string _network = "tcp";
     [ObservableProperty] private string _security = "tls";
     [ObservableProperty] private string _sni = "";
     [ObservableProperty] private string _fingerprint = "chrome";
+    [ObservableProperty] private string _realityPublicKey = "";
+    [ObservableProperty] private string _realityShortId = "";
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private string _saveStatus = "";
 
@@ -61,10 +64,13 @@ public partial class ProfileViewModel : ObservableObject
         ServerAddress = active.ServerAddress;
         ServerPort = active.ServerPort;
         UserId = active.UserId;
+        Flow = active.Flow;
         Network = active.Network;
         Security = active.Security;
         Sni = active.Tls?.Sni ?? "";
         Fingerprint = active.Tls?.Fingerprint ?? "chrome";
+        RealityPublicKey = active.Tls?.RealityPublicKey ?? "";
+        RealityShortId = active.Tls?.RealityShortId ?? "";
         IsActive = active.IsActive;
     }
 
@@ -99,23 +105,41 @@ public partial class ProfileViewModel : ObservableObject
         }
     }
 
-    private VlessProfile BuildProfile() => new()
+    private VlessProfile BuildProfile()
     {
-        Id = Id,
-        Name = Name,
-        ServerAddress = ServerAddress,
-        ServerPort = ServerPort,
-        UserId = UserId,
-        Network = Network,
-        Security = Security,
-        IsActive = IsActive,
-        Tls = string.Equals(Security, "none", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : new TlsOptions
-            {
-                Sni = string.IsNullOrEmpty(Sni) ? ServerAddress : Sni,
-                AllowInsecure = false,
-                Fingerprint = string.IsNullOrEmpty(Fingerprint) ? null : Fingerprint
-            }
-    };
+        var flowTrim = Flow.Trim();
+        return new VlessProfile
+        {
+            Id = Id,
+            Name = Name,
+            ServerAddress = ServerAddress,
+            ServerPort = ServerPort,
+            UserId = UserId,
+            Flow = flowTrim,
+            Network = Network,
+            Security = Security,
+            IsActive = IsActive,
+            Tls = string.Equals(Security, "none", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : string.Equals(Security, "reality", StringComparison.OrdinalIgnoreCase)
+                    ? new TlsOptions
+                    {
+                        Sni = string.IsNullOrEmpty(Sni) ? ServerAddress : Sni,
+                        AllowInsecure = false,
+                        Fingerprint = string.IsNullOrEmpty(Fingerprint) ? null : Fingerprint,
+                        RealityPublicKey = string.IsNullOrWhiteSpace(RealityPublicKey)
+                            ? null
+                            : RealityPublicKey.Trim(),
+                        RealityShortId = string.IsNullOrWhiteSpace(RealityShortId)
+                            ? null
+                            : RealityShortId.Trim()
+                    }
+                    : new TlsOptions
+                    {
+                        Sni = string.IsNullOrEmpty(Sni) ? ServerAddress : Sni,
+                        AllowInsecure = false,
+                        Fingerprint = string.IsNullOrEmpty(Fingerprint) ? null : Fingerprint
+                    }
+        };
+    }
 }

@@ -31,6 +31,7 @@ public record VlessProfile
     public string ServerAddress { get; init; }  // hostname or IP
     public int ServerPort { get; init; }
     public string UserId { get; init; }         // UUID, DPAPI-encrypted at rest
+    public string Flow { get; init; }           // e.g. "xtls-rprx-vision" or ""
     public string Network { get; init; }        // "tcp" | "ws" | "grpc"
     public string Security { get; init; }       // "tls" | "reality" | "none"
     public TlsOptions? Tls { get; init; }
@@ -42,6 +43,8 @@ public record TlsOptions
     public string Sni { get; init; }
     public bool AllowInsecure { get; init; }
     public string? Fingerprint { get; init; }   // "chrome" | "firefox" | null
+    public string? RealityPublicKey { get; init; }  // when Security == "reality"
+    public string? RealityShortId { get; init; }
 }
 ```
 

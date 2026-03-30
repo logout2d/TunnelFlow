@@ -41,6 +41,9 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Name -->
@@ -86,36 +89,57 @@
                     </TextBlock>
                 </Grid>
 
-                <!-- Network -->
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="Network" VerticalAlignment="Center"
+                <!-- Flow (e.g. xtls-rprx-vision) -->
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Flow" VerticalAlignment="Center"
                            Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium"/>
-                <ComboBox Grid.Row="4" Grid.Column="1"
+                <TextBox Grid.Row="4" Grid.Column="1"
+                         Text="{Binding Flow, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"
+                         ToolTip="Leave empty for plain VLESS; use xtls-rprx-vision for REALITY + Vision"/>
+
+                <!-- Network -->
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Network" VerticalAlignment="Center"
+                           Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium"/>
+                <ComboBox Grid.Row="5" Grid.Column="1"
                           ItemsSource="{Binding Source={x:Static vm:ProfileViewModel.Networks}}"
                           SelectedItem="{Binding Network}"
                           Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"/>
 
                 <!-- Security -->
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="Security" VerticalAlignment="Center"
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Security" VerticalAlignment="Center"
                            Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium"/>
-                <ComboBox Grid.Row="5" Grid.Column="1"
+                <ComboBox Grid.Row="6" Grid.Column="1"
                           ItemsSource="{Binding Source={x:Static vm:ProfileViewModel.Securities}}"
                           SelectedItem="{Binding Security}"
                           Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"/>
 
                 <!-- SNI -->
-                <TextBlock Grid.Row="6" Grid.Column="0" Text="SNI" VerticalAlignment="Center"
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="SNI" VerticalAlignment="Center"
                            Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium"/>
-                <TextBox Grid.Row="6" Grid.Column="1"
+                <TextBox Grid.Row="7" Grid.Column="1"
                          Text="{Binding Sni, UpdateSourceTrigger=PropertyChanged}"
                          Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"/>
 
                 <!-- Fingerprint -->
-                <TextBlock Grid.Row="7" Grid.Column="0" Text="Fingerprint" VerticalAlignment="Center"
-                           Margin="0,0,12,0" Foreground="#475569" FontWeight="Medium"/>
-                <ComboBox Grid.Row="7" Grid.Column="1"
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="Fingerprint" VerticalAlignment="Center"
+                           Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium"/>
+                <ComboBox Grid.Row="8" Grid.Column="1"
                           ItemsSource="{Binding Source={x:Static vm:ProfileViewModel.Fingerprints}}"
                           SelectedItem="{Binding Fingerprint}"
-                          Padding="8,5" BorderBrush="#CBD5E1"/>
+                          Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"/>
+
+                <!-- REALITY -->
+                <TextBlock Grid.Row="9" Grid.Column="0" Text="Reality public key" VerticalAlignment="Center"
+                           Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium" TextWrapping="Wrap"/>
+                <TextBox Grid.Row="9" Grid.Column="1"
+                         Text="{Binding RealityPublicKey, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,0,0,12" Padding="8,5" BorderBrush="#CBD5E1"/>
+
+                <TextBlock Grid.Row="10" Grid.Column="0" Text="Reality short ID" VerticalAlignment="Center"
+                           Margin="0,0,12,0" Foreground="#475569" FontWeight="Medium" TextWrapping="Wrap"/>
+                <TextBox Grid.Row="10" Grid.Column="1"
+                         Text="{Binding RealityShortId, UpdateSourceTrigger=PropertyChanged}"
+                         Padding="8,5" BorderBrush="#CBD5E1"/>
             </Grid>
 
             <!-- Buttons -->

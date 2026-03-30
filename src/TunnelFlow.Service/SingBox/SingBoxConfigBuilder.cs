@@ -1,21 +1,20 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.Service.SingBox;
 
 public class SingBoxConfigBuilder
 {
-    private static readonly JsonSerializerOptions _writeOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions _writeOptions = new()
+    {
+        WriteIndented = true,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver()
+    };
 
     public string Build(VlessProfile profile, SingBoxConfig config)
     {
-        bool tlsEnabled = !string.Equals(profile.Security, "none", StringComparison.OrdinalIgnoreCase);
-        string sni = profile.Tls?.Sni ?? profile.ServerAddress;
-        bool allowInsecure = profile.Tls?.AllowInsecure ?? false;
-        bool utlsEnabled = profile.Tls?.Fingerprint is not null;
-        string fingerprint = profile.Tls?.Fingerprint ?? "chrome";
-
         var logNode = new JsonObject { ["level"] = "info" };
         if (!string.IsNullOrEmpty(config.LogOutputPath))
             logNode["output"] = config.LogOutputPath;
@@ -30,21 +29,14 @@ public class SingBoxConfigBuilder
                     new JsonObject
                     {
                         ["tag"] = "remote-dns",
-                        ["address"] = "https://1.1.1.1/dns-query",
+                        ["type"] = "https",
+                        ["server"] = "1.1.1.1",
                         ["detour"] = "vless-out"
                     },
                     new JsonObject
                     {
                         ["tag"] = "local-dns",
-                        ["address"] = "local"
-                    }
-                },
-                ["rules"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["outbound"] = "any",
-                        ["server"] = "local-dns"
+                        ["type"] = "local"
                     }
                 },
                 ["final"] = "remote-dns"
@@ -56,51 +48,91 @@ public class SingBoxConfigBuilder
                     ["type"] = "socks",
                     ["tag"] = "socks-in",
                     ["listen"] = "127.0.0.1",
-                    ["listen_port"] = config.SocksPort,
-                    ["sniff"] = true,
-                    ["sniff_override_destination"] = true
+                    ["listen_port"] = config.SocksPort
                 }
             },
             ["outbounds"] = new JsonArray
             {
-                new JsonObject
-                {
-                    ["type"] = "vless",
-                    ["tag"] = "vless-out",
-                    ["server"] = profile.ServerAddress,
-                    ["server_port"] = profile.ServerPort,
-                    ["uuid"] = profile.UserId,
-                    ["flow"] = "",
-                    ["tls"] = new JsonObject
-                    {
-                        ["enabled"] = tlsEnabled,
-                        ["server_name"] = sni,
-                        ["insecure"] = allowInsecure,
-                        ["utls"] = new JsonObject
-                        {
-                            ["enabled"] = utlsEnabled,
-                            ["fingerprint"] = fingerprint
-                        }
-                    }
-                },
-                new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
-                new JsonObject { ["type"] = "block",  ["tag"] = "block"  }
+                BuildVlessOutbound(profile),
+                new JsonObject { ["type"] = "direct", ["tag"] = "direct" }
             },
             ["route"] = new JsonObject
             {
                 ["rules"] = new JsonArray
                 {
+                    new JsonObject { ["action"] = "sniff" },
                     new JsonObject
                     {
                         ["protocol"] = "dns",
-                        ["outbound"] = "vless-out"
+                        ["action"] = "hijack-dns"
                     }
                 },
                 ["final"] = "vless-out",
-                ["auto_detect_interface"] = true
+                ["auto_detect_interface"] = true,
+                ["default_domain_resolver"] = "local-dns"
             }
         };
 
         return root.ToJsonString(_writeOptions);
+    }
+
+    private static JsonObject BuildVlessOutbound(VlessProfile profile)
+    {
+        var vless = new JsonObject
+        {
+            ["type"] = "vless",
+            ["tag"] = "vless-out",
+            ["server"] = profile.ServerAddress,
+            ["server_port"] = profile.ServerPort,
+            ["uuid"] = profile.UserId
+        };
+
+        if (!string.IsNullOrWhiteSpace(profile.Flow))
+            vless["flow"] = profile.Flow;
+
+        if (string.Equals(profile.Security, "none", StringComparison.OrdinalIgnoreCase))
+            return vless;
+
+        string sni = string.IsNullOrEmpty(profile.Tls?.Sni)
+            ? profile.ServerAddress
+            : profile.Tls!.Sni;
+        string fingerprint = string.IsNullOrEmpty(profile.Tls?.Fingerprint)
+            ? "chrome"
+            : profile.Tls!.Fingerprint!;
+
+        var utls = new JsonObject
+        {
+            ["enabled"] = true,
+            ["fingerprint"] = fingerprint
+        };
+
+        if (string.Equals(profile.Security, "reality", StringComparison.OrdinalIgnoreCase))
+        {
+            vless["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = sni,
+                ["reality"] = new JsonObject
+                {
+                    ["enabled"] = true,
+                    ["public_key"] = profile.Tls?.RealityPublicKey ?? string.Empty,
+                    ["short_id"] = profile.Tls?.RealityShortId ?? string.Empty
+                },
+                ["utls"] = utls
+            };
+        }
+        else
+        {
+            bool allowInsecure = profile.Tls?.AllowInsecure ?? false;
+            vless["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = sni,
+                ["insecure"] = allowInsecure,
+                ["utls"] = utls
+            };
+        }
+
+        return vless;
     }
 }

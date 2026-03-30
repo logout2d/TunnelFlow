@@ -71,9 +71,8 @@ public class SingBoxConfigBuilderTests
         var json = _builder.Build(MakeProfile(), MakeConfig());
 
         using var doc = JsonDocument.Parse(json);
-        var inbound = doc.RootElement.GetProperty("inbounds")[0];
-        Assert.True(inbound.GetProperty("sniff").GetBoolean());
-        Assert.True(inbound.GetProperty("sniff_override_destination").GetBoolean());
+        var rules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        Assert.Equal("sniff", rules[0].GetProperty("action").GetString());
     }
 
     [Fact]
@@ -85,17 +84,24 @@ public class SingBoxConfigBuilderTests
         var root = doc.RootElement;
         Assert.True(root.TryGetProperty("dns", out var dns));
 
-        // remote-dns server routes through vless-out
+        // remote-dns server uses new sing-box 1.12+ typed format
         var servers = dns.GetProperty("servers");
         Assert.True(servers.GetArrayLength() >= 2);
         Assert.Equal("remote-dns", servers[0].GetProperty("tag").GetString());
+        Assert.Equal("https", servers[0].GetProperty("type").GetString());
+        Assert.Equal("1.1.1.1", servers[0].GetProperty("server").GetString());
         Assert.Equal("vless-out", servers[0].GetProperty("detour").GetString());
+        Assert.Equal("local", servers[1].GetProperty("type").GetString());
 
-        // route has dns protocol rule
-        var routeRules = root.GetProperty("route").GetProperty("rules");
-        Assert.True(routeRules.GetArrayLength() >= 1);
-        Assert.Equal("dns", routeRules[0].GetProperty("protocol").GetString());
-        Assert.Equal("vless-out", routeRules[0].GetProperty("outbound").GetString());
+        Assert.False(dns.TryGetProperty("rules", out _), "dns.rules removed in sing-box 1.13 layout");
+
+        var route = root.GetProperty("route");
+        Assert.Equal("local-dns", route.GetProperty("default_domain_resolver").GetString());
+
+        var routeRules = route.GetProperty("rules");
+        Assert.Equal(2, routeRules.GetArrayLength());
+        Assert.Equal("dns", routeRules[1].GetProperty("protocol").GetString());
+        Assert.Equal("hijack-dns", routeRules[1].GetProperty("action").GetString());
     }
 
     [Fact]
@@ -116,12 +122,8 @@ public class SingBoxConfigBuilderTests
         var json = _builder.Build(MakeProfile(security: "none"), MakeConfig());
 
         using var doc = JsonDocument.Parse(json);
-        var tlsEnabled = doc.RootElement
-            .GetProperty("outbounds")[0]
-            .GetProperty("tls")
-            .GetProperty("enabled")
-            .GetBoolean();
-        Assert.False(tlsEnabled);
+        var outbound = doc.RootElement.GetProperty("outbounds")[0];
+        Assert.False(outbound.TryGetProperty("tls", out _), "security none must omit tls on vless outbound");
     }
 
     [Fact]
@@ -153,5 +155,46 @@ public class SingBoxConfigBuilderTests
             .GetProperty("server_name")
             .GetString();
         Assert.Equal(tls.Sni, sni);
+    }
+
+    [Fact]
+    public void Build_Reality_OutboundContainsRealityAndUtls()
+    {
+        var tls = new TlsOptions
+        {
+            Sni = "www.example.com",
+            AllowInsecure = false,
+            Fingerprint = "chrome",
+            RealityPublicKey = "SuT2Ct1R8lBD36kL2ZoM8zaiks3P0DetQ-In2z-WSVk",
+            RealityShortId = "adbacdba5bfe"
+        };
+        var profile = MakeProfile(security: "reality", tls: tls);
+        var json = _builder.Build(profile, MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        var tlsNode = doc.RootElement.GetProperty("outbounds")[0].GetProperty("tls");
+        Assert.True(tlsNode.GetProperty("enabled").GetBoolean());
+        Assert.Equal("www.example.com", tlsNode.GetProperty("server_name").GetString());
+        var reality = tlsNode.GetProperty("reality");
+        Assert.True(reality.GetProperty("enabled").GetBoolean());
+        Assert.Equal(tls.RealityPublicKey, reality.GetProperty("public_key").GetString());
+        Assert.Equal(tls.RealityShortId, reality.GetProperty("short_id").GetString());
+        Assert.True(tlsNode.GetProperty("utls").GetProperty("enabled").GetBoolean());
+        Assert.False(tlsNode.TryGetProperty("insecure", out _), "reality tls must not use legacy insecure field");
+    }
+
+    [Fact]
+    public void Build_Flow_OmittedWhenEmpty_PresentWhenSet()
+    {
+        var emptyFlow = _builder.Build(MakeProfile(), MakeConfig());
+        using (var doc = JsonDocument.Parse(emptyFlow))
+            Assert.False(doc.RootElement.GetProperty("outbounds")[0].TryGetProperty("flow", out _));
+
+        var withFlow = _builder.Build(
+            MakeProfile() with { Flow = "xtls-rprx-vision" },
+            MakeConfig());
+        using (var doc = JsonDocument.Parse(withFlow))
+            Assert.Equal("xtls-rprx-vision",
+                doc.RootElement.GetProperty("outbounds")[0].GetProperty("flow").GetString());
     }
 }

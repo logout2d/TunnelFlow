@@ -7,4 +7,10 @@ public record TlsOptions
     public bool AllowInsecure { get; init; }
 
     public string? Fingerprint { get; init; }
+
+    /// <summary>Used when profile <c>Security</c> is <c>reality</c>.</summary>
+    public string? RealityPublicKey { get; init; }
+
+    /// <summary>Used when profile <c>Security</c> is <c>reality</c>.</summary>
+    public string? RealityShortId { get; init; }
 }

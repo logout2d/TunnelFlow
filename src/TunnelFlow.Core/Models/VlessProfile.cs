@@ -12,6 +12,9 @@ public record VlessProfile
 
     public string UserId { get; init; } = string.Empty;
 
+    /// <summary>VLESS flow, e.g. <c>xtls-rprx-vision</c>; empty when not used.</summary>
+    public string Flow { get; init; } = string.Empty;
+
     public string Network { get; init; } = string.Empty;
 
     public string Security { get; init; } = string.Empty;
