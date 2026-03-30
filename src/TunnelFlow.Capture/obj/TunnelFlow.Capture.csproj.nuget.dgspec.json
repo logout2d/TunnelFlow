@@ -10,14 +10,14 @@
         "projectUniqueName": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Capture\\TunnelFlow.Capture.csproj",
         "projectName": "TunnelFlow.Capture",
         "projectPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Capture\\TunnelFlow.Capture.csproj",
-        "packagesPath": "C:\\Users\\Dogan\\.nuget\\packages\\",
+        "packagesPath": "C:\\Users\\Vatman\\.nuget\\packages\\",
         "outputPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Capture\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Dogan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Vatman\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -88,14 +88,14 @@
         "projectUniqueName": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Core\\TunnelFlow.Core.csproj",
         "projectName": "TunnelFlow.Core",
         "projectPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Core\\TunnelFlow.Core.csproj",
-        "packagesPath": "C:\\Users\\Dogan\\.nuget\\packages\\",
+        "packagesPath": "C:\\Users\\Vatman\\.nuget\\packages\\",
         "outputPath": "D:\\Develop\\TunnelFlow\\src\\TunnelFlow.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Dogan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Vatman\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -153,7 +153,7 @@
         "projectUniqueName": "D:\\Develop\\TunnelFlow\\third_party\\ndisapi.net\\NdisApiDotNet\\NdisApiDotNet.csproj",
         "projectName": "NdisApiDotNet",
         "projectPath": "D:\\Develop\\TunnelFlow\\third_party\\ndisapi.net\\NdisApiDotNet\\NdisApiDotNet.csproj",
-        "packagesPath": "C:\\Users\\Dogan\\.nuget\\packages\\",
+        "packagesPath": "C:\\Users\\Vatman\\.nuget\\packages\\",
         "outputPath": "D:\\Develop\\TunnelFlow\\third_party\\ndisapi.net\\NdisApiDotNet\\obj\\",
         "projectStyle": "PackageReference",
         "crossTargeting": true,
@@ -161,7 +161,7 @@
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Dogan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Vatman\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
