@@ -57,6 +57,12 @@ Completed sub-step:
   - `WfpNativeInterop`
   - `WfpNativeSession`
   - provider ingestion of session events into the metadata store
+Completed sub-step:
+- add the first real native session/control channel:
+  - tiny native helper process
+  - real process/stdin/stdout boundary
+  - `WfpNativeSession` receives a real event from that native channel
+  - `WfpTcpRedirectProvider` ingests it into the metadata store
 
 ## Step 12
 Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.

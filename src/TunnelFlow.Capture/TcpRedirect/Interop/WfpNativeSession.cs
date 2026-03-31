@@ -6,10 +6,11 @@ public sealed class WfpNativeSession
 {
     private readonly WfpNativeInterop _interop;
     private readonly ILogger<WfpNativeSession> _logger;
+    private readonly TimeSpan _eventPumpInterval;
 
     private CancellationTokenSource? _pumpCts;
     private Task? _pumpTask;
-    private WfpNativeSessionHandle _handle;
+    private WfpNativeSessionHandle _handle = WfpNativeSessionHandle.CreateStub();
     private volatile bool _started;
 
     public event EventHandler<WfpRedirectEvent>? RedirectEventReceived;
@@ -18,10 +19,12 @@ public sealed class WfpNativeSession
 
     public WfpNativeSession(
         WfpNativeInterop interop,
-        ILogger<WfpNativeSession> logger)
+        ILogger<WfpNativeSession> logger,
+        TimeSpan? eventPumpInterval = null)
     {
         _interop = interop;
         _logger = logger;
+        _eventPumpInterval = eventPumpInterval ?? TimeSpan.FromMilliseconds(100);
     }
 
     public async Task StartAsync(WfpRedirectConfig config, CancellationToken ct = default)
@@ -35,9 +38,10 @@ public sealed class WfpNativeSession
         _started = true;
 
         _logger.LogInformation(
-            "WFP native session start useWfpTcpRedirect={UseWfpTcpRedirect} sessionId={SessionId}",
+            "WFP native session start useWfpTcpRedirect={UseWfpTcpRedirect} sessionId={SessionId} mode={Mode}",
             config.UseWfpTcpRedirect,
-            _handle.Id);
+            _handle.Id,
+            _handle.Mode);
     }
 
     public async Task StopAsync(CancellationToken ct = default)
@@ -59,23 +63,34 @@ public sealed class WfpNativeSession
         _started = false;
 
         _logger.LogInformation(
-            "WFP native session stop sessionId={SessionId}",
-            _handle.Id);
+            "WFP native session stop sessionId={SessionId} mode={Mode}",
+            _handle.Id,
+            _handle.Mode);
     }
 
-    internal void PublishSyntheticEvent(WfpRedirectEvent redirectEvent)
+    internal async Task PublishSyntheticEventAsync(
+        WfpRedirectEvent redirectEvent,
+        CancellationToken ct = default)
     {
         _logger.LogInformation(
-            "WFP native session synthetic-event key={LookupKey} originalDst={OriginalDestination} relay={RelayEndpoint}",
+            "WFP native session synthetic-event key={LookupKey} originalDst={OriginalDestination} relay={RelayEndpoint} mode={Mode}",
             redirectEvent.LookupKey,
             redirectEvent.OriginalDestination,
-            redirectEvent.RelayEndpoint);
+            redirectEvent.RelayEndpoint,
+            _handle.Mode);
+
+        if (_handle.Mode == WfpNativeSessionMode.Native)
+        {
+            await _interop.SendSyntheticRedirectEventAsync(_handle, redirectEvent, ct);
+            return;
+        }
+
         RedirectEventReceived?.Invoke(this, redirectEvent);
     }
 
     private async Task PumpEventsAsync(CancellationToken ct)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        using var timer = new PeriodicTimer(_eventPumpInterval);
 
         while (await timer.WaitForNextTickAsync(ct))
         {

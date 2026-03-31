@@ -10,9 +10,10 @@ public class WfpTcpRedirectProviderEventIngestionTests
     [Fact]
     public async Task SyntheticNativeEvent_IsIngestedIntoMetadataStore()
     {
+        string helperPath = NativeChannelTestHelper.GetHelperPathOrSkip();
         var store = new InMemoryOriginalDestinationStore();
         var nativeSession = new WfpNativeSession(
-            new WfpNativeInterop(),
+            new WfpNativeInterop(helperPath),
             NullLogger<WfpNativeSession>.Instance);
         var provider = new WfpTcpRedirectProvider(
             store,
@@ -38,9 +39,9 @@ public class WfpTcpRedirectProviderEventIngestionTests
             ObservedAtUtc = new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc)
         };
 
-        nativeSession.PublishSyntheticEvent(redirectEvent);
+        await nativeSession.PublishSyntheticEventAsync(redirectEvent);
 
-        Assert.True(provider.TryGetOriginalDestination(redirectEvent.LookupKey, out var stored));
+        var stored = await WaitForRedirectAsync(provider, redirectEvent.LookupKey);
         Assert.Equal(redirectEvent.OriginalDestination, stored.OriginalDestination);
         Assert.Equal(redirectEvent.RelayEndpoint, stored.RelayEndpoint);
         Assert.Equal(redirectEvent.ProcessId, stored.ProcessId);
@@ -56,5 +57,41 @@ public class WfpTcpRedirectProviderEventIngestionTests
         Assert.Equal(1, stats.ActiveRecordCount);
 
         await provider.StopAsync();
+    }
+
+    private static async Task<ConnectionRedirectRecord> WaitForRedirectAsync(
+        WfpTcpRedirectProvider provider,
+        ConnectionLookupKey key)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        while (!cts.IsCancellationRequested)
+        {
+            if (provider.TryGetOriginalDestination(key, out var stored))
+                return stored;
+
+            await Task.Delay(20, cts.Token);
+        }
+
+        throw new TimeoutException($"Redirect metadata was not ingested for key {key}");
+    }
+}
+
+internal static class NativeChannelTestHelper
+{
+    internal static string GetHelperPathOrSkip()
+    {
+        string helperPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "native",
+            "TunnelFlow.WfpRedirectChannel",
+            "x64",
+            "Debug",
+            "TunnelFlow.WfpRedirectChannel.exe"));
+
+        Assert.True(File.Exists(helperPath), $"Native helper not built: {helperPath}");
+
+        return helperPath;
     }
 }

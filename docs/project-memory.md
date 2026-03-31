@@ -588,3 +588,58 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - skipped: 0
 - Next concrete step toward the first real native redirect milestone:
   - replace the no-op `WfpNativeInterop.TryReadRedirectEventAsync()` path with a real driver/device control channel and carry a single real native redirect event into `WfpNativeSession`
+
+## WFP Native Session Channel
+- Implemented in this phase:
+  - replaced the fully no-op managed/native boundary with the smallest real native control path possible for now:
+    - a tiny native helper process
+    - one stdin command shape
+    - one stdout event shape
+    - one managed session wrapper that reads real events from that native process
+  - `WfpNativeInterop` now:
+    - opens a real native helper process when the helper binary exists
+    - returns a native session handle with real process/stdin/stdout streams
+    - can send one synthetic redirect event command over the native channel
+    - can read one real redirect event line back from the native channel
+    - falls back to stub mode when the helper binary is absent, preserving existing behavior
+  - `WfpNativeSession` now:
+    - logs the actual session mode (`Native` or `Stub`)
+    - pumps events from the real native process when present
+    - publishes synthetic test events through the real native channel instead of directly invoking the event handler
+- Exact files added:
+  - `native/TunnelFlow.WfpRedirectChannel/TunnelFlow.WfpRedirectChannel.vcxproj`
+  - `native/TunnelFlow.WfpRedirectChannel/main.cpp`
+- Exact files changed:
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeInterop.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeSession.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpTcpRedirectProviderEventIngestionTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact real behavior now achieved:
+  - there is now a real native process boundary behind `WfpNativeInterop` / `WfpNativeSession`
+  - a managed test can send a redirect event through that native process
+  - `WfpNativeSession` receives the event back from the real native channel
+  - `WfpTcpRedirectProvider` ingests the event into the metadata store through the normal provider event path
+- What is still not implemented:
+  - no kernel driver/device yet
+  - no WFP ALE classify/redirect behavior yet
+  - no OS-level app `connect()` interception yet
+- Exact validation results:
+  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe native\TunnelFlow.WfpRedirectChannel\TunnelFlow.WfpRedirectChannel.vcxproj /p:Configuration=Debug /p:Platform=x64`
+    - passed
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpTcpRedirectProviderEventIngestionTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpRedirectEventTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.FeatureFlagTcpRedirectProviderTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0
+- Remaining blocker before the first true runtime redirected accept:
+  - replace the native helper process with the first real native driver/device control channel from the future WFP `ALE_CONNECT_REDIRECT_V4` implementation so a real outbound app `connect()` generates the event rather than a synthetic test command
