@@ -532,3 +532,59 @@ Google may still work in some fallback scenarios, while many other sites fail.
   5. emit one redirect metadata event to managed code
   6. store the event as `ConnectionRedirectRecord`
   7. validate one real redirected accept into `LocalRelay`
+
+## WFP Managed Native-Contract Skeleton
+- Implemented in this phase:
+  - added managed interop/session scaffolding for the future native redirect layer
+  - `WfpTcpRedirectProvider` now owns a `WfpNativeSession`
+  - redirect events from that session are converted into `ConnectionRedirectRecord` and stored via the existing metadata path
+  - all native behavior remains stubbed/no-op unless a synthetic event is explicitly published in tests
+- Exact files changed:
+  - `src/TunnelFlow.Capture/TcpRedirect/WfpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Tests/Capture/FeatureFlagTcpRedirectProviderTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpTcpRedirectProviderIntegrationTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact files added:
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpRedirectEvent.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeInterop.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeSession.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpRedirectEventTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpTcpRedirectProviderEventIngestionTests.cs`
+- Contract/event shape introduced:
+  - `WfpRedirectEvent`
+    - `LookupKey`
+    - `OriginalDestination`
+    - `RelayEndpoint`
+    - `ProcessId`
+    - `ProcessPath`
+    - `AppId`
+    - `Protocol`
+    - `CorrelationId`
+    - `ObservedAtUtc`
+  - `WfpRedirectEvent.ToConnectionRedirectRecord(ttl)` maps the event into the existing managed metadata model
+  - `WfpNativeSession`
+    - start/stop lifecycle
+    - background no-op event pump
+    - `RedirectEventReceived` event
+    - test-only synthetic event publishing path
+  - `WfpNativeInterop`
+    - no-op open/close/read contract skeleton for the future native device/session boundary
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpRedirectEventTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpTcpRedirectProviderEventIngestionTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.FeatureFlagTcpRedirectProviderTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0
+- Next concrete step toward the first real native redirect milestone:
+  - replace the no-op `WfpNativeInterop.TryReadRedirectEventAsync()` path with a real driver/device control channel and carry a single real native redirect event into `WfpNativeSession`

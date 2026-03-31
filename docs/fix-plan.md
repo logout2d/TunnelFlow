@@ -51,6 +51,12 @@ Current narrow milestone:
 - target one test app-id / executable only
 - emit one redirect metadata event into `WfpTcpRedirectProvider`
 - prove one real redirected accept reaches `LocalRelay` with `source=redirect-store`
+Completed sub-step:
+- add managed native-contract scaffolding:
+  - `WfpRedirectEvent`
+  - `WfpNativeInterop`
+  - `WfpNativeSession`
+  - provider ingestion of session events into the metadata store
 
 ## Step 12
 Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.

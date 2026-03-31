@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TunnelFlow.Capture.TcpRedirect;
+using TunnelFlow.Capture.TcpRedirect.Interop;
 
 namespace TunnelFlow.Tests.Capture;
 
@@ -61,7 +62,13 @@ public class FeatureFlagTcpRedirectProviderTests
     {
         var store = new InMemoryOriginalDestinationStore();
         var noOpProvider = new NoOpTcpRedirectProvider(store, NullLogger<NoOpTcpRedirectProvider>.Instance);
-        var wfpProvider = new WfpTcpRedirectProvider(store, NullLogger<WfpTcpRedirectProvider>.Instance);
+        var nativeSession = new WfpNativeSession(
+            new WfpNativeInterop(),
+            NullLogger<WfpNativeSession>.Instance);
+        var wfpProvider = new WfpTcpRedirectProvider(
+            store,
+            nativeSession,
+            NullLogger<WfpTcpRedirectProvider>.Instance);
 
         return new FeatureFlagTcpRedirectProvider(
             noOpProvider,

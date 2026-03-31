@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using TunnelFlow.Capture.TcpRedirect;
+using TunnelFlow.Capture.TcpRedirect.Interop;
 using TunnelFlow.Capture.TransparentProxy;
 
 namespace TunnelFlow.Tests.Capture;
@@ -20,8 +21,12 @@ public class WfpTcpRedirectProviderIntegrationTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         var store = new InMemoryOriginalDestinationStore();
+        var nativeSession = new WfpNativeSession(
+            new WfpNativeInterop(),
+            NullLogger<WfpNativeSession>.Instance);
         var provider = new WfpTcpRedirectProvider(
             store,
+            nativeSession,
             NullLogger<WfpTcpRedirectProvider>.Instance);
         await provider.StartAsync(new WfpRedirectConfig
         {

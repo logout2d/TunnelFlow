@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TunnelFlow.Capture.TcpRedirect.Interop;
 
 namespace TunnelFlow.Capture.TcpRedirect;
 
@@ -6,6 +7,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
 {
     private readonly ILogger<WfpTcpRedirectProvider> _logger;
     private readonly IOriginalDestinationStore _destinationStore;
+    private readonly WfpNativeSession _nativeSession;
 
     private volatile WfpRedirectConfig _config = new();
     private volatile bool _started;
@@ -15,29 +17,33 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
 
     public WfpTcpRedirectProvider(
         IOriginalDestinationStore destinationStore,
+        WfpNativeSession nativeSession,
         ILogger<WfpTcpRedirectProvider> logger)
     {
         _destinationStore = destinationStore;
+        _nativeSession = nativeSession;
         _logger = logger;
     }
 
-    public Task StartAsync(WfpRedirectConfig config, CancellationToken ct = default)
+    public async Task StartAsync(WfpRedirectConfig config, CancellationToken ct = default)
     {
         _config = config;
         _started = true;
+        _nativeSession.RedirectEventReceived -= OnRedirectEventReceived;
+        _nativeSession.RedirectEventReceived += OnRedirectEventReceived;
+        await _nativeSession.StartAsync(config, ct);
 
         _logger.LogInformation(
-            "TCP redirect provider start implementation=wfp-stub useWfpTcpRedirect={UseWfpTcpRedirect} status=placeholder",
+            "TCP redirect provider start implementation=wfp-stub useWfpTcpRedirect={UseWfpTcpRedirect} status=managed-native-session-skeleton",
             config.UseWfpTcpRedirect);
-
-        return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken ct = default)
+    public async Task StopAsync(CancellationToken ct = default)
     {
         _started = false;
+        _nativeSession.RedirectEventReceived -= OnRedirectEventReceived;
+        await _nativeSession.StopAsync(ct);
         _logger.LogInformation("TCP redirect provider stop implementation=wfp-stub");
-        return Task.CompletedTask;
     }
 
     public void RecordRedirect(ConnectionRedirectRecord record)
@@ -90,4 +96,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
         LookupMissCount = Interlocked.Read(ref _lookupMissCount),
         ActiveRecordCount = _destinationStore.Count
     };
+
+    private void OnRedirectEventReceived(object? sender, WfpRedirectEvent redirectEvent) =>
+        RecordRedirect(redirectEvent.ToConnectionRedirectRecord(_config.RecordTtl));
 }
