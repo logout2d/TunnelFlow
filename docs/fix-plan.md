@@ -17,7 +17,7 @@ Status: completed
 
 ## Step 4
 Patch SingBoxConfigBuilder to honor profile.Network (tcp/ws/grpc as supported by the project).
-Status: pending
+Status: completed
 
 ## Step 5
 Improve sing-box readiness validation and logging.

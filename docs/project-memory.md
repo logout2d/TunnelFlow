@@ -81,3 +81,17 @@ Google may still work in some fallback scenarios, while many other sites fail.
   - which sites open
   - whether CONNECT/domain logs show hostname preservation
   - whether fallback to IP occurred
+  
+## Confirmed fix: SingBoxConfigBuilder network mode
+- Confirmed that VlessProfile.Network was defined in the model, exposed in the UI, and persisted, but ignored by SingBoxConfigBuilder.
+- Before the fix, tcp/ws/grpc profile selections produced the same outbound JSON.
+- The builder now:
+  - omits transport for tcp
+  - emits transport.type = "ws" for ws
+  - emits transport.type = "grpc" for grpc
+
+## Validation
+- Ran:
+  - dotnet test .\src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"
+- Result:
+  - 12 passed, 0 failed

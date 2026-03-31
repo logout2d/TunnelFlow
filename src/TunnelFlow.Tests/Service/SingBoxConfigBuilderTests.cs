@@ -209,4 +209,35 @@ public class SingBoxConfigBuilderTests
             Assert.Equal("xtls-rprx-vision",
                 doc.RootElement.GetProperty("outbounds")[0].GetProperty("flow").GetString());
     }
+
+    [Fact]
+    public void Build_TcpNetwork_OmitsTransport()
+    {
+        var json = _builder.Build(MakeProfile() with { Network = "tcp" }, MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.GetProperty("outbounds")[0].TryGetProperty("transport", out _));
+    }
+
+    [Fact]
+    public void Build_WebSocketNetwork_UsesWsTransport()
+    {
+        var json = _builder.Build(MakeProfile() with { Network = "ws" }, MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(
+            "ws",
+            doc.RootElement.GetProperty("outbounds")[0].GetProperty("transport").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void Build_GrpcNetwork_UsesGrpcTransport()
+    {
+        var json = _builder.Build(MakeProfile() with { Network = "grpc" }, MakeConfig());
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(
+            "grpc",
+            doc.RootElement.GetProperty("outbounds")[0].GetProperty("transport").GetProperty("type").GetString());
+    }
 }

@@ -90,6 +90,10 @@ public class SingBoxConfigBuilder
         if (!string.IsNullOrWhiteSpace(profile.Flow))
             vless["flow"] = profile.Flow;
 
+        var transport = BuildTransport(profile.Network);
+        if (transport is not null)
+            vless["transport"] = transport;
+
         if (string.Equals(profile.Security, "none", StringComparison.OrdinalIgnoreCase))
             return vless;
 
@@ -134,5 +138,22 @@ public class SingBoxConfigBuilder
         }
 
         return vless;
+    }
+
+    private static JsonObject? BuildTransport(string? network)
+    {
+        if (string.IsNullOrWhiteSpace(network) ||
+            string.Equals(network, "tcp", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.Equals(network, "ws", StringComparison.OrdinalIgnoreCase))
+            return new JsonObject { ["type"] = "ws" };
+
+        if (string.Equals(network, "grpc", StringComparison.OrdinalIgnoreCase))
+            return new JsonObject { ["type"] = "grpc" };
+
+        return null;
     }
 }
