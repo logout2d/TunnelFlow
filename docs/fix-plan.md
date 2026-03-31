@@ -9,11 +9,11 @@ Status: in progress
 
 ## Step 2
 Patch SOCKS5 domain reply parsing and improve ProtocolSniffer robustness.
-Status: pending
+Status: completed
 
 ## Step 3
 Add focused tests for SOCKS5/domain and fragmented TLS sniffing behavior.
-Status: pending
+Status: completed
 
 ## Step 4
 Patch SingBoxConfigBuilder to honor profile.Network (tcp/ws/grpc as supported by the project).

@@ -28,6 +28,26 @@ Important components:
 4. Capture path currently appears IPv4-focused; IPv6 handling may be incomplete or absent.
 5. SingBoxManager may mark sing-box as running even when SOCKS readiness is not fully confirmed.
 
+## Confirmed patch outcome
+- Root cause addressed in this patch:
+  hostname-preserving transparent relay could fail when SOCKS5 CONNECT responses used ATYP=0x03 (domain) and when early TLS bytes arrived fragmented, causing sniffing to fall back too early and lose hostname/SNI context.
+- Exact files changed:
+  - src/TunnelFlow.Capture/TransparentProxy/Socks5Connector.cs
+  - src/TunnelFlow.Capture/TransparentProxy/ProtocolSniffer.cs
+  - src/TunnelFlow.Tests/Capture/Socks5ConnectorTests.cs
+  - src/TunnelFlow.Tests/Capture/ProtocolSnifferTests.cs
+- Exact validation results:
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.Socks5ConnectorTests" --logger "console;verbosity=minimal"`
+    - passed: 4
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.ProtocolSnifferTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+- Local environment note:
+  `third_party/ndisapi.net/ndisapi.dll` must exist locally for build/test because TunnelFlow.Capture copies it into output and the capture stack expects it at runtime.
+
 ## Working hypothesis
 Most likely immediate browsing failure is caused by losing the destination hostname and falling back to IP-based connection for sites that require proper SNI/hostname-based routing.
 Google may still work in some fallback scenarios, while many other sites fail.

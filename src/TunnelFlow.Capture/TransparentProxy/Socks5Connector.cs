@@ -146,16 +146,25 @@ public static class Socks5Connector
         if (header[1] != ReplySuccess)
             throw new Socks5Exception($"SOCKS5 CONNECT failed with code: {header[1]} ({GetErrorMessage(header[1])})");
 
-        int addrLen = header[3] switch
-        {
-            AddrTypeIPv4 => 4,
-            AddrTypeIPv6 => 16,
-            _ => throw new Socks5Exception($"Unknown address type in response: {header[3]}")
-        };
-
-        var remaining = new byte[addrLen + 2];
+        int initialRemainingLength = GetConnectResponseInitialRemainingLength(header[3]);
+        var remaining = new byte[initialRemainingLength];
         await ReadExactAsync(stream, remaining, ct);
+
+        if (header[3] == AddrTypeDomain)
+        {
+            int domainLength = remaining[0];
+            var domainAndPort = new byte[domainLength + 2];
+            await ReadExactAsync(stream, domainAndPort, ct);
+        }
     }
+
+    internal static int GetConnectResponseInitialRemainingLength(byte addrType) => addrType switch
+    {
+        AddrTypeIPv4 => 4 + 2,
+        AddrTypeDomain => 1,
+        AddrTypeIPv6 => 16 + 2,
+        _ => throw new Socks5Exception($"Unknown address type in response: {addrType}")
+    };
 
     internal static async Task ReadExactAsync(
         NetworkStream stream, byte[] buffer, CancellationToken ct)
