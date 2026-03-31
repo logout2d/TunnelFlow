@@ -53,13 +53,11 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     }
 
     /// <summary>
-    /// Read-only snapshot of the current NAT table for LocalRelay to consume.
-    /// Key: "srcIP:srcPort", Value: original destination IPEndPoint.
+    /// Looks up the original destination for a source endpoint key ("srcIP:srcPort").
+    /// Returns null if not found. Used by LocalRelay for live NAT lookups.
     /// </summary>
-    public IReadOnlyDictionary<string, IPEndPoint> NatTableSnapshot =>
-        _natTable.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.OriginalDestination);
+    public IPEndPoint? LookupNat(string key) =>
+        _natTable.TryGetValue(key, out var entry) ? entry.OriginalDestination : null;
 
     /// <summary>
     /// Configure the driver with redirect target and process lists.
@@ -396,9 +394,14 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
 
         // Check if this flow should be redirected (NAT entry exists)
         string srcKey = $"{srcIp}:{srcPort}";
-        if (_natTable.TryGetValue(srcKey, out _))
+        bool shouldRedirect = _natTable.ContainsKey(srcKey);
+        _logger.LogDebug(
+            "Flow {SrcKey}: NAT table has {Count} entries, redirect={Redirect}",
+            srcKey, _natTable.Count, shouldRedirect);
+
+        if (shouldRedirect)
         {
-            // Rewrite destination to SOCKS endpoint
+            // Rewrite destination to LocalRelay endpoint
             RewriteDestination(raw, ip, transport, proto, ihl, packetLen);
         }
 
@@ -448,6 +451,7 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     {
         string key = $"{localEndpoint.Address}:{localEndpoint.Port}";
         _natTable[key] = new NatEntry(originalDestination, DateTime.UtcNow);
+        _logger.LogDebug("NAT entry added: {Key} → {Dest}", key, originalDestination);
     }
 
     /// <summary>

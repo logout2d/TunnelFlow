@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 
 namespace TunnelFlow.Capture.TransparentProxy;
 
@@ -14,10 +15,40 @@ public static class Socks5Connector
     private const byte NoAuth = 0x00;
     private const byte CmdConnect = 0x01;
     private const byte AddrTypeIPv4 = 0x01;
+    private const byte AddrTypeDomain = 0x03;
     private const byte AddrTypeIPv6 = 0x04;
     private const byte ReplySuccess = 0x00;
 
-    public static async Task<NetworkStream> ConnectAsync(
+    public static async Task<NetworkStream> ConnectByDomainAsync(
+        IPEndPoint socksServer,
+        string domain,
+        int port,
+        CancellationToken ct = default)
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = true
+        };
+
+        try
+        {
+            await socket.ConnectAsync(socksServer, ct);
+            var stream = new NetworkStream(socket, ownsSocket: true);
+
+            await NegotiateAuthAsync(stream, ct);
+            await SendDomainConnectRequestAsync(stream, domain, port, ct);
+            await ReadConnectResponseAsync(stream, ct);
+
+            return stream;
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    public static async Task<NetworkStream> ConnectByIpAsync(
         IPEndPoint socksServer,
         IPEndPoint destination,
         CancellationToken ct = default)
@@ -33,7 +64,7 @@ public static class Socks5Connector
             var stream = new NetworkStream(socket, ownsSocket: true);
 
             await NegotiateAuthAsync(stream, ct);
-            await SendConnectRequestAsync(stream, destination, ct);
+            await SendIpConnectRequestAsync(stream, destination, ct);
             await ReadConnectResponseAsync(stream, ct);
 
             return stream;
@@ -60,7 +91,29 @@ public static class Socks5Connector
             throw new Socks5Exception($"SOCKS5 server rejected no-auth, returned method: {response[1]}");
     }
 
-    private static async Task SendConnectRequestAsync(
+    private static async Task SendDomainConnectRequestAsync(
+        NetworkStream stream, string domain, int port, CancellationToken ct)
+    {
+        byte[] domainBytes = Encoding.ASCII.GetBytes(domain);
+        if (domainBytes.Length > 255)
+            throw new Socks5Exception($"Domain too long: {domain} ({domainBytes.Length} bytes)");
+
+        var request = new byte[4 + 1 + domainBytes.Length + 2];
+        request[0] = Version;
+        request[1] = CmdConnect;
+        request[2] = 0x00;
+        request[3] = AddrTypeDomain;
+        request[4] = (byte)domainBytes.Length;
+        domainBytes.CopyTo(request.AsSpan(5));
+
+        BinaryPrimitives.WriteUInt16BigEndian(
+            request.AsSpan(5 + domainBytes.Length),
+            (ushort)port);
+
+        await stream.WriteAsync(request, ct);
+    }
+
+    private static async Task SendIpConnectRequestAsync(
         NetworkStream stream, IPEndPoint destination, CancellationToken ct)
     {
         byte[] destAddrBytes = destination.Address.GetAddressBytes();
@@ -136,6 +189,22 @@ public static class Socks5Connector
         BinaryPrimitives.WriteUInt16BigEndian(
             request.AsSpan(4 + destAddrBytes.Length),
             (ushort)destination.Port);
+        return request;
+    }
+
+    internal static byte[] BuildDomainConnectRequest(string domain, int port)
+    {
+        byte[] domainBytes = Encoding.ASCII.GetBytes(domain);
+        var request = new byte[4 + 1 + domainBytes.Length + 2];
+        request[0] = Version;
+        request[1] = CmdConnect;
+        request[2] = 0x00;
+        request[3] = AddrTypeDomain;
+        request[4] = (byte)domainBytes.Length;
+        domainBytes.CopyTo(request.AsSpan(5));
+        BinaryPrimitives.WriteUInt16BigEndian(
+            request.AsSpan(5 + domainBytes.Length),
+            (ushort)port);
         return request;
     }
 

@@ -14,13 +14,18 @@ public sealed class LocalRelay : IAsyncDisposable
 {
     private readonly IPEndPoint _listenEndpoint;
     private readonly IPEndPoint _socksEndpoint;
-    private readonly Func<IReadOnlyDictionary<string, IPEndPoint>> _getNatTable;
+    private readonly Func<string, IPEndPoint?> _lookupNat;
     private readonly ILogger<LocalRelay> _logger;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _connectionThrottle;
     private TcpListener? _listener;
     private Task? _acceptLoop;
+    private Task? _statsLoop;
     private int _activeConnections;
+    private long _totalConnections;
+    private long _sniResolved;
+    private long _httpHostResolved;
+    private long _ipFallback;
 
     private const int BufferSize = 65536;
     private const int MaxConcurrentConnections = 4096;
@@ -30,12 +35,12 @@ public sealed class LocalRelay : IAsyncDisposable
     public LocalRelay(
         IPEndPoint relayEndpoint,
         IPEndPoint socksEndpoint,
-        Func<IReadOnlyDictionary<string, IPEndPoint>> getNatTable,
+        Func<string, IPEndPoint?> lookupNat,
         ILogger<LocalRelay> logger)
     {
         _listenEndpoint = relayEndpoint;
         _socksEndpoint = socksEndpoint;
-        _getNatTable = getNatTable;
+        _lookupNat = lookupNat;
         _logger = logger;
         _connectionThrottle = new SemaphoreSlim(MaxConcurrentConnections, MaxConcurrentConnections);
     }
@@ -54,6 +59,7 @@ public sealed class LocalRelay : IAsyncDisposable
 
         var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
         _acceptLoop = AcceptLoopAsync(linked.Token);
+        _statsLoop = StatsLoopAsync(linked.Token);
         return Task.CompletedTask;
     }
 
@@ -93,6 +99,7 @@ public sealed class LocalRelay : IAsyncDisposable
         }
 
         Interlocked.Increment(ref _activeConnections);
+        Interlocked.Increment(ref _totalConnections);
         IPEndPoint? clientEndpoint = null;
 
         try
@@ -105,20 +112,26 @@ public sealed class LocalRelay : IAsyncDisposable
             }
 
             string natKey = $"{clientEndpoint.Address}:{clientEndpoint.Port}";
-            var natTable = _getNatTable();
-            if (!natTable.TryGetValue(natKey, out var originalDest))
+            var originalDest = _lookupNat(natKey);
+            _logger.LogDebug("NAT lookup for key {Key}: {Result}",
+                natKey, originalDest?.ToString() ?? "NOT FOUND");
+
+            if (originalDest is null)
             {
                 _logger.LogWarning("No NAT entry for {Client}, dropping connection", clientEndpoint);
                 return;
             }
 
-            _logger.LogDebug(
-                "Relaying {Client} → {Destination} via SOCKS5",
-                clientEndpoint, originalDest);
-
             using var clientStream = client.GetStream();
-            await using var socksStream = await Socks5Connector.ConnectAsync(
-                _socksEndpoint, originalDest, ct);
+            var sniffResult = await ProtocolSniffer.SniffAsync(clientStream, ct);
+            await using var socksStream = await ConnectSocksAsync(sniffResult, originalDest, clientEndpoint, ct);
+
+            if (sniffResult.BufferedLength > 0)
+            {
+                await socksStream.WriteAsync(
+                    sniffResult.BufferedData.AsMemory(0, sniffResult.BufferedLength),
+                    ct);
+            }
 
             await RelayAsync(clientStream, socksStream, ct);
         }
@@ -138,6 +151,58 @@ public sealed class LocalRelay : IAsyncDisposable
             client.Dispose();
             Interlocked.Decrement(ref _activeConnections);
             _connectionThrottle.Release();
+        }
+    }
+
+    private async Task<NetworkStream> ConnectSocksAsync(
+        SniffResult sniffResult,
+        IPEndPoint originalDest,
+        IPEndPoint? clientEndpoint,
+        CancellationToken ct)
+    {
+        if (sniffResult.HasDomain)
+        {
+            var target = $"{sniffResult.Domain}:{originalDest.Port}";
+            if (sniffResult.Protocol == SniffedProtocol.TLS)
+            {
+                Interlocked.Increment(ref _sniResolved);
+                _logger.LogDebug(
+                    "SNI: {Client} → {Domain}:{Port} (TLS SNI)",
+                    clientEndpoint, sniffResult.Domain, originalDest.Port);
+            }
+            else if (sniffResult.Protocol == SniffedProtocol.HTTP)
+            {
+                Interlocked.Increment(ref _httpHostResolved);
+                _logger.LogDebug(
+                    "Host: {Client} → {Domain}:{Port} (HTTP Host)",
+                    clientEndpoint, sniffResult.Domain, originalDest.Port);
+            }
+
+            _logger.LogDebug("Relaying {Client} → {Target} via SOCKS5", clientEndpoint, target);
+            return await Socks5Connector.ConnectByDomainAsync(
+                _socksEndpoint,
+                sniffResult.Domain!,
+                originalDest.Port,
+                ct);
+        }
+
+        Interlocked.Increment(ref _ipFallback);
+        _logger.LogDebug("Relaying {Client} → {Target} via SOCKS5", clientEndpoint, originalDest);
+        return await Socks5Connector.ConnectByIpAsync(_socksEndpoint, originalDest, ct);
+    }
+
+    private async Task StatsLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        while (await timer.WaitForNextTickAsync(ct))
+        {
+            _logger.LogInformation(
+                "LocalRelay stats: active={Active} total={Total} sni={Sni} http={Http} ipFallback={IpFallback}",
+                _activeConnections,
+                Interlocked.Read(ref _totalConnections),
+                Interlocked.Read(ref _sniResolved),
+                Interlocked.Read(ref _httpHostResolved),
+                Interlocked.Read(ref _ipFallback));
         }
     }
 
@@ -188,11 +253,18 @@ public sealed class LocalRelay : IAsyncDisposable
 
         if (_acceptLoop is not null)
             try { await _acceptLoop; } catch { }
+        if (_statsLoop is not null)
+            try { await _statsLoop; } catch { }
 
         _cts.Dispose();
         _connectionThrottle.Dispose();
         _listener?.Dispose();
 
-        _logger.LogInformation("LocalRelay stopped");
+        _logger.LogInformation(
+            "LocalRelay stopped. Final stats: total={Total} sni={Sni} http={Http} ipFallback={IpFallback}",
+            Interlocked.Read(ref _totalConnections),
+            Interlocked.Read(ref _sniResolved),
+            Interlocked.Read(ref _httpHostResolved),
+            Interlocked.Read(ref _ipFallback));
     }
 }

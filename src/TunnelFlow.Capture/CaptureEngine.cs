@@ -80,7 +80,7 @@ public sealed class CaptureEngine : ICaptureEngine
                 _localRelay = new LocalRelay(
                     relayEndpoint,
                     _socksEndpoint,
-                    () => wpfDriver.NatTableSnapshot,
+                    key => wpfDriver.LookupNat(key),
                     _loggerFactory.CreateLogger<LocalRelay>());
                 _ = _localRelay.StartAsync(_cts.Token);
             }
