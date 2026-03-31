@@ -442,3 +442,93 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - skipped: 0
 - Remaining blocker to the first true redirected accept from a real app:
   - Windows-native WFP ALE connect redirection still has to create the metadata record from a real outbound connect and redirect that connect to `LocalRelay` at the OS connection layer
+
+## WFP Native Slice Plan
+- Next goal:
+  - implement the smallest real Windows-native slice that can cause one outbound app TCP `connect()` to arrive at `LocalRelay` as a true accepted socket
+- Exact native/interop boundary:
+  - native component owns:
+    - WFP callout registration
+    - ALE connect-redirection classify logic
+    - redirect-handle creation/destruction
+    - redirect-context packaging for one redirected connect
+    - loop-prevention checks inside classify
+  - managed component owns:
+    - provider lifecycle and feature flag
+    - opening/closing the native control channel
+    - pushing relay endpoint/config to native code
+    - receiving redirect-metadata events from native code
+    - inserting/removing `ConnectionRedirectRecord` entries in `IOriginalDestinationStore`
+- Exact native components needed for the first real slice:
+  - a kernel-mode WFP callout driver at `ALE_CONNECT_REDIRECT_V4`
+  - a control device exposed by that driver for user-mode configuration and event delivery
+  - one redirect handle for connect redirection
+  - one sublayer/callout/filter registration path for IPv4 TCP only
+- Exact managed components needed for the first real slice:
+  - `src/TunnelFlow.Capture/TcpRedirect/WfpTcpRedirectProvider.cs`
+    - evolve from metadata-only stub into the user-mode owner of the native session
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeInterop.cs`
+    - P/Invoke surface for driver/device control and any user-mode WFP management calls
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeSession.cs`
+    - safe lifetime wrapper around native startup/shutdown/config/event pump
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpRedirectEvent.cs`
+    - managed representation of one redirected-connect metadata event
+- Minimal file/class layout for the native side:
+  - `native/TunnelFlow.WfpRedirectDriver/DriverEntry.c`
+  - `native/TunnelFlow.WfpRedirectDriver/RedirectCallout.c`
+  - `native/TunnelFlow.WfpRedirectDriver/DeviceControl.c`
+  - `native/TunnelFlow.WfpRedirectDriver/SharedTypes.h`
+  - `native/TunnelFlow.WfpRedirectDriver/TunnelFlowWfpRedirect.inf`
+- Smallest first real data flow:
+  1. one allowed test app calls outbound IPv4 TCP `connect(remoteIp, remotePort)`
+  2. WFP `ALE_CONNECT_REDIRECT_V4` callout classifies the connect
+  3. callout checks loop guards and only redirects if:
+     - TCP
+     - IPv4
+     - configured test app match
+     - not already redirected
+     - destination is not the relay endpoint
+     - process is not service/sing-box
+  4. callout redirects the connect to the configured relay endpoint
+  5. native side emits one metadata event containing:
+     - lookup key for the future accepted relay client endpoint
+     - original destination
+     - relay endpoint
+     - process id / app id if available
+  6. managed `WfpTcpRedirectProvider` receives that event and stores `ConnectionRedirectRecord`
+  7. `LocalRelay` accepts the redirected connection and resolves original destination from the metadata store
+  8. existing `ProtocolSniffer -> SOCKS5 CONNECT -> sing-box` path continues unchanged
+- Loop prevention plan for the first real slice:
+  - exclude service binary and `sing-box.exe` by app-id/path at filter/config level
+  - skip connects whose destination is already the relay endpoint
+  - skip connects already marked as redirected by WFP redirect-state query
+  - keep `UseWfpTcpRedirect` feature-flagged so old behavior is still available
+- First runnable milestone:
+  - IPv4 TCP only
+  - one test executable/app-id only
+  - one relay endpoint only
+  - redirect one outbound connect into `LocalRelay`
+  - emit/store one metadata record
+  - observe:
+    - `TCP redirect provider select ... implementation=WfpTcpRedirectProvider`
+    - native redirect event logged
+    - `Relay accept`
+    - `Relay destination-lookup ... source=redirect-store`
+  - this milestone does not yet require:
+    - UDP
+    - IPv6
+    - full policy-engine routing replacement
+    - broad production hardening
+- Main risks/blockers:
+  - reliable correlation from the native redirect event to the accepted relay client endpoint
+  - loop prevention must be correct before any broad enablement
+  - packaging/signing/loading the kernel driver is the largest environmental blocker
+  - coexistence with the old WinpkFilter TCP path must remain feature-flagged and explicit
+- Recommended implementation order:
+  1. define the shared native/managed event structure and control IOCTL contract
+  2. add `WfpNativeInterop.cs` and `WfpNativeSession.cs` with no redirect logic beyond driver/session startup
+  3. add the kernel callout driver skeleton and device channel
+  4. implement one `ALE_CONNECT_REDIRECT_V4` classify path for IPv4 TCP and one test app-id match
+  5. emit one redirect metadata event to managed code
+  6. store the event as `ConnectionRedirectRecord`
+  7. validate one real redirected accept into `LocalRelay`

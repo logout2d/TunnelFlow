@@ -46,6 +46,11 @@ Status: completed
 ## Step 11
 Phase 3 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
 Status: in progress
+Current narrow milestone:
+- add the first real native `ALE_CONNECT_REDIRECT_V4` slice for IPv4 TCP only
+- target one test app-id / executable only
+- emit one redirect metadata event into `WfpTcpRedirectProvider`
+- prove one real redirected accept reaches `LocalRelay` with `source=redirect-store`
 
 ## Step 12
 Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.
