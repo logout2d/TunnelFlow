@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using System.Net;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Text;
 
 namespace TunnelFlow.Capture.TcpRedirect.Interop;
@@ -18,6 +21,14 @@ public sealed class WfpNativeInterop
         WfpRedirectConfig config,
         CancellationToken ct = default)
     {
+        string devicePath = ResolveDevicePath(config);
+        SafeFileHandle? deviceHandle = TryOpenDevice(devicePath);
+        if (deviceHandle is not null)
+        {
+            SendConfigureRequest(deviceHandle, config);
+            return Task.FromResult(WfpNativeSessionHandle.CreateDevice(deviceHandle, devicePath));
+        }
+
         string? helperPath = ResolveHelperPath();
         if (string.IsNullOrWhiteSpace(helperPath) || !File.Exists(helperPath))
             return Task.FromResult(WfpNativeSessionHandle.CreateStub());
@@ -38,7 +49,7 @@ public sealed class WfpNativeInterop
         if (!process.Start())
             throw new InvalidOperationException($"Failed to start native WFP helper: {helperPath}");
 
-        return Task.FromResult(WfpNativeSessionHandle.CreateNative(
+        return Task.FromResult(WfpNativeSessionHandle.CreateHelper(
             process,
             process.StandardInput,
             process.StandardOutput));
@@ -48,7 +59,13 @@ public sealed class WfpNativeInterop
         WfpNativeSessionHandle handle,
         CancellationToken ct = default)
     {
-        if (handle.Mode != WfpNativeSessionMode.Native || handle.Process is null)
+        if (handle.Mode == WfpNativeSessionMode.Device)
+        {
+            handle.DeviceHandle?.Dispose();
+            return;
+        }
+
+        if (handle.Mode != WfpNativeSessionMode.Helper || handle.Process is null)
             return;
 
         if (!handle.Process.HasExited && handle.Writer is not null)
@@ -77,7 +94,10 @@ public sealed class WfpNativeInterop
         WfpNativeSessionHandle handle,
         CancellationToken ct = default)
     {
-        if (handle.Mode != WfpNativeSessionMode.Native || handle.Reader is null)
+        if (handle.Mode == WfpNativeSessionMode.Device)
+            return await TryReadRedirectEventFromDeviceAsync(handle, ct);
+
+        if (handle.Mode != WfpNativeSessionMode.Helper || handle.Reader is null)
             return null;
 
         while (!ct.IsCancellationRequested)
@@ -98,12 +118,52 @@ public sealed class WfpNativeInterop
         WfpRedirectEvent redirectEvent,
         CancellationToken ct = default)
     {
-        if (handle.Mode != WfpNativeSessionMode.Native || handle.Writer is null)
+        if (handle.Mode != WfpNativeSessionMode.Helper || handle.Writer is null)
             return;
 
         string line = BuildEmitLine(redirectEvent);
         await handle.Writer.WriteLineAsync(line);
         await handle.Writer.FlushAsync();
+    }
+
+    private async Task<WfpRedirectEvent?> TryReadRedirectEventFromDeviceAsync(
+        WfpNativeSessionHandle handle,
+        CancellationToken ct)
+    {
+        if (handle.DeviceHandle is null || handle.DeviceHandle.IsInvalid)
+            return null;
+
+        return await Task.Run(() =>
+        {
+            byte[] outputBuffer = new byte[Marshal.SizeOf<WfpNativeRedirectEventV1>()];
+            bool success = NativeMethods.DeviceIoControl(
+                handle.DeviceHandle,
+                WfpNativeContract.IoctlGetNextEvent,
+                null,
+                0,
+                outputBuffer,
+                outputBuffer.Length,
+                out uint bytesReturned,
+                IntPtr.Zero);
+
+            if (!success)
+            {
+                int error = Marshal.GetLastWin32Error();
+                if (error is NativeMethods.ErrorFileNotFound or NativeMethods.ErrorPathNotFound or NativeMethods.ErrorNoMoreItems)
+                    return null;
+
+                throw new Win32Exception(error, $"WFP device read failed for {handle.DevicePath ?? WfpNativeContract.DefaultDevicePath}");
+            }
+
+            if (bytesReturned == 0)
+                return null;
+
+            return WfpNativeContract.TryParseRedirectEvent(
+                outputBuffer.AsSpan(0, checked((int)bytesReturned)),
+                out var redirectEvent)
+                ? redirectEvent
+                : throw new InvalidDataException("Native WFP device returned an unreadable redirect event payload.");
+        }, ct);
     }
 
     private string? ResolveHelperPath()
@@ -124,6 +184,61 @@ public sealed class WfpNativeInterop
                 "x64",
                 "Debug",
                 "TunnelFlow.WfpRedirectChannel.exe"));
+    }
+
+    private string ResolveDevicePath(WfpRedirectConfig config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.NativeDevicePath))
+            return config.NativeDevicePath;
+
+        string? envPath = Environment.GetEnvironmentVariable("TUNNELFLOW_WFP_NATIVE_DEVICE");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return envPath;
+
+        return WfpNativeContract.DefaultDevicePath;
+    }
+
+    private static SafeFileHandle? TryOpenDevice(string devicePath)
+    {
+        SafeFileHandle handle = NativeMethods.CreateFile(
+            devicePath,
+            NativeMethods.GenericRead | NativeMethods.GenericWrite,
+            NativeMethods.FileShareRead | NativeMethods.FileShareWrite,
+            IntPtr.Zero,
+            NativeMethods.OpenExisting,
+            NativeMethods.FileAttributeNormal,
+            IntPtr.Zero);
+
+        if (!handle.IsInvalid)
+            return handle;
+
+        int error = Marshal.GetLastWin32Error();
+        handle.Dispose();
+
+        if (error is NativeMethods.ErrorFileNotFound or NativeMethods.ErrorPathNotFound)
+            return null;
+
+        throw new Win32Exception(error, $"Failed to open WFP redirect device: {devicePath}");
+    }
+
+    private static void SendConfigureRequest(SafeFileHandle deviceHandle, WfpRedirectConfig config)
+    {
+        byte[] inputBuffer = WfpNativeContract.BuildConfigureRequest(config);
+        bool success = NativeMethods.DeviceIoControl(
+            deviceHandle,
+            WfpNativeContract.IoctlConfigure,
+            inputBuffer,
+            inputBuffer.Length,
+            null,
+            0,
+            out _,
+            IntPtr.Zero);
+
+        if (!success)
+        {
+            int error = Marshal.GetLastWin32Error();
+            throw new Win32Exception(error, "Failed to configure the WFP redirect device.");
+        }
     }
 
     private static string BuildEmitLine(WfpRedirectEvent redirectEvent)
@@ -202,6 +317,41 @@ public sealed class WfpNativeInterop
 
         return Encoding.UTF8.GetString(Convert.FromBase64String(value));
     }
+
+    private static class NativeMethods
+    {
+        internal const uint GenericRead = 0x80000000;
+        internal const uint GenericWrite = 0x40000000;
+        internal const uint FileShareRead = 0x00000001;
+        internal const uint FileShareWrite = 0x00000002;
+        internal const uint OpenExisting = 3;
+        internal const uint FileAttributeNormal = 0x00000080;
+        internal const int ErrorFileNotFound = 2;
+        internal const int ErrorPathNotFound = 3;
+        internal const int ErrorNoMoreItems = 259;
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        internal static extern SafeFileHandle CreateFile(
+            string lpFileName,
+            uint dwDesiredAccess,
+            uint dwShareMode,
+            IntPtr lpSecurityAttributes,
+            uint dwCreationDisposition,
+            uint dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool DeviceIoControl(
+            SafeFileHandle hDevice,
+            uint dwIoControlCode,
+            byte[]? lpInBuffer,
+            int nInBufferSize,
+            byte[]? lpOutBuffer,
+            int nOutBufferSize,
+            out uint lpBytesReturned,
+            IntPtr lpOverlapped);
+    }
 }
 
 public sealed class WfpNativeSessionHandle
@@ -209,12 +359,16 @@ public sealed class WfpNativeSessionHandle
     private WfpNativeSessionHandle(
         WfpNativeSessionMode mode,
         Guid id,
+        SafeFileHandle? deviceHandle,
+        string? devicePath,
         Process? process,
         StreamWriter? writer,
         StreamReader? reader)
     {
         Mode = mode;
         Id = id;
+        DeviceHandle = deviceHandle;
+        DevicePath = devicePath;
         Process = process;
         Writer = writer;
         Reader = reader;
@@ -224,6 +378,10 @@ public sealed class WfpNativeSessionHandle
 
     public Guid Id { get; }
 
+    public SafeFileHandle? DeviceHandle { get; }
+
+    public string? DevicePath { get; }
+
     public Process? Process { get; }
 
     public StreamWriter? Writer { get; }
@@ -231,17 +389,23 @@ public sealed class WfpNativeSessionHandle
     public StreamReader? Reader { get; }
 
     public static WfpNativeSessionHandle CreateStub() =>
-        new(WfpNativeSessionMode.Stub, Guid.NewGuid(), null, null, null);
+        new(WfpNativeSessionMode.Stub, Guid.NewGuid(), null, null, null, null, null);
 
-    public static WfpNativeSessionHandle CreateNative(
+    public static WfpNativeSessionHandle CreateDevice(
+        SafeFileHandle deviceHandle,
+        string devicePath) =>
+        new(WfpNativeSessionMode.Device, Guid.NewGuid(), deviceHandle, devicePath, null, null, null);
+
+    public static WfpNativeSessionHandle CreateHelper(
         Process process,
         StreamWriter writer,
         StreamReader reader) =>
-        new(WfpNativeSessionMode.Native, Guid.NewGuid(), process, writer, reader);
+        new(WfpNativeSessionMode.Helper, Guid.NewGuid(), null, null, process, writer, reader);
 }
 
 public enum WfpNativeSessionMode
 {
     Stub = 0,
-    Native = 1
+    Helper = 1,
+    Device = 2
 }

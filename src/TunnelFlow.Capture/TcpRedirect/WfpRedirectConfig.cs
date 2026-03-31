@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace TunnelFlow.Capture.TcpRedirect;
 
 public sealed record WfpRedirectConfig
@@ -7,4 +9,10 @@ public sealed record WfpRedirectConfig
     public TimeSpan RecordTtl { get; init; } = TimeSpan.FromMinutes(2);
 
     public bool EnableDetailedLogging { get; init; }
+
+    public string? NativeDevicePath { get; init; }
+
+    public string? TestProcessPath { get; init; }
+
+    public IPEndPoint? RelayEndpoint { get; init; }
 }

@@ -34,8 +34,9 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
         await _nativeSession.StartAsync(config, ct);
 
         _logger.LogInformation(
-            "TCP redirect provider start implementation=wfp-stub useWfpTcpRedirect={UseWfpTcpRedirect} status=managed-native-session-skeleton",
-            config.UseWfpTcpRedirect);
+            "TCP redirect provider start implementation=wfp-provider useWfpTcpRedirect={UseWfpTcpRedirect} nativeMode={NativeMode}",
+            config.UseWfpTcpRedirect,
+            _nativeSession.Mode);
     }
 
     public async Task StopAsync(CancellationToken ct = default)
@@ -43,7 +44,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
         _started = false;
         _nativeSession.RedirectEventReceived -= OnRedirectEventReceived;
         await _nativeSession.StopAsync(ct);
-        _logger.LogInformation("TCP redirect provider stop implementation=wfp-stub");
+        _logger.LogInformation("TCP redirect provider stop implementation=wfp-provider");
     }
 
     public void RecordRedirect(ConnectionRedirectRecord record)
@@ -51,7 +52,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
         _destinationStore.Add(record);
         Interlocked.Increment(ref _redirectRegistrationCount);
         _logger.LogInformation(
-            "TCP redirect metadata-add implementation=wfp-stub key={LookupKey} originalDst={OriginalDestination} relay={RelayEndpoint} correlationId={CorrelationId}",
+            "TCP redirect metadata-add implementation=wfp-provider key={LookupKey} originalDst={OriginalDestination} relay={RelayEndpoint} correlationId={CorrelationId}",
             record.LookupKey,
             record.OriginalDestination,
             record.RelayEndpoint,
@@ -62,7 +63,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
     {
         _destinationStore.Remove(key);
         _logger.LogInformation(
-            "TCP redirect metadata-remove implementation=wfp-stub key={LookupKey}",
+            "TCP redirect metadata-remove implementation=wfp-provider key={LookupKey}",
             key);
     }
 
@@ -72,7 +73,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
         {
             Interlocked.Increment(ref _lookupHitCount);
             _logger.LogInformation(
-                "TCP redirect metadata-hit implementation=wfp-stub key={LookupKey} originalDst={OriginalDestination}",
+                "TCP redirect metadata-hit implementation=wfp-provider key={LookupKey} originalDst={OriginalDestination}",
                 key,
                 record.OriginalDestination);
             return true;
@@ -80,7 +81,7 @@ public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
 
         Interlocked.Increment(ref _lookupMissCount);
         _logger.LogInformation(
-            "TCP redirect metadata-miss implementation=wfp-stub key={LookupKey}",
+            "TCP redirect metadata-miss implementation=wfp-provider key={LookupKey}",
             key);
         record = null!;
         return false;

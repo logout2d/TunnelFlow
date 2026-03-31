@@ -17,6 +17,8 @@ public sealed class WfpNativeSession
 
     public bool IsStarted => _started;
 
+    public WfpNativeSessionMode Mode => _handle.Mode;
+
     public WfpNativeSession(
         WfpNativeInterop interop,
         ILogger<WfpNativeSession> logger,
@@ -79,7 +81,7 @@ public sealed class WfpNativeSession
             redirectEvent.RelayEndpoint,
             _handle.Mode);
 
-        if (_handle.Mode == WfpNativeSessionMode.Native)
+        if (_handle.Mode == WfpNativeSessionMode.Helper)
         {
             await _interop.SendSyntheticRedirectEventAsync(_handle, redirectEvent, ct);
             return;
