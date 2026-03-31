@@ -1,4 +1,5 @@
 using System.Net;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using TunnelFlow.Capture.Interop;
 using TunnelFlow.Capture.Policy;
@@ -200,8 +201,7 @@ public sealed class CaptureEngine : ICaptureEngine
 
         if (packet.Protocol == Protocol.Tcp)
         {
-            pid = _processResolver.GetTcpPid(packet.Source);
-            processPath = _processResolver.ResolveTcpProcess(packet.Source);
+            (pid, processPath) = ResolveWithRetry(packet.Source, isTcp: true);
         }
         else
         {
@@ -252,6 +252,34 @@ public sealed class CaptureEngine : ICaptureEngine
                 _driver.PassFlow(packet.FlowId);
                 break;
         }
+    }
+
+    private (int? pid, string? path) ResolveWithRetry(IPEndPoint source, bool isTcp)
+    {
+        const int MaxAttempts = 5;
+        const int DelayMs = 10;
+
+        for (int i = 0; i < MaxAttempts; i++)
+        {
+            int? pid = isTcp
+                ? _processResolver.GetTcpPid(source)
+                : _processResolver.GetUdpPid(source);
+
+            if (pid is not null)
+            {
+                string? path = isTcp
+                    ? _processResolver.ResolveTcpProcess(source)
+                    : _processResolver.ResolveUdpProcess(source);
+
+                if (path is not null)
+                    return (pid, path);
+            }
+
+            if (i < MaxAttempts - 1)
+                Thread.Sleep(DelayMs);
+        }
+
+        return (null, null);
     }
 
     private void HandleFlowEnd(PacketInfo packet)
