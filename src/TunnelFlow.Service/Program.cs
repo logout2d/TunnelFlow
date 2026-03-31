@@ -22,7 +22,8 @@ builder.Services.AddSingleton<ISingBoxManager, SingBoxManager>();
 builder.Services.AddSingleton<IPacketDriver, WinpkFilterPacketDriver>();
 builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
 builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
-builder.Services.AddSingleton<IPolicyEngine>(_ => new PolicyEngine([]));
+builder.Services.AddSingleton<IPolicyEngine>(sp =>
+    new PolicyEngine([], sp.GetRequiredService<ILogger<PolicyEngine>>()));
 builder.Services.AddSingleton<ICaptureEngine>(sp =>
     new CaptureEngine(
         sp.GetRequiredService<IPacketDriver>(),

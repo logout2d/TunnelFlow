@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using TunnelFlow.Capture.Interop;
@@ -61,7 +62,12 @@ public sealed class CaptureEngine : ICaptureEngine
         _policyEngine.UpdateRules(config.Rules);
 
         _socksEndpoint = new IPEndPoint(config.SocksAddress, config.SocksPort);
-        var relayEndpoint = new IPEndPoint(IPAddress.Loopback, RelayPort);
+        var relayAddress = SelectRelayListenAddress();
+        var relayEndpoint = new IPEndPoint(relayAddress, RelayPort);
+        _logger.LogInformation(
+            "Capture relay endpoint selected address={RelayAddress} port={RelayPort}",
+            relayAddress,
+            RelayPort);
 
         if (_driver is WinpkFilterPacketDriver wpfDriver)
         {
@@ -91,6 +97,59 @@ public sealed class CaptureEngine : ICaptureEngine
         _purgeLoopTask = RunPurgeLoopAsync(_cts.Token);
 
         return Task.CompletedTask;
+    }
+
+    internal static IPAddress SelectRelayListenAddress() =>
+        SelectRelayListenAddress(GetCandidateRelayAddresses());
+
+    internal static IPAddress SelectRelayListenAddress(IEnumerable<IPAddress> candidates)
+    {
+        foreach (var address in candidates)
+        {
+            if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                continue;
+
+            if (IPAddress.IsLoopback(address))
+                continue;
+
+            var bytes = address.GetAddressBytes();
+            if (bytes[0] == 169 && bytes[1] == 254)
+                continue;
+
+            if (address.Equals(IPAddress.Any))
+                continue;
+
+            return address;
+        }
+
+        throw new InvalidOperationException(
+            "No non-loopback IPv4 address found for LocalRelay. " +
+            "TunnelFlow requires an active local IPv4 host address for redirected relay traffic.");
+    }
+
+    private static IEnumerable<IPAddress> GetCandidateRelayAddresses()
+    {
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != OperationalStatus.Up)
+                continue;
+
+            if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                continue;
+
+            IPInterfaceProperties properties;
+            try
+            {
+                properties = nic.GetIPProperties();
+            }
+            catch (NetworkInformationException)
+            {
+                continue;
+            }
+
+            foreach (var unicast in properties.UnicastAddresses)
+                yield return unicast.Address;
+        }
     }
 
     public async Task StopAsync(CancellationToken ct)
@@ -212,11 +271,30 @@ public sealed class CaptureEngine : ICaptureEngine
         if (pid is null || processPath is null)
         {
             _driver.PassFlow(packet.FlowId);
-            _logger.LogDebug("Could not resolve process for flow {FlowId}, passing through", packet.FlowId);
+            _logger.LogInformation(
+                "Capture flow unresolved flowId={FlowId} protocol={Protocol} src={Source} dst={Destination} pid={Pid} process={ProcessPath} action={Action} reason={Reason}",
+                packet.FlowId,
+                packet.Protocol,
+                packet.Source,
+                packet.Destination,
+                pid,
+                processPath ?? "<unresolved>",
+                PolicyAction.Direct,
+                "unresolved process");
             return;
         }
 
         var decision = _policyEngine.Evaluate(pid.Value, processPath, packet.Destination, packet.Protocol);
+        _logger.LogInformation(
+            "Capture flow decision flowId={FlowId} protocol={Protocol} src={Source} dst={Destination} pid={Pid} process={ProcessPath} action={Action} reason={Reason}",
+            packet.FlowId,
+            packet.Protocol,
+            packet.Source,
+            packet.Destination,
+            pid.Value,
+            processPath,
+            decision.Action,
+            decision.Reason ?? "<none>");
 
         switch (decision.Action)
         {

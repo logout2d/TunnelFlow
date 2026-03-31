@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace TunnelFlow.Capture.TransparentProxy;
 
@@ -23,26 +24,32 @@ public static class Socks5Connector
         IPEndPoint socksServer,
         string domain,
         int port,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ILogger? logger = null)
     {
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         {
             NoDelay = true
         };
+        string targetContext = $"{domain}:{port}";
 
         try
         {
+            logger?.LogInformation("SOCKS connect-start socks={SocksServer} target={Target} mode=domain", socksServer, targetContext);
             await socket.ConnectAsync(socksServer, ct);
             var stream = new NetworkStream(socket, ownsSocket: true);
 
-            await NegotiateAuthAsync(stream, ct);
-            await SendDomainConnectRequestAsync(stream, domain, port, ct);
-            await ReadConnectResponseAsync(stream, ct);
+            logger?.LogInformation("SOCKS tcp-connected socks={SocksServer} target={Target}", socksServer, targetContext);
+            await NegotiateAuthAsync(stream, ct, logger, targetContext);
+            await SendDomainConnectRequestAsync(stream, domain, port, ct, logger, targetContext);
+            await ReadConnectResponseAsync(stream, ct, logger, targetContext);
+            logger?.LogInformation("SOCKS connect-established target={Target}", targetContext);
 
             return stream;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "SOCKS connect-failed target={Target}", targetContext);
             socket.Dispose();
             throw;
         }
@@ -51,32 +58,42 @@ public static class Socks5Connector
     public static async Task<NetworkStream> ConnectByIpAsync(
         IPEndPoint socksServer,
         IPEndPoint destination,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ILogger? logger = null)
     {
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         {
             NoDelay = true
         };
+        string targetContext = destination.ToString();
 
         try
         {
+            logger?.LogInformation("SOCKS connect-start socks={SocksServer} target={Target} mode=ip", socksServer, targetContext);
             await socket.ConnectAsync(socksServer, ct);
             var stream = new NetworkStream(socket, ownsSocket: true);
 
-            await NegotiateAuthAsync(stream, ct);
-            await SendIpConnectRequestAsync(stream, destination, ct);
-            await ReadConnectResponseAsync(stream, ct);
+            logger?.LogInformation("SOCKS tcp-connected socks={SocksServer} target={Target}", socksServer, targetContext);
+            await NegotiateAuthAsync(stream, ct, logger, targetContext);
+            await SendIpConnectRequestAsync(stream, destination, ct, logger, targetContext);
+            await ReadConnectResponseAsync(stream, ct, logger, targetContext);
+            logger?.LogInformation("SOCKS connect-established target={Target}", targetContext);
 
             return stream;
         }
-        catch
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "SOCKS connect-failed target={Target}", targetContext);
             socket.Dispose();
             throw;
         }
     }
 
-    private static async Task NegotiateAuthAsync(NetworkStream stream, CancellationToken ct)
+    private static async Task NegotiateAuthAsync(
+        NetworkStream stream,
+        CancellationToken ct,
+        ILogger? logger,
+        string targetContext)
     {
         byte[] greeting = [Version, 0x01, NoAuth];
         await stream.WriteAsync(greeting, ct);
@@ -89,10 +106,17 @@ public static class Socks5Connector
 
         if (response[1] != NoAuth)
             throw new Socks5Exception($"SOCKS5 server rejected no-auth, returned method: {response[1]}");
+
+        logger?.LogInformation("SOCKS auth-ok target={Target} method=no-auth", targetContext);
     }
 
     private static async Task SendDomainConnectRequestAsync(
-        NetworkStream stream, string domain, int port, CancellationToken ct)
+        NetworkStream stream,
+        string domain,
+        int port,
+        CancellationToken ct,
+        ILogger? logger,
+        string targetContext)
     {
         byte[] domainBytes = Encoding.ASCII.GetBytes(domain);
         if (domainBytes.Length > 255)
@@ -111,10 +135,15 @@ public static class Socks5Connector
             (ushort)port);
 
         await stream.WriteAsync(request, ct);
+        logger?.LogInformation("SOCKS connect-request target={Target} atyp=domain", targetContext);
     }
 
     private static async Task SendIpConnectRequestAsync(
-        NetworkStream stream, IPEndPoint destination, CancellationToken ct)
+        NetworkStream stream,
+        IPEndPoint destination,
+        CancellationToken ct,
+        ILogger? logger,
+        string targetContext)
     {
         byte[] destAddrBytes = destination.Address.GetAddressBytes();
         bool isIpv6 = destination.Address.AddressFamily == AddressFamily.InterNetworkV6;
@@ -133,9 +162,17 @@ public static class Socks5Connector
             (ushort)destination.Port);
 
         await stream.WriteAsync(request, ct);
+        logger?.LogInformation(
+            "SOCKS connect-request target={Target} atyp={AddressType}",
+            targetContext,
+            isIpv6 ? "ipv6" : "ipv4");
     }
 
-    private static async Task ReadConnectResponseAsync(NetworkStream stream, CancellationToken ct)
+    private static async Task ReadConnectResponseAsync(
+        NetworkStream stream,
+        CancellationToken ct,
+        ILogger? logger,
+        string targetContext)
     {
         var header = new byte[4];
         await ReadExactAsync(stream, header, ct);
@@ -156,6 +193,11 @@ public static class Socks5Connector
             var domainAndPort = new byte[domainLength + 2];
             await ReadExactAsync(stream, domainAndPort, ct);
         }
+
+        logger?.LogInformation(
+            "SOCKS connect-reply target={Target} atyp={AddressType}",
+            targetContext,
+            GetAddressTypeName(header[3]));
     }
 
     internal static int GetConnectResponseInitialRemainingLength(byte addrType) => addrType switch
@@ -228,6 +270,14 @@ public static class Socks5Connector
         0x07 => "command not supported",
         0x08 => "address type not supported",
         _ => "unknown error"
+    };
+
+    private static string GetAddressTypeName(byte code) => code switch
+    {
+        AddrTypeIPv4 => "ipv4",
+        AddrTypeDomain => "domain",
+        AddrTypeIPv6 => "ipv6",
+        _ => $"unknown:{code}"
     };
 }
 

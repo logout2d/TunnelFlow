@@ -20,9 +20,29 @@ Patch SingBoxConfigBuilder to honor profile.Network (tcp/ws/grpc as supported by
 Status: completed
 
 ## Step 5
-Improve sing-box readiness validation and logging.
-Status: pending
+Add end-to-end diagnostic logging across capture, policy, driver, relay, and SOCKS to localize the runtime failure point, including redirect rewrite/reinject, relay listener self-check diagnostics, and explicit post-decision redirect application logs for rewrite execution and reinject path.
+Status: completed
 
 ## Step 6
+Replace loopback relay addressing with a non-loopback local IPv4 host address so the existing NDIS rewrite/response rewrite model can function.
+Status: completed
+
+## Step 7
+Reinject redirected outbound relay packets through MSTCP/local stack instead of the generic outbound adapter path.
+Status: completed
+
+## Step 8
+Phase 1 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
+Status: pending
+
+## Step 9
+Phase 2 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.
+Status: pending
+
+## Step 10
+Phase 3 cleanup: remove obsolete TCP packet rewrite/NAT bridging logic from WinpkFilterPacketDriver once connection-level redirect is stable.
+Status: pending
+
+## Step 11
 Investigate/patch IPv6 capture path if still required after earlier fixes.
 Status: pending

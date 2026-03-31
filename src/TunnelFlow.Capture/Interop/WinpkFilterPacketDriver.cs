@@ -17,10 +17,14 @@ namespace TunnelFlow.Capture.Interop;
 /// </summary>
 public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
 {
+    internal const string ReinjectPathAdapter = "adapter";
+    internal const string ReinjectPathMstcp = "mstcp";
+
     private const ushort EtherTypeIpv4 = 0x0800;
     private const byte IpProtoTcp = 6;
     private const byte IpProtoUdp = 17;
     private const int EthernetHeaderLen = 14;
+    private const int RedirectTraceLimit = 16;
 
     private readonly ILogger<WinpkFilterPacketDriver> _logger;
     private NdisApiDotNet.NdisApi? _api;
@@ -46,6 +50,15 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     /// Key: "srcIP:srcPort-dstIP:dstPort-proto"
     /// </summary>
     private readonly ConcurrentDictionary<string, ulong> _flowIds = new();
+    private long _ipv4TcpPackets;
+    private long _ipv4UdpPackets;
+    private long _nonIpv4Packets;
+    private long _redirectedPackets;
+    private long _redirectApplied;
+    private long _redirectRewriteFailed;
+    private long _redirectSendFailed;
+    private long _redirectTraceCount;
+    private DateTime _lastStatsLoggedAtUtc = DateTime.UtcNow;
 
     public WinpkFilterPacketDriver(ILogger<WinpkFilterPacketDriver> logger)
     {
@@ -208,7 +221,10 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
                 int signaled = WaitHandle.WaitAny(waitHandles.ToArray(), TimeSpan.FromSeconds(1));
 
                 if (signaled == WaitHandle.WaitTimeout)
+                {
+                    MaybeLogCounters();
                     continue;
+                }
 
                 // Check if cancellation was signaled
                 if (signaled == waitHandles.Count - 1)
@@ -219,6 +235,7 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
                 {
                     var (adapter, _) = adapterEvents[signaled];
                     ProcessAdapterPackets(adapter, onPacket);
+                    MaybeLogCounters();
                 }
             }
         }
@@ -264,6 +281,7 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
 
                 if (etherType != EtherTypeIpv4)
                 {
+                    Interlocked.Increment(ref _nonIpv4Packets);
                     ReinjectPacket(ref ethRequest);
                     continue;
                 }
@@ -298,6 +316,11 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
             return;
         }
 
+        if (proto == IpProtoTcp)
+            Interlocked.Increment(ref _ipv4TcpPackets);
+        else
+            Interlocked.Increment(ref _ipv4UdpPackets);
+
         if (packetLen < EthernetHeaderLen + ihl + 4)
         {
             ReinjectPacket(ref ethRequest);
@@ -324,6 +347,8 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         var dst = new IPEndPoint(dstIp, dstPort);
 
         string flowKey = $"{srcIp}:{srcPort}-{dstIp}:{dstPort}-{proto}";
+
+        ulong currentFlowId = 0;
 
         // Check for TCP SYN (new connection) or new UDP flow
         bool isNewFlow;
@@ -366,6 +391,7 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         {
             ulong flowId = Interlocked.Increment(ref _nextFlowId);
             _flowIds[flowKey] = flowId;
+            currentFlowId = flowId;
 
             // onPacket is synchronous — CaptureEngine.HandleNewFlow() runs inline,
             // calls PolicyEngine.Evaluate(), and on Proxy decision calls AddNatEntry()
@@ -382,6 +408,7 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         }
         else if (_flowIds.TryGetValue(flowKey, out ulong existingFlowId))
         {
+            currentFlowId = existingFlowId;
             onPacket(new PacketInfo
             {
                 FlowId = existingFlowId,
@@ -395,17 +422,106 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         // Check if this flow should be redirected (NAT entry exists)
         string srcKey = $"{srcIp}:{srcPort}";
         bool shouldRedirect = _natTable.ContainsKey(srcKey);
-        _logger.LogDebug(
-            "Flow {SrcKey}: NAT table has {Count} entries, redirect={Redirect}",
-            srcKey, _natTable.Count, shouldRedirect);
+        if (isNewFlow)
+        {
+            _logger.LogInformation(
+                "Driver redirect-decision flowId={FlowId} protocol={Protocol} src={Source} dst={Destination} redirect={Redirect} natSize={NatSize}",
+                currentFlowId,
+                protocol,
+                src,
+                dst,
+                shouldRedirect,
+                _natTable.Count);
+        }
+
+        bool traceRedirect = shouldRedirect
+            && isNewFlow
+            && protocol == Protocol.Tcp
+            && Interlocked.Increment(ref _redirectTraceCount) <= RedirectTraceLimit;
+        IPEndPoint rewrittenDestination = dst;
+        bool rewriteRan = false;
+        bool headersRewritten = false;
+        bool checksumRecomputed = false;
 
         if (shouldRedirect)
         {
-            // Rewrite destination to LocalRelay endpoint
-            RewriteDestination(raw, ip, transport, proto, ihl, packetLen);
+            try
+            {
+                // Rewrite destination to LocalRelay endpoint
+                rewriteRan = true;
+                RewriteDestination(raw, ip, transport, proto, ihl, packetLen);
+                checksumRecomputed = true;
+                rewrittenDestination = ReadDestination(ip, transport);
+                headersRewritten =
+                    rewrittenDestination.Address.Equals(_relayEndpoint.Address) &&
+                    rewrittenDestination.Port == _relayEndpoint.Port;
+
+                if (headersRewritten)
+                {
+                    Interlocked.Increment(ref _redirectedPackets);
+                    Interlocked.Increment(ref _redirectApplied);
+                }
+                else
+                {
+                    Interlocked.Increment(ref _redirectRewriteFailed);
+                    _logger.LogWarning(
+                        "Driver redirect-rewrite-mismatch flowId={FlowId} protocol={Protocol} src={Source} originalDst={OriginalDestination} rewrittenDst={RewrittenDestination} redirectTarget={RedirectTarget}",
+                        currentFlowId,
+                        protocol,
+                        src,
+                        dst,
+                        rewrittenDestination,
+                        _relayEndpoint);
+                }
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Increment(ref _redirectRewriteFailed);
+                _logger.LogError(
+                    ex,
+                    "Driver redirect-rewrite-failed flowId={FlowId} protocol={Protocol} src={Source} originalDst={OriginalDestination} redirectTarget={RedirectTarget}",
+                    currentFlowId,
+                    protocol,
+                    src,
+                    dst,
+                    _relayEndpoint);
+                throw;
+            }
         }
 
-        ReinjectPacket(ref ethRequest);
+        string reinjectPath = GetReinjectPath(ref ethRequest, redirectToLocalRelay: shouldRedirect);
+        bool sendOk = ReinjectPacket(ref ethRequest, redirectToLocalRelay: shouldRedirect);
+        if (shouldRedirect && !sendOk)
+        {
+            Interlocked.Increment(ref _redirectSendFailed);
+            _logger.LogWarning(
+                "Driver redirect-send-failed flowId={FlowId} protocol={Protocol} src={Source} originalDst={OriginalDestination} redirectTarget={RedirectTarget} rewriteRan={RewriteRan} rewrittenDst={RewrittenDestination} reinjectPath={ReinjectPath}",
+                currentFlowId,
+                protocol,
+                src,
+                dst,
+                _relayEndpoint,
+                rewriteRan,
+                rewrittenDestination,
+                reinjectPath);
+        }
+
+        if (traceRedirect)
+        {
+            _logger.LogInformation(
+                "Driver redirect-apply flowId={FlowId} protocol={Protocol} src={Source} originalDst={OriginalDestination} redirectTarget={RedirectTarget} rewriteRan={RewriteRan} headersRewritten={HeadersRewritten} rewrittenDst={RewrittenDestination} checksumsRecomputed={ChecksumsRecomputed} reinjectPath={ReinjectPath} sendOk={SendOk}",
+                currentFlowId,
+                protocol,
+                src,
+                dst,
+                _relayEndpoint,
+                rewriteRan,
+                headersRewritten,
+                rewrittenDestination,
+                checksumRecomputed,
+                reinjectPath,
+                sendOk);
+        }
     }
 
     private void HandleInboundPacket(
@@ -422,6 +538,11 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
             ReinjectPacket(ref ethRequest);
             return;
         }
+
+        if (proto == IpProtoTcp)
+            Interlocked.Increment(ref _ipv4TcpPackets);
+        else
+            Interlocked.Increment(ref _ipv4UdpPackets);
 
         var srcIp = new IPAddress(new ReadOnlySpan<byte>(ip + 12, 4));
         byte* transport = ip + ihl;
@@ -451,7 +572,11 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     {
         string key = $"{localEndpoint.Address}:{localEndpoint.Port}";
         _natTable[key] = new NatEntry(originalDestination, DateTime.UtcNow);
-        _logger.LogDebug("NAT entry added: {Key} → {Dest}", key, originalDestination);
+        _logger.LogInformation(
+            "Driver nat-add key={Key} originalDst={Destination} natSize={NatSize}",
+            key,
+            originalDestination,
+            _natTable.Count);
     }
 
     /// <summary>
@@ -461,6 +586,48 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
     {
         string key = $"{localEndpoint.Address}:{localEndpoint.Port}";
         _natTable.TryRemove(key, out _);
+    }
+
+    private void MaybeLogCounters()
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastStatsLoggedAtUtc < TimeSpan.FromSeconds(30))
+            return;
+
+        _lastStatsLoggedAtUtc = now;
+        _logger.LogInformation(
+            "Driver stats ipv4Tcp={Ipv4Tcp} ipv4Udp={Ipv4Udp} nonIpv4={NonIpv4} redirected={Redirected} redirectApplied={RedirectApplied} redirectRewriteFailed={RedirectRewriteFailed} redirectSendFailed={RedirectSendFailed} natSize={NatSize}",
+            Interlocked.Read(ref _ipv4TcpPackets),
+            Interlocked.Read(ref _ipv4UdpPackets),
+            Interlocked.Read(ref _nonIpv4Packets),
+            Interlocked.Read(ref _redirectedPackets),
+            Interlocked.Read(ref _redirectApplied),
+            Interlocked.Read(ref _redirectRewriteFailed),
+            Interlocked.Read(ref _redirectSendFailed),
+            _natTable.Count);
+    }
+
+    private static IPEndPoint ReadDestination(byte* ip, byte* transport)
+    {
+        var dstIp = new IPAddress(new ReadOnlySpan<byte>(ip + 16, 4));
+        ushort dstPort = BinaryPrimitives.ReadUInt16BigEndian(new ReadOnlySpan<byte>(transport + 2, 2));
+        return new IPEndPoint(dstIp, dstPort);
+    }
+
+    internal static string GetReinjectPath(bool isOutbound, bool redirectToLocalRelay) =>
+        redirectToLocalRelay
+            ? ReinjectPathMstcp
+            : isOutbound
+                ? ReinjectPathAdapter
+                : ReinjectPathMstcp;
+
+    private static string GetReinjectPath(
+        ref NdisApiDotNet.Native.NdisApi.ETH_REQUEST ethRequest,
+        bool redirectToLocalRelay)
+    {
+        var buffer = (NdisApiDotNet.Native.NdisApi.INTERMEDIATE_BUFFER*)ethRequest.EthPacket.Buffer;
+        bool isOutbound = buffer->m_dwDeviceFlags == NdisApiDotNet.Native.NdisApi.PACKET_FLAG.PACKET_FLAG_ON_SEND;
+        return GetReinjectPath(isOutbound, redirectToLocalRelay);
     }
 
     private void RewriteDestination(byte* raw, byte* ip, byte* transport, byte proto, byte ihl, int packetLen)
@@ -576,10 +743,18 @@ public sealed unsafe class WinpkFilterPacketDriver : IPacketDriver
         return (ushort)~sum;
     }
 
-    private void ReinjectPacket(ref NdisApiDotNet.Native.NdisApi.ETH_REQUEST ethRequest)
+    private bool ReinjectPacket(
+        ref NdisApiDotNet.Native.NdisApi.ETH_REQUEST ethRequest,
+        bool redirectToLocalRelay = false)
     {
-        _api?.SendPacket(ref ethRequest);
+        if (_api is null)
+            return false;
+
+        return redirectToLocalRelay
+            ? _api.SendPacketToMstcp(ref ethRequest)
+            : _api.SendPacket(ref ethRequest);
     }
 
     private sealed record NatEntry(IPEndPoint OriginalDestination, DateTime CreatedAt);
 }
+
