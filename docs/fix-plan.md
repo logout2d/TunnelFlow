@@ -47,10 +47,12 @@ Status: completed
 Phase 3 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
 Status: in progress
 Current narrow milestone:
+- retire the helper channel as an expansion path and keep it only as temporary test scaffolding
 - add the first real native `ALE_CONNECT_REDIRECT_V4` slice for IPv4 TCP only
 - target one test app-id / executable only
-- emit one redirect metadata event into `WfpTcpRedirectProvider`
-- prove one real redirected accept reaches `LocalRelay` with `source=redirect-store`
+- produce one real redirect event from an actual outbound app `connect()`
+- deliver that event into `WfpTcpRedirectProvider`
+- then extend that slice into the first true redirected accept at `LocalRelay`
 Completed sub-step:
 - add managed native-contract scaffolding:
   - `WfpRedirectEvent`
@@ -63,6 +65,14 @@ Completed sub-step:
   - real process/stdin/stdout boundary
   - `WfpNativeSession` receives a real event from that native channel
   - `WfpTcpRedirectProvider` ingests it into the metadata store
+Next required sub-step:
+- add the first real kernel/user-mode WFP boundary:
+  - new `TunnelFlow.WfpRedirectDriver` native project
+  - control device + shared event struct + IOCTL contract
+  - minimal `ALE_CONNECT_REDIRECT_V4` registration for IPv4/TCP
+  - one real outbound app `connect()` produces one real redirect event
+Follow-up sub-step after that:
+- add the minimal redirect action needed so that same real native path reaches the first true `LocalRelay` accepted connection using `source=redirect-store`
 
 ## Step 12
 Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.

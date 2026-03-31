@@ -641,5 +641,73 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 3
     - failed: 0
     - skipped: 0
-- Remaining blocker before the first true runtime redirected accept:
+  - Remaining blocker before the first true runtime redirected accept:
   - replace the native helper process with the first real native driver/device control channel from the future WFP `ALE_CONNECT_REDIRECT_V4` implementation so a real outbound app `connect()` generates the event rather than a synthetic test command
+
+## Corrected next WFP step
+- Important correction after the helper-channel milestone:
+  - the helper-based native channel is useful only as temporary scaffolding for managed contract testing
+  - it should not be expanded further as a product path
+  - the next step must move directly toward a real Windows-native WFP/ALE event produced by an actual outbound app `connect()`
+- What can stay temporarily:
+  - `WfpRedirectEvent`
+  - `WfpNativeSession`
+  - `WfpNativeInterop` as the managed boundary type, but its implementation should pivot from helper-process transport to the first real driver/device channel
+  - `WfpTcpRedirectProvider` event ingestion into `IOriginalDestinationStore`
+  - existing relay-side metadata lookup path in `LocalRelay`
+- What must be replaced soon:
+  - `native/TunnelFlow.WfpRedirectChannel/`
+  - helper-process stdin/stdout transport in `WfpNativeInterop`
+  - helper-backed synthetic event flow as the main path for native-session development
+- Exact minimum additional native components required from here:
+  - one kernel-mode WFP callout driver project dedicated to IPv4/TCP only
+  - one control device on that driver for:
+    - driver start/stop/config from user mode
+    - relay endpoint configuration
+    - one redirect-event delivery path from kernel to user mode
+  - one shared native event contract carrying:
+    - original destination
+    - redirected relay endpoint
+    - process identity
+    - correlation material for relay lookup
+  - one minimal WFP registration path:
+    - provider/sublayer/callout/filter registration
+    - `ALE_CONNECT_REDIRECT_V4` classify callback only
+- Exact first real native milestone:
+  - feature-flagged
+  - IPv4 only
+  - TCP only
+  - one test executable/app-id only
+  - one relay endpoint only
+  - one real outbound app `connect()` reaches the WFP `ALE_CONNECT_REDIRECT_V4` classify path
+  - that classify path emits one real redirect event through the driver/device channel
+  - managed `WfpNativeSession` receives the event and `WfpTcpRedirectProvider` stores it
+  - full runtime redirect of that connect to `LocalRelay` may remain a follow-up sub-step, but the first real milestone must at least prove a real event from a real outbound connect rather than a helper-generated event
+- Exact files/projects required for that milestone:
+  - new native project:
+    - `native/TunnelFlow.WfpRedirectDriver/TunnelFlow.WfpRedirectDriver.vcxproj`
+  - planned native files:
+    - `native/TunnelFlow.WfpRedirectDriver/DriverEntry.c`
+    - `native/TunnelFlow.WfpRedirectDriver/RedirectCallout.c`
+    - `native/TunnelFlow.WfpRedirectDriver/DeviceControl.c`
+    - `native/TunnelFlow.WfpRedirectDriver/SharedTypes.h`
+    - `native/TunnelFlow.WfpRedirectDriver/TunnelFlowWfpRedirect.inf`
+  - managed files to evolve, not replace:
+    - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeInterop.cs`
+    - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeSession.cs`
+    - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpRedirectEvent.cs`
+    - `src/TunnelFlow.Capture/TcpRedirect/WfpTcpRedirectProvider.cs`
+- Recommended implementation order:
+  1. freeze the helper channel as test-only bootstrap scaffolding
+  2. define the single shared driver/user-mode event struct and IOCTL contract
+  3. add the minimal kernel driver project with control device and loadable skeleton
+  4. wire `WfpNativeInterop` to open the real device handle and read one event
+  5. implement `ALE_CONNECT_REDIRECT_V4` registration and one classify callback for IPv4/TCP only
+  6. in classify, match one test app and emit one real redirect event for a real outbound connect
+  7. validate that `WfpNativeSession` receives that event and `WfpTcpRedirectProvider` stores it
+  8. only after that, add the actual redirect action needed for the first true runtime redirected accept
+- Exact reason this is the shortest path to the first true runtime redirected accept:
+  - it stops spending time on simulation infrastructure that cannot prove WFP behavior
+  - it preserves the managed provider/session/store work already completed
+  - it introduces only the minimum native pieces needed to observe the first real app-driven WFP classify event
+  - once a real classify event is flowing into the existing managed metadata path, the remaining gap to the first true redirected accept is narrowed to the redirect action itself, not the surrounding infrastructure
