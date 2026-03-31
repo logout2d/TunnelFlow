@@ -2,17 +2,17 @@ using Microsoft.Extensions.Logging;
 
 namespace TunnelFlow.Capture.TcpRedirect;
 
-public sealed class NoOpTcpRedirectProvider : ITcpRedirectProvider
+public sealed class WfpTcpRedirectProvider : ITcpRedirectProvider
 {
-    private readonly ILogger<NoOpTcpRedirectProvider> _logger;
+    private readonly ILogger<WfpTcpRedirectProvider> _logger;
     private readonly IOriginalDestinationStore _destinationStore;
 
     private volatile WfpRedirectConfig _config = new();
     private volatile bool _started;
 
-    public NoOpTcpRedirectProvider(
+    public WfpTcpRedirectProvider(
         IOriginalDestinationStore destinationStore,
-        ILogger<NoOpTcpRedirectProvider> logger)
+        ILogger<WfpTcpRedirectProvider> logger)
     {
         _destinationStore = destinationStore;
         _logger = logger;
@@ -24,7 +24,7 @@ public sealed class NoOpTcpRedirectProvider : ITcpRedirectProvider
         _started = true;
 
         _logger.LogInformation(
-            "TCP redirect provider initialized mode=no-op useWfpTcpRedirect={UseWfpTcpRedirect}",
+            "TCP redirect provider start implementation=wfp-stub useWfpTcpRedirect={UseWfpTcpRedirect} status=placeholder",
             config.UseWfpTcpRedirect);
 
         return Task.CompletedTask;
@@ -33,7 +33,7 @@ public sealed class NoOpTcpRedirectProvider : ITcpRedirectProvider
     public Task StopAsync(CancellationToken ct = default)
     {
         _started = false;
-        _logger.LogInformation("TCP redirect provider stopped mode=no-op");
+        _logger.LogInformation("TCP redirect provider stop implementation=wfp-stub");
         return Task.CompletedTask;
     }
 
@@ -50,6 +50,6 @@ public sealed class NoOpTcpRedirectProvider : ITcpRedirectProvider
     {
         UseWfpTcpRedirect = _config.UseWfpTcpRedirect,
         ProviderStarted = _started,
-        ActiveProviderName = nameof(NoOpTcpRedirectProvider)
+        ActiveProviderName = nameof(WfpTcpRedirectProvider)
     };
 }

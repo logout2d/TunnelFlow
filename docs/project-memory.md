@@ -358,3 +358,43 @@ Google may still work in some fallback scenarios, while many other sites fail.
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.CaptureEngineTests" --logger "console;verbosity=minimal"`
 - Purpose of the phase:
   - prepare `LocalRelay` for future connection-level redirect metadata without enabling real WFP redirect behavior yet
+
+## WFP Phase 2 provider lifecycle skeleton
+- Implemented in this phase:
+  - added a real `WfpTcpRedirectProvider` skeleton with start/stop/logging only
+  - added `FeatureFlagTcpRedirectProvider` to choose the active provider implementation from `UseWfpTcpRedirect`
+  - integrated TCP redirect provider lifecycle into `OrchestratorService.StartCaptureAsync()` / `StopCaptureAsync()`
+  - kept current WinpkFilter capture path unchanged
+- Exact files changed:
+  - `src/TunnelFlow.Capture/TcpRedirect/WfpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/FeatureFlagTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/NoOpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/TcpRedirectStats.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Capture/FeatureFlagTcpRedirectProviderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Runtime behavior:
+  - when `UseWfpTcpRedirect=false`:
+    - `FeatureFlagTcpRedirectProvider` selects `NoOpTcpRedirectProvider`
+    - provider lifecycle starts/stops, but traffic behavior remains unchanged
+  - when `UseWfpTcpRedirect=true`:
+    - `FeatureFlagTcpRedirectProvider` selects `WfpTcpRedirectProvider`
+    - the provider logs that it is a placeholder stub
+    - traffic behavior still remains unchanged because no native redirect is implemented yet
+- Structured logs added for this phase:
+  - `TCP redirect feature state useWfpTcpRedirect={UseWfpTcpRedirect}`
+  - `TCP redirect provider select useWfpTcpRedirect={UseWfpTcpRedirect} implementation={Implementation}`
+  - `TCP redirect provider start implementation=wfp-stub useWfpTcpRedirect={UseWfpTcpRedirect} status=placeholder`
+  - `TCP redirect provider initialized mode=no-op useWfpTcpRedirect={UseWfpTcpRedirect}`
+  - `TCP redirect provider lifecycle-stop implementation={Implementation} useWfpTcpRedirect={UseWfpTcpRedirect}`
+  - `TCP redirect provider stop implementation=wfp-stub`
+  - `TCP redirect provider stopped mode=no-op`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.FeatureFlagTcpRedirectProviderTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0

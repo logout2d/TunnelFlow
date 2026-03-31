@@ -6,6 +6,8 @@ public sealed record TcpRedirectStats
 
     public bool ProviderStarted { get; init; }
 
+    public string ActiveProviderName { get; init; } = string.Empty;
+
     public long RedirectRegistrationCount { get; init; }
 
     public long LookupHitCount { get; init; }

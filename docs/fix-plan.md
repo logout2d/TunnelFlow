@@ -41,7 +41,7 @@ Status: completed
 
 ## Step 10
 Phase 2 provider skeleton: add the WFP redirect provider lifecycle/startup path without enabling real redirect behavior yet.
-Status: pending
+Status: completed
 
 ## Step 11
 Phase 3 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.

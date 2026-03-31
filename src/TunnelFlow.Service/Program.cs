@@ -22,7 +22,9 @@ builder.Services.AddSingleton<ISingBoxManager, SingBoxManager>();
 // builder.Services.AddSingleton<IPacketDriver, StubPacketDriver>();
 builder.Services.AddSingleton<IPacketDriver, WinpkFilterPacketDriver>();
 builder.Services.AddSingleton<IOriginalDestinationStore, InMemoryOriginalDestinationStore>();
-builder.Services.AddSingleton<ITcpRedirectProvider, NoOpTcpRedirectProvider>();
+builder.Services.AddSingleton<NoOpTcpRedirectProvider>();
+builder.Services.AddSingleton<WfpTcpRedirectProvider>();
+builder.Services.AddSingleton<ITcpRedirectProvider, FeatureFlagTcpRedirectProvider>();
 builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
 builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
 builder.Services.AddSingleton<IPolicyEngine>(sp =>

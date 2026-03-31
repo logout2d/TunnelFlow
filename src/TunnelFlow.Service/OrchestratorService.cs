@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TunnelFlow.Capture.Policy;
+using TunnelFlow.Capture.TcpRedirect;
 using TunnelFlow.Core;
 using TunnelFlow.Core.IPC.Responses;
 using TunnelFlow.Core.Models;
@@ -15,6 +16,7 @@ public sealed class OrchestratorService : BackgroundService
     private readonly ISingBoxManager _singBoxManager;
     private readonly ICaptureEngine _captureEngine;
     private readonly IPolicyEngine _policyEngine;
+    private readonly ITcpRedirectProvider _tcpRedirectProvider;
     private readonly ISessionRegistry _sessionRegistry;
     private readonly ConfigStore _configStore;
     private readonly PipeServer _pipeServer;
@@ -33,6 +35,7 @@ public sealed class OrchestratorService : BackgroundService
         ISingBoxManager singBoxManager,
         ICaptureEngine captureEngine,
         IPolicyEngine policyEngine,
+        ITcpRedirectProvider tcpRedirectProvider,
         ISessionRegistry sessionRegistry,
         ConfigStore configStore,
         PipeServer pipeServer,
@@ -41,6 +44,7 @@ public sealed class OrchestratorService : BackgroundService
         _singBoxManager = singBoxManager;
         _captureEngine = captureEngine;
         _policyEngine = policyEngine;
+        _tcpRedirectProvider = tcpRedirectProvider;
         _sessionRegistry = sessionRegistry;
         _configStore = configStore;
         _pipeServer = pipeServer;
@@ -170,6 +174,15 @@ public sealed class OrchestratorService : BackgroundService
                 ExcludedDestinations = serverAddresses.ToList()
             };
 
+            var redirectConfig = new WfpRedirectConfig
+            {
+                UseWfpTcpRedirect = config.UseWfpTcpRedirect
+            };
+            _logger.LogInformation(
+                "TCP redirect feature state useWfpTcpRedirect={UseWfpTcpRedirect}",
+                redirectConfig.UseWfpTcpRedirect);
+            await _tcpRedirectProvider.StartAsync(redirectConfig, _stoppingToken);
+
             await _captureEngine.StartAsync(captureConfig, _stoppingToken);
 
             _captureRunning = true;
@@ -179,6 +192,7 @@ public sealed class OrchestratorService : BackgroundService
         }
         catch (Exception ex)
         {
+            try { await _tcpRedirectProvider.StopAsync(_stoppingToken); } catch { }
             _logger.LogError(ex, "StartCaptureAsync failed");
             _pipeServer.PushLogLine("service", "Error",
                 $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
@@ -200,6 +214,7 @@ public sealed class OrchestratorService : BackgroundService
 
             _pipeServer.PushLogLine("service", "Info", "Stopping tunnel...");
             await _captureEngine.StopAsync(_stoppingToken);
+            await _tcpRedirectProvider.StopAsync(_stoppingToken);
             await _singBoxManager.StopAsync(_stoppingToken);
 
             _captureRunning = false;

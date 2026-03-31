@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TunnelFlow.Capture")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e89e3667ced91e3544781a60c3697e5f7535894a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5c77da994b86fc9fd46cbdb40f7aadf32a024fb6")]
 [assembly: System.Reflection.AssemblyProductAttribute("TunnelFlow.Capture")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TunnelFlow.Capture")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
