@@ -8,6 +8,10 @@ public interface ITcpRedirectProvider
 
     Task StopAsync(CancellationToken ct = default);
 
+    void RecordRedirect(ConnectionRedirectRecord record);
+
+    void RemoveRedirect(ConnectionLookupKey key);
+
     bool TryGetOriginalDestination(ConnectionLookupKey key, out ConnectionRedirectRecord record);
 
     TcpRedirectStats GetStats();

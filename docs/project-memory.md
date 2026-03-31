@@ -398,3 +398,47 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 3
     - failed: 0
     - skipped: 0
+
+## WFP Phase 3 minimal vertical slice
+- Implemented in this phase:
+  - `WfpTcpRedirectProvider` now owns real redirect-metadata lifecycle operations:
+    - add metadata record
+    - remove metadata record
+    - lookup with hit/miss accounting
+  - `FeatureFlagTcpRedirectProvider` forwards metadata record operations to the active provider
+  - added a live-socket integration test that proves:
+    - a metadata record created through `WfpTcpRedirectProvider`
+    - is consumed by `LocalRelay`
+    - during a real accepted TCP connection path
+    - and drives the SOCKS target selection using the metadata path instead of NAT fallback
+- Exact files changed:
+  - `src/TunnelFlow.Capture/TcpRedirect/IOriginalDestinationStore.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/InMemoryOriginalDestinationStore.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/ITcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/NoOpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/WfpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/FeatureFlagTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpTcpRedirectProviderIntegrationTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- What is real in this slice:
+  - provider-created metadata records are now real state, not placeholders
+  - `LocalRelay` metadata lookup path is exercised on a real TCP accept path in tests
+  - SOCKS target selection can be driven by metadata from the WFP-side provider path
+- What is still stubbed:
+  - no native WFP ALE connect redirection
+  - no Windows-native interception of outbound connects
+  - no real OS-level redirect that causes an arbitrary app connect to arrive at `LocalRelay`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpTcpRedirectProviderIntegrationTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.FeatureFlagTcpRedirectProviderTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0
+- Remaining blocker to the first true redirected accept from a real app:
+  - Windows-native WFP ALE connect redirection still has to create the metadata record from a real outbound connect and redirect that connect to `LocalRelay` at the OS connection layer

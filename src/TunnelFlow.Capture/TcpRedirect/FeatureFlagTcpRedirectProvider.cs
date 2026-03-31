@@ -47,6 +47,12 @@ public sealed class FeatureFlagTcpRedirectProvider : ITcpRedirectProvider
         await _activeProvider.StopAsync(ct);
     }
 
+    public void RecordRedirect(ConnectionRedirectRecord record) =>
+        _activeProvider.RecordRedirect(record);
+
+    public void RemoveRedirect(ConnectionLookupKey key) =>
+        _activeProvider.RemoveRedirect(key);
+
     public bool TryGetOriginalDestination(ConnectionLookupKey key, out ConnectionRedirectRecord record) =>
         _activeProvider.TryGetOriginalDestination(key, out record);
 

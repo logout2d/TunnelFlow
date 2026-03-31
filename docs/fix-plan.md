@@ -45,7 +45,7 @@ Status: completed
 
 ## Step 11
 Phase 3 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
-Status: pending
+Status: in progress
 
 ## Step 12
 Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.

@@ -6,6 +6,8 @@ public sealed class InMemoryOriginalDestinationStore : IOriginalDestinationStore
 {
     private readonly ConcurrentDictionary<ConnectionLookupKey, ConnectionRedirectRecord> _records = new();
 
+    public int Count => _records.Count;
+
     public void Add(ConnectionRedirectRecord record) =>
         _records[record.LookupKey] = record;
 
