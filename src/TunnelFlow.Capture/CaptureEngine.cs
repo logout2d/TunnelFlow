@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TunnelFlow.Capture.Interop;
 using TunnelFlow.Capture.Policy;
 using TunnelFlow.Capture.ProcessResolver;
+using TunnelFlow.Capture.TcpRedirect;
 using TunnelFlow.Capture.TransparentProxy;
 using TunnelFlow.Core;
 using TunnelFlow.Core.Models;
@@ -19,6 +20,7 @@ public sealed class CaptureEngine : ICaptureEngine
     private readonly IProcessResolver _processResolver;
     private readonly ISessionRegistry _registry;
     private readonly IPolicyEngine _policyEngine;
+    private readonly ITcpRedirectProvider? _tcpRedirectProvider;
     private readonly ILogger<CaptureEngine> _logger;
     private readonly ILoggerFactory? _loggerFactory;
 
@@ -38,6 +40,7 @@ public sealed class CaptureEngine : ICaptureEngine
         IProcessResolver processResolver,
         ISessionRegistry registry,
         IPolicyEngine policyEngine,
+        ITcpRedirectProvider? tcpRedirectProvider,
         ILogger<CaptureEngine> logger,
         ILoggerFactory? loggerFactory = null)
     {
@@ -45,6 +48,7 @@ public sealed class CaptureEngine : ICaptureEngine
         _processResolver = processResolver;
         _registry = registry;
         _policyEngine = policyEngine;
+        _tcpRedirectProvider = tcpRedirectProvider;
         _logger = logger;
         _loggerFactory = loggerFactory;
     }
@@ -88,6 +92,7 @@ public sealed class CaptureEngine : ICaptureEngine
                     relayEndpoint,
                     _socksEndpoint,
                     key => wpfDriver.LookupNat(key),
+                    key => TryLookupOriginalDestination(key),
                     _loggerFactory.CreateLogger<LocalRelay>());
                 _ = _localRelay.StartAsync(_cts.Token);
             }
@@ -97,6 +102,17 @@ public sealed class CaptureEngine : ICaptureEngine
         _purgeLoopTask = RunPurgeLoopAsync(_cts.Token);
 
         return Task.CompletedTask;
+    }
+
+    private IPEndPoint? TryLookupOriginalDestination(ConnectionLookupKey key)
+    {
+        if (_tcpRedirectProvider is not null &&
+            _tcpRedirectProvider.TryGetOriginalDestination(key, out var record))
+        {
+            return record.OriginalDestination;
+        }
+
+        return null;
     }
 
     internal static IPAddress SelectRelayListenAddress() =>

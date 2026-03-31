@@ -1,4 +1,5 @@
 using System.Net;
+using TunnelFlow.Capture.TcpRedirect;
 using TunnelFlow.Capture.TransparentProxy;
 
 namespace TunnelFlow.Tests.Capture;
@@ -76,5 +77,53 @@ public class LocalRelayTests
 
         Assert.True(natTable.TryGetValue("192.168.1.5:54321", out var result));
         Assert.Equal(originalDest, result);
+    }
+
+    [Fact]
+    public void ResolveOriginalDestination_PrefersRedirectStoreOverNatFallback()
+    {
+        var clientEndpoint = new IPEndPoint(IPAddress.Parse("192.168.1.5"), 54321);
+        var metadataDestination = new IPEndPoint(IPAddress.Parse("203.0.113.10"), 443);
+        var natDestination = new IPEndPoint(IPAddress.Parse("198.51.100.25"), 443);
+
+        var result = LocalRelay.ResolveOriginalDestination(
+            clientEndpoint,
+            key => key == ConnectionLookupKey.From(clientEndpoint) ? metadataDestination : null,
+            _ => natDestination,
+            out var source);
+
+        Assert.Equal(metadataDestination, result);
+        Assert.Equal("redirect-store", source);
+    }
+
+    [Fact]
+    public void ResolveOriginalDestination_FallsBackToNatWhenRedirectStoreMisses()
+    {
+        var clientEndpoint = new IPEndPoint(IPAddress.Parse("192.168.1.5"), 54321);
+        var natDestination = new IPEndPoint(IPAddress.Parse("198.51.100.25"), 443);
+
+        var result = LocalRelay.ResolveOriginalDestination(
+            clientEndpoint,
+            _ => null,
+            key => key == "192.168.1.5:54321" ? natDestination : null,
+            out var source);
+
+        Assert.Equal(natDestination, result);
+        Assert.Equal("nat-fallback", source);
+    }
+
+    [Fact]
+    public void ResolveOriginalDestination_ReturnsMissWhenNoLookupMatches()
+    {
+        var clientEndpoint = new IPEndPoint(IPAddress.Parse("192.168.1.5"), 54321);
+
+        var result = LocalRelay.ResolveOriginalDestination(
+            clientEndpoint,
+            _ => null,
+            _ => null,
+            out var source);
+
+        Assert.Null(result);
+        Assert.Equal("miss", source);
     }
 }

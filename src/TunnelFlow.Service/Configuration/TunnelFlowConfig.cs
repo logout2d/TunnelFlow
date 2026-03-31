@@ -9,4 +9,5 @@ public class TunnelFlowConfig
     public Guid? ActiveProfileId { get; set; }
     public int SocksPort { get; set; } = 2080;
     public bool StartCaptureOnServiceStart { get; set; } = false;
+    public bool UseWfpTcpRedirect { get; set; } = false;
 }

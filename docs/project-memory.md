@@ -1,5 +1,12 @@
 # TunnelFlow project memory
 
+## WFP Redirect Docs
+- Active migration design reference:
+  - `docs/wfp-tcp-redirect-poc-plan.md`
+- Current repository status:
+  - Phase 0 skeleton/scaffolding is now in place
+  - no real WFP redirect behavior has been implemented yet
+
 ## Goal
 Bring TunnelFlow to a stable working state for selective per-application transparent proxying on Windows.
 
@@ -306,3 +313,48 @@ Google may still work in some fallback scenarios, while many other sites fail.
   - WFP ALE connect redirection requires Windows-native integration work and likely a new interop layer/driver component
   - original-destination metadata must be mapped reliably from redirected connect to accepted relay socket
   - rollback path should preserve current diagnostics so TCP redirect behavior remains observable during migration
+
+## WFP Phase 0 skeleton
+- Implemented in this phase:
+  - new TCP redirect abstraction layer under `src/TunnelFlow.Capture/TcpRedirect/`
+  - feature flag/config switch: `UseWfpTcpRedirect`
+  - no-op `ITcpRedirectProvider` implementation
+  - in-memory original-destination store skeleton
+  - DI wiring in service startup
+- Intentionally not implemented yet:
+  - native WFP interop
+  - real connection-level redirect behavior
+  - runtime capture-path switching away from WinpkFilter
+- Phase 0 added files:
+  - `src/TunnelFlow.Capture/TcpRedirect/ITcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/IOriginalDestinationStore.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/ConnectionRedirectRecord.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/ConnectionLookupKey.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/TcpRedirectStats.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/WfpRedirectConfig.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/NoOpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/InMemoryOriginalDestinationStore.cs`
+
+## WFP Phase 1 metadata path preparation
+- Implemented in this phase:
+  - `LocalRelay` now resolves original destination through the new connection-level metadata path first
+  - if that lookup misses, it falls back to the existing WinpkFilter NAT lookup path
+  - runtime behavior stays unchanged while the no-op provider/store has no record for a connection
+- Exact files changed:
+  - `src/TunnelFlow.Capture/CaptureEngine.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/LocalRelay.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Tests/Capture/LocalRelayTests.cs`
+  - `src/TunnelFlow.Tests/Capture/InMemoryOriginalDestinationStoreTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Lookup order after this patch:
+  1. `ITcpRedirectProvider` / `IOriginalDestinationStore` metadata by `ConnectionLookupKey`
+  2. existing WinpkFilter NAT lookup by `srcIP:srcPort`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.InMemoryOriginalDestinationStoreTests" --logger "console;verbosity=minimal"`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.LocalRelayTests" --logger "console;verbosity=minimal"`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.CaptureEngineTests" --logger "console;verbosity=minimal"`
+- Purpose of the phase:
+  - prepare `LocalRelay` for future connection-level redirect metadata without enabling real WFP redirect behavior yet

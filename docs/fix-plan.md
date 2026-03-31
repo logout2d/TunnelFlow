@@ -32,17 +32,29 @@ Reinject redirected outbound relay packets through MSTCP/local stack instead of 
 Status: completed
 
 ## Step 8
-Phase 1 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
-Status: pending
+Phase 0 foundation: add WFP TCP redirect documentation, skeleton abstractions/models, config feature flag, DI wiring, and a no-op provider without changing runtime behavior.
+Status: completed
 
 ## Step 9
-Phase 2 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.
-Status: pending
+Phase 1 preparation: teach LocalRelay to check connection-level original-destination metadata first and fall back to the existing NAT lookup path.
+Status: completed
 
 ## Step 10
-Phase 3 cleanup: remove obsolete TCP packet rewrite/NAT bridging logic from WinpkFilterPacketDriver once connection-level redirect is stable.
+Phase 2 provider skeleton: add the WFP redirect provider lifecycle/startup path without enabling real redirect behavior yet.
 Status: pending
 
 ## Step 11
+Phase 3 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
+Status: pending
+
+## Step 12
+Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.
+Status: pending
+
+## Step 13
+Phase 5 cleanup: remove obsolete TCP packet rewrite/NAT bridging logic from WinpkFilterPacketDriver once connection-level redirect is stable.
+Status: pending
+
+## Step 14
 Investigate/patch IPv6 capture path if still required after earlier fixes.
 Status: pending

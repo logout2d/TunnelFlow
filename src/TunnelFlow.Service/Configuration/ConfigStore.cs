@@ -42,7 +42,8 @@ public class ConfigStore
                 Profiles = persisted.Profiles.Select(ToVlessProfile).ToList(),
                 ActiveProfileId = persisted.ActiveProfileId,
                 SocksPort = persisted.SocksPort,
-                StartCaptureOnServiceStart = persisted.StartCaptureOnServiceStart
+                StartCaptureOnServiceStart = persisted.StartCaptureOnServiceStart,
+                UseWfpTcpRedirect = persisted.UseWfpTcpRedirect
             };
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException)
@@ -62,7 +63,8 @@ public class ConfigStore
             Profiles = config.Profiles.Select(ToPersistedProfile).ToList(),
             ActiveProfileId = config.ActiveProfileId,
             SocksPort = config.SocksPort,
-            StartCaptureOnServiceStart = config.StartCaptureOnServiceStart
+            StartCaptureOnServiceStart = config.StartCaptureOnServiceStart,
+            UseWfpTcpRedirect = config.UseWfpTcpRedirect
         };
 
         var json = JsonSerializer.Serialize(persisted, JsonOptions);
@@ -133,6 +135,9 @@ public class ConfigStore
 
         [JsonPropertyName("startCaptureOnServiceStart")]
         public bool StartCaptureOnServiceStart { get; set; }
+
+        [JsonPropertyName("useWfpTcpRedirect")]
+        public bool UseWfpTcpRedirect { get; set; }
     }
 
     private class PersistedVlessProfile
