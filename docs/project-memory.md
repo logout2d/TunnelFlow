@@ -308,6 +308,36 @@
     - failed: 0
     - skipped: 0
 
+## TUN-mode policy observability improvement
+- Confirmed runtime gap:
+  - TUN-mode `Block` behavior appeared to work at runtime, but the service logs did not clearly show how each app rule had been translated into sing-box policy
+- Narrow diagnostics added:
+  - `OrchestratorService` now emits a TUN policy summary during TUN-mode startup only
+  - for each enabled process-path app rule, the service logs:
+    - app path
+    - rule mode
+    - mapped sing-box action
+    - mapped outbound when applicable
+  - summary examples now emitted:
+    - `Proxy` -> `mappedAction=route`, `mappedOutbound=vless-out`
+    - `Direct` -> `mappedAction=route`, `mappedOutbound=direct`
+    - `Block` -> `mappedAction=reject`, `mappedOutbound=(none)`
+- Exact files changed:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Test readability improvement:
+  - the `Block` builder test now extracts the specific block rule first and asserts its `action` and missing `outbound` directly, which makes the expected mapping easier to read
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
+    - passed: 21
+    - failed: 0
+    - skipped: 0
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

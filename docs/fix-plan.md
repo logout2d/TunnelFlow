@@ -114,6 +114,10 @@ Progress:
   - `Proxy` -> explicit route to `vless-out`
   - `Direct` -> explicit route to `direct`
   - `Block` -> explicit reject rule
+- TUN-mode startup logs now include a per-app policy summary:
+  - app path
+  - rule mode
+  - mapped sing-box action/outbound
 - full end-to-end runtime validation is still pending
 
 ## Step 18

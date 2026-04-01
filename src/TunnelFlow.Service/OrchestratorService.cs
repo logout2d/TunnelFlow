@@ -230,6 +230,32 @@ public sealed class OrchestratorService : BackgroundService
                 "Info",
                 $"Runtime plan: selectedMode={runtimePlan.SelectedMode}, legacyCaptureEnabled={runtimePlan.LegacyCaptureEnabled}, localRelayEnabled={runtimePlan.LocalRelayEnabled}, winpkFilterEnabled={runtimePlan.WinpkFilterEnabled}");
 
+            if (tunModeSelection.SelectedMode == TunnelMode.Tun)
+            {
+                var tunPolicySummaries = BuildTunPolicySummaries(config.Rules);
+                _logger.LogInformation(
+                    "TUN policy summary count={Count}",
+                    tunPolicySummaries.Count);
+                _pipeServer.PushLogLine(
+                    "service",
+                    "Info",
+                    $"TUN policy summary count={tunPolicySummaries.Count}");
+
+                foreach (var summary in tunPolicySummaries)
+                {
+                    _logger.LogInformation(
+                        "TUN policy appPath={AppPath} ruleMode={RuleMode} mappedAction={MappedAction} mappedOutbound={MappedOutbound}",
+                        summary.AppPath,
+                        summary.RuleMode,
+                        summary.MappedAction,
+                        summary.MappedOutbound ?? "(none)");
+                    _pipeServer.PushLogLine(
+                        "service",
+                        "Info",
+                        $"TUN policy: appPath={summary.AppPath}, ruleMode={summary.RuleMode}, mappedAction={summary.MappedAction}, mappedOutbound={summary.MappedOutbound ?? "(none)"}");
+                }
+            }
+
             var singBoxConfig = new SingBoxConfig
             {
                 SocksPort = config.SocksPort,
@@ -472,6 +498,18 @@ public sealed class OrchestratorService : BackgroundService
                 LegacyCaptureEnabled: true,
                 LocalRelayEnabled: true,
                 WinpkFilterEnabled: true);
+
+    internal static IReadOnlyList<TunPolicySummary> BuildTunPolicySummaries(IReadOnlyList<AppRule> rules) =>
+        rules
+            .Where(rule => rule.IsEnabled && !string.IsNullOrWhiteSpace(rule.ExePath))
+            .Select(rule => rule.Mode switch
+            {
+                RuleMode.Proxy => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "vless-out"),
+                RuleMode.Direct => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "direct"),
+                RuleMode.Block => new TunPolicySummary(rule.ExePath, rule.Mode, "reject", null),
+                _ => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "direct")
+            })
+            .ToArray();
 }
 
 internal readonly record struct TunnelRuntimePlan(
@@ -479,3 +517,9 @@ internal readonly record struct TunnelRuntimePlan(
     bool LegacyCaptureEnabled,
     bool LocalRelayEnabled,
     bool WinpkFilterEnabled);
+
+internal readonly record struct TunPolicySummary(
+    string AppPath,
+    RuleMode RuleMode,
+    string MappedAction,
+    string? MappedOutbound);

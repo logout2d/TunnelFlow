@@ -203,11 +203,11 @@ public class SingBoxConfigBuilderTests
 
         using var doc = JsonDocument.Parse(json);
         var routeRules = doc.RootElement.GetProperty("route").GetProperty("rules");
-        Assert.Contains(routeRules.EnumerateArray(), rule =>
+        var blockRule = routeRules.EnumerateArray().Single(rule =>
             rule.TryGetProperty("process_path", out var processPaths) &&
-            processPaths[0].GetString() == @"C:\Apps\BlockMe.exe" &&
-            rule.GetProperty("action").GetString() == "reject" &&
-            !rule.TryGetProperty("outbound", out _));
+            processPaths[0].GetString() == @"C:\Apps\BlockMe.exe");
+        Assert.Equal("reject", blockRule.GetProperty("action").GetString());
+        Assert.False(blockRule.TryGetProperty("outbound", out _));
     }
 
     [Fact]
