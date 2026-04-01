@@ -8,6 +8,8 @@ public sealed class NoOpTunOrchestrator : ITunOrchestrator
 
     public NoOpTunOrchestrator(ILogger<NoOpTunOrchestrator> logger) => _logger = logger;
 
+    public string ResolvedWintunPath => WintunPathResolver.Resolve();
+
     public bool SupportsActivation => false;
 
     public Task StartAsync(TunOrchestrationConfig config, CancellationToken cancellationToken)

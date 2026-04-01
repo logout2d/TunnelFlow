@@ -141,7 +141,7 @@ public sealed class OrchestratorService : BackgroundService
             var tunModeSelection = TunModeSelector.Select(
                 config.UseTunMode,
                 _tunOrchestrator.SupportsActivation,
-                ResolveWintunPath());
+                _tunOrchestrator.ResolvedWintunPath);
 
             if (!File.Exists(singBoxExe))
             {
@@ -164,7 +164,7 @@ public sealed class OrchestratorService : BackgroundService
             _pipeServer.PushLogLine(
                 "service",
                 "Info",
-                $"Tunnel mode selection: requestedTun={tunModeSelection.UseTunModeRequested}, selectedMode={tunModeSelection.SelectedMode}, tunPrerequisitesSatisfied={tunModeSelection.TunPrerequisitesSatisfied}");
+                $"Tunnel mode selection: requestedTun={tunModeSelection.UseTunModeRequested}, selectedMode={tunModeSelection.SelectedMode}, tunPrerequisitesSatisfied={tunModeSelection.TunPrerequisitesSatisfied}, wintunPath={tunModeSelection.WintunPath}");
 
             if (tunModeSelection.UseTunModeRequested && tunModeSelection.SelectedMode != TunnelMode.Tun)
             {
@@ -177,6 +177,46 @@ public sealed class OrchestratorService : BackgroundService
             var logDir = Path.Combine(DataDir, "logs");
             Directory.CreateDirectory(logDir);
 
+            if (tunModeSelection.SelectedMode == TunnelMode.Tun)
+            {
+                try
+                {
+                    _pipeServer.PushLogLine(
+                        "service",
+                        "Info",
+                        $"TUN activation attempt: wintunPath={tunModeSelection.WintunPath}");
+                    await _tunOrchestrator.StartAsync(
+                        new TunOrchestrationConfig
+                        {
+                            UseTunMode = true,
+                            WintunPath = tunModeSelection.WintunPath
+                        },
+                        _stoppingToken);
+                    _tunModeActive = true;
+                    _pipeServer.PushLogLine(
+                        "service",
+                        "Info",
+                        $"TUN activation succeeded: wintunPath={tunModeSelection.WintunPath}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "TUN activation failed; falling back to legacy mode wintunPath={WintunPath}",
+                        tunModeSelection.WintunPath);
+                    _pipeServer.PushLogLine(
+                        "service",
+                        "Warning",
+                        $"TUN activation failed, falling back to legacy mode: {ex.Message}");
+                    tunModeSelection = tunModeSelection with
+                    {
+                        SelectedMode = TunnelMode.Legacy,
+                        SelectionReason = "tun-activation-failed"
+                    };
+                    _tunModeActive = false;
+                }
+            }
+
             var singBoxConfig = new SingBoxConfig
             {
                 SocksPort = config.SocksPort,
@@ -188,14 +228,6 @@ public sealed class OrchestratorService : BackgroundService
                 RestartDelay = TimeSpan.FromSeconds(3),
                 MaxRestartAttempts = 5
             };
-
-            if (tunModeSelection.SelectedMode == TunnelMode.Tun)
-            {
-                await _tunOrchestrator.StartAsync(
-                    new TunOrchestrationConfig { UseTunMode = true },
-                    _stoppingToken);
-                _tunModeActive = true;
-            }
 
             _pipeServer.PushLogLine("service", "Info", $"Starting sing-box: {singBoxExe}");
             await _singBoxManager.StartAsync(profile, singBoxConfig, _stoppingToken);
@@ -404,20 +436,5 @@ public sealed class OrchestratorService : BackgroundService
 
         // In deployed/installed scenarios the binary may sit next to the service exe
         return Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
-    }
-
-    private static string ResolveWintunPath()
-    {
-        var repoCandidate = Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-                "third_party", "wintun", "wintun.dll"));
-        if (File.Exists(repoCandidate))
-            return repoCandidate;
-
-        var nextToServiceCandidate = Path.Combine(AppContext.BaseDirectory, "wintun.dll");
-        if (File.Exists(nextToServiceCandidate))
-            return nextToServiceCandidate;
-
-        return repoCandidate;
     }
 }

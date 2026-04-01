@@ -29,7 +29,7 @@ builder.Services.AddSingleton<WfpNativeSession>();
 builder.Services.AddSingleton<NoOpTcpRedirectProvider>();
 builder.Services.AddSingleton<WfpTcpRedirectProvider>();
 builder.Services.AddSingleton<ITcpRedirectProvider, FeatureFlagTcpRedirectProvider>();
-builder.Services.AddSingleton<ITunOrchestrator, NoOpTunOrchestrator>();
+builder.Services.AddSingleton<ITunOrchestrator, WintunTunOrchestrator>();
 builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
 builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
 builder.Services.AddSingleton<IPolicyEngine>(sp =>

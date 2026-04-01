@@ -94,11 +94,15 @@ Scope:
 
 ## Step 17
 Phase 4 of the TUN pivot: first real runtime validation with one selected app on Wintun + sing-box TUN.
-Status: pending
+Status: in progress
 Scope:
 - validate selected-app proxying
 - validate non-selected direct traffic
 - validate service/UI lifecycle and observability
+Progress:
+- first real activation-capable TUN orchestrator slice is now implemented
+- service can now select effective TUN mode when Wintun prerequisites are met
+- full end-to-end runtime validation is still pending
 
 ## Step 18
 Phase 5 of the TUN pivot: DNS hardening, loop prevention refinement, and compatibility tuning.

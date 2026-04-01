@@ -120,6 +120,46 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
 
+## TUN pivot Phase 4 activation-capable orchestrator slice
+- Implemented in this step:
+  - replaced the TUN no-op-only DI path with a real `WintunTunOrchestrator`
+  - added Wintun path resolution for the first likely local asset locations:
+    - `third_party/wintun/bin/amd64/wintun.dll`
+    - `third_party/wintun/wintun.dll`
+    - `wintun.dll` next to the service binary
+  - `SupportsActivation` is now true only when a resolved Wintun DLL actually exists
+  - the first real activation boundary is now:
+    - load `wintun.dll` into the service process on TUN activation start
+    - unload it again on stop
+  - `OrchestratorService` now:
+    - logs the resolved Wintun path through mode selection
+    - attempts TUN activation before sing-box startup when TUN mode is effectively selected
+    - falls back to legacy mode if TUN activation fails
+- Exact files changed:
+  - `src/TunnelFlow.Service/Tun/ITunOrchestrator.cs`
+  - `src/TunnelFlow.Service/Tun/TunOrchestrationConfig.cs`
+  - `src/TunnelFlow.Service/Tun/NoOpTunOrchestrator.cs`
+  - `src/TunnelFlow.Service/Tun/WintunPathResolver.cs`
+  - `src/TunnelFlow.Service/Tun/WintunTunOrchestrator.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/WintunTunOrchestratorTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Structured logs added:
+  - resolved Wintun path in mode selection logs
+  - TUN activation attempt
+  - TUN activation success
+  - TUN activation failure with fallback to legacy mode
+- Current effect:
+  - the service can now honestly enter effective TUN mode when the Wintun DLL asset is present and loads successfully
+  - legacy behavior remains the fallback when Wintun is missing or activation fails
+  - this is still not full production TUN lifecycle management yet; adapter/interface creation and full runtime validation remain next
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.WintunTunOrchestratorTests" --logger "console;verbosity=minimal"`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.TunModeSelectorTests.Select_" --logger "console;verbosity=minimal"`
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
