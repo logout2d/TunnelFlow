@@ -248,17 +248,54 @@ public class SingBoxConfigBuilderTests
         Assert.Equal("local-dns", dns.GetProperty("final").GetString());
 
         var dnsRules = dns.GetProperty("rules");
-        Assert.Single(dnsRules.EnumerateArray());
-        var dnsRule = dnsRules[0];
-        Assert.Equal(@"C:\Apps\ProxyMe.exe", dnsRule.GetProperty("process_path")[0].GetString());
-        Assert.Equal("route", dnsRule.GetProperty("action").GetString());
-        Assert.Equal("remote-dns", dnsRule.GetProperty("server").GetString());
+        var proxyDnsRule = dnsRules.EnumerateArray().Single(rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\ProxyMe.exe");
+        Assert.Equal("route", proxyDnsRule.GetProperty("action").GetString());
+        Assert.Equal("remote-dns", proxyDnsRule.GetProperty("server").GetString());
         Assert.DoesNotContain(dnsRules.EnumerateArray(), rule =>
             rule.TryGetProperty("process_path", out var processPaths) &&
             processPaths[0].GetString() == @"C:\Apps\DirectMe.exe");
-        Assert.DoesNotContain(dnsRules.EnumerateArray(), rule =>
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_AddsBlockDnsRejectRules()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\BlockMe.exe",
+                DisplayName = "BlockMe",
+                Mode = RuleMode.Block,
+                IsEnabled = true
+            },
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\DirectMe.exe",
+                DisplayName = "DirectMe",
+                Mode = RuleMode.Direct,
+                IsEnabled = true
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var dns = doc.RootElement.GetProperty("dns");
+        Assert.Equal("local-dns", dns.GetProperty("final").GetString());
+
+        var dnsRules = dns.GetProperty("rules");
+        var blockDnsRule = dnsRules.EnumerateArray().Single(rule =>
             rule.TryGetProperty("process_path", out var processPaths) &&
             processPaths[0].GetString() == @"C:\Apps\BlockMe.exe");
+        Assert.Equal("reject", blockDnsRule.GetProperty("action").GetString());
+        Assert.False(blockDnsRule.TryGetProperty("server", out _));
+        Assert.DoesNotContain(dnsRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\DirectMe.exe");
     }
 
     [Fact]

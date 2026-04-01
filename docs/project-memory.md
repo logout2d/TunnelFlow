@@ -338,6 +338,42 @@
     - failed: 0
     - skipped: 0
 
+## TUN-mode DNS hardening for Block rules
+- Confirmed policy gap:
+  - TUN-mode `Block` apps were rejected at the route layer, but they still had no explicit DNS hardening
+  - `Proxy` DNS behavior and default `Direct` DNS behavior were already correct and did not need broader changes
+- Narrow hardening applied:
+  - in TUN mode, `SingBoxConfigBuilder` now emits explicit DNS rules for enabled `Block` apps:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "reject"`
+  - existing behavior remains unchanged for:
+    - `Proxy` apps:
+      - `process_path -> remote-dns`
+    - `Direct` apps:
+      - no extra DNS rule
+      - default `local-dns`
+  - legacy mode remains unchanged
+- Exact files changed:
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- DNS behavior summary after this step:
+  - `Proxy`:
+    - explicit DNS rule to `remote-dns`
+  - `Direct`:
+    - no explicit DNS rule
+    - falls through to `local-dns`
+  - `Block`:
+    - explicit DNS reject rule
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
+    - passed: 22
+    - failed: 0
+    - skipped: 0
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

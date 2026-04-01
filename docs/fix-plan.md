@@ -118,6 +118,7 @@ Progress:
   - app path
   - rule mode
   - mapped sing-box action/outbound
+- TUN-mode DNS hardening now includes explicit DNS reject rules for `Block` apps
 - full end-to-end runtime validation is still pending
 
 ## Step 18

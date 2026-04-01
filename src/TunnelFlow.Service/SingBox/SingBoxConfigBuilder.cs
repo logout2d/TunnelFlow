@@ -16,9 +16,6 @@ public class SingBoxConfigBuilder
     public string Build(VlessProfile profile, SingBoxConfig config)
     {
         var tunRules = GetEnabledTunRules(config);
-        var proxyRules = tunRules
-            .Where(rule => rule.Mode == RuleMode.Proxy)
-            .ToArray();
         var logNode = new JsonObject { ["level"] = "info" };
         if (!string.IsNullOrEmpty(config.LogOutputPath))
             logNode["output"] = config.LogOutputPath;
@@ -26,7 +23,7 @@ public class SingBoxConfigBuilder
         var root = new JsonObject
         {
             ["log"] = logNode,
-            ["dns"] = BuildDns(config, proxyRules),
+            ["dns"] = BuildDns(config, tunRules),
             ["inbounds"] = BuildInbounds(config),
             ["outbounds"] = new JsonArray
             {
@@ -70,7 +67,7 @@ public class SingBoxConfigBuilder
         };
     }
 
-    private static JsonObject BuildDns(SingBoxConfig config, IReadOnlyList<AppRule> proxyRules)
+    private static JsonObject BuildDns(SingBoxConfig config, IReadOnlyList<AppRule> tunRules)
     {
         var dns = new JsonObject
         {
@@ -92,19 +89,19 @@ public class SingBoxConfigBuilder
             ["final"] = config.UseTunMode ? "local-dns" : "remote-dns"
         };
 
-        if (!config.UseTunMode || proxyRules.Count == 0)
+        if (!config.UseTunMode)
             return dns;
 
         var rules = new JsonArray();
-        foreach (var rule in proxyRules)
+        foreach (var rule in tunRules)
         {
-            rules.Add(new JsonObject
-            {
-                ["process_path"] = new JsonArray(rule.ExePath),
-                ["action"] = "route",
-                ["server"] = "remote-dns"
-            });
+            var dnsRule = BuildTunDnsRule(rule);
+            if (dnsRule is not null)
+                rules.Add(dnsRule);
         }
+
+        if (rules.Count == 0)
+            return dns;
 
         dns["rules"] = rules;
         return dns;
@@ -176,6 +173,27 @@ public class SingBoxConfigBuilder
                 ["action"] = "route",
                 ["outbound"] = "direct"
             }
+        };
+    }
+
+    private static JsonObject? BuildTunDnsRule(AppRule rule)
+    {
+        var processPath = new JsonArray(rule.ExePath);
+
+        return rule.Mode switch
+        {
+            RuleMode.Proxy => new JsonObject
+            {
+                ["process_path"] = processPath,
+                ["action"] = "route",
+                ["server"] = "remote-dns"
+            },
+            RuleMode.Block => new JsonObject
+            {
+                ["process_path"] = processPath,
+                ["action"] = "reject"
+            },
+            _ => null
         };
     }
 
