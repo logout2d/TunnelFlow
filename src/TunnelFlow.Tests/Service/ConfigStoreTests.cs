@@ -29,6 +29,7 @@ public class ConfigStoreTests : IDisposable
         {
             SocksPort = 9090,
             StartCaptureOnServiceStart = true,
+            UseTunMode = true,
             UseWfpTcpRedirect = true,
             ActiveProfileId = Guid.NewGuid(),
             Rules =
@@ -64,6 +65,7 @@ public class ConfigStoreTests : IDisposable
 
         Assert.Equal(config.SocksPort, loaded.SocksPort);
         Assert.Equal(config.StartCaptureOnServiceStart, loaded.StartCaptureOnServiceStart);
+        Assert.Equal(config.UseTunMode, loaded.UseTunMode);
         Assert.Equal(config.UseWfpTcpRedirect, loaded.UseWfpTcpRedirect);
         Assert.Equal(config.ActiveProfileId, loaded.ActiveProfileId);
         Assert.Single(loaded.Rules);
@@ -119,6 +121,7 @@ public class ConfigStoreTests : IDisposable
         Assert.Null(config.ActiveProfileId);
         Assert.Equal(2080, config.SocksPort);
         Assert.False(config.StartCaptureOnServiceStart);
+        Assert.False(config.UseTunMode);
         Assert.False(config.UseWfpTcpRedirect);
     }
 

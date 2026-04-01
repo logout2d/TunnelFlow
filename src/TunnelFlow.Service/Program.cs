@@ -10,6 +10,7 @@ using TunnelFlow.Service;
 using TunnelFlow.Service.Configuration;
 using TunnelFlow.Service.Ipc;
 using TunnelFlow.Service.SingBox;
+using TunnelFlow.Service.Tun;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -28,6 +29,7 @@ builder.Services.AddSingleton<WfpNativeSession>();
 builder.Services.AddSingleton<NoOpTcpRedirectProvider>();
 builder.Services.AddSingleton<WfpTcpRedirectProvider>();
 builder.Services.AddSingleton<ITcpRedirectProvider, FeatureFlagTcpRedirectProvider>();
+builder.Services.AddSingleton<ITunOrchestrator, NoOpTunOrchestrator>();
 builder.Services.AddSingleton<IProcessResolver, WindowsProcessResolver>();
 builder.Services.AddSingleton<ISessionRegistry, InMemorySessionRegistry>();
 builder.Services.AddSingleton<IPolicyEngine>(sp =>

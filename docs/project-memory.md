@@ -1,5 +1,34 @@
 # TunnelFlow project memory
 
+## Active Architecture Docs
+- Current primary design reference:
+  - `docs/tunnelflow-wintun-singbox-tun-design.md`
+- Historical / diagnostic R&D reference:
+  - `docs/wfp-tcp-redirect-poc-plan.md`
+
+## TUN pivot Phase 0.5 service skeleton
+- Implemented in this step:
+  - persisted `UseTunMode` flag in service config storage
+  - added a no-op service-side TUN orchestration abstraction and DI registration
+  - intentionally did not change runtime selection or sing-box config generation yet
+- Exact files changed:
+  - `src/TunnelFlow.Service/Configuration/TunnelFlowConfig.cs`
+  - `src/TunnelFlow.Service/Configuration/ConfigStore.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/Tun/ITunOrchestrator.cs`
+  - `src/TunnelFlow.Service/Tun/TunOrchestrationConfig.cs`
+  - `src/TunnelFlow.Service/Tun/NoOpTunOrchestrator.cs`
+  - `src/TunnelFlow.Tests/Service/ConfigStoreTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Current effect:
+  - config persistence can now express the future TUN mode
+  - the service container now has a dedicated seam for future Wintun/TUN lifecycle work
+  - current runtime behavior remains unchanged because the new orchestrator is a stub and is not yet selecting the TUN path
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests" --logger "console;verbosity=minimal"`
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
@@ -10,6 +39,19 @@
 ## Goal
 Bring TunnelFlow to a stable working state for selective per-application transparent proxying on Windows.
 
+## Architectural pivot
+- The packet-level TCP redirect path and the WFP-driver redirect exploration are no longer the main delivery architecture.
+- The new primary path is:
+  - Wintun
+  - sing-box TUN inbound
+  - process-based routing and DNS rules on Windows
+- The previous packet-level / WFP work remains useful as:
+  - diagnostics history
+  - architecture validation of what did not work as the main product path
+  - possible future experimental/reference material
+- The active implementation direction is now defined in:
+  - `docs/tunnelflow-wintun-singbox-tun-design.md`
+
 ## Current user-reported symptom
 - Proxy chain starts and reaches the stage of application proxying.
 - In the target browser ("froorp"), Google opens, but most other sites do not.
@@ -17,6 +59,13 @@ Bring TunnelFlow to a stable working state for selective per-application transpa
 ## Current architectural understanding
 Intended traffic path:
 packet capture -> local relay -> SOCKS5 CONNECT -> sing-box -> remote VLESS server
+
+Updated primary architecture direction:
+- TunnelFlow Service controls sing-box in TUN mode on top of Wintun
+- sing-box applies process-based route and DNS rules for selected applications
+- selected apps are routed into the tunnel path
+- non-selected apps remain direct
+- the old packet capture / local relay path is no longer the mainline architecture
 
 Important components:
 - TunnelFlow.Capture:
@@ -27,6 +76,21 @@ Important components:
   WPF client for status/config/rules/sessions/logs
 - TunnelFlow.Core:
   shared models/interfaces/contracts
+
+Service / UI split remains unchanged:
+- Service owns elevated/system operations:
+  - sing-box lifecycle
+  - Wintun / TUN lifecycle
+  - route and DNS generation
+  - system networking changes
+  - config persistence
+  - diagnostics/logging
+  - IPC server
+- UI remains user-mode:
+  - profile/rule editing
+  - status/log viewing
+  - start/stop requests
+  - communication with the service via IPC
 
 ## Confirmed code observations from analysis
 1. Socks5Connector currently does not handle SOCKS5 reply ATYP=0x03 (domain) in connect response parsing.
@@ -58,6 +122,20 @@ Important components:
 ## Working hypothesis
 Most likely immediate browsing failure is caused by losing the destination hostname and falling back to IP-based connection for sites that require proper SNI/hostname-based routing.
 Google may still work in some fallback scenarios, while many other sites fail.
+
+## New main-path risks
+- Routing loops:
+  - service/sing-box/self traffic must not route back into the tunnel
+  - local management endpoints and control traffic need explicit exclusion
+- DNS leaks / `strict_route` behavior:
+  - route correctness alone is not enough; DNS handling must be aligned with app-selection behavior
+  - strict routing on Windows may create connectivity surprises if local/private exceptions are not handled carefully
+- Service / elevation lifecycle:
+  - the service remains the privileged owner of system networking actions
+  - start/stop/restart behavior for sing-box, Wintun, and related routes must be robust and reversible
+- Version pinning:
+  - sing-box and Wintun versions should be pinned during early rollout
+  - unexpected upstream behavior changes are now a primary product risk
 
 ## Diagnostic logging patch
 - Runtime evidence now points to the failure occurring before traffic reaches LocalRelay, because sing-box, LocalRelay, and WinpkFilter start successfully but LocalRelay stats remain:
@@ -313,6 +391,14 @@ Google may still work in some fallback scenarios, while many other sites fail.
   - WFP ALE connect redirection requires Windows-native integration work and likely a new interop layer/driver component
   - original-destination metadata must be mapped reliably from redirected connect to accepted relay socket
   - rollback path should preserve current diagnostics so TCP redirect behavior remains observable during migration
+
+## WFP exploration status
+- The WFP redirect effort should now be treated as:
+  - diagnostic and R&D work
+  - useful history for why the packet-level/local-relay main path was abandoned
+  - not the primary delivery path going forward
+- The current main implementation direction is the TUN design documented in:
+  - `docs/tunnelflow-wintun-singbox-tun-design.md`
 
 ## WFP Phase 0 skeleton
 - Implemented in this phase:

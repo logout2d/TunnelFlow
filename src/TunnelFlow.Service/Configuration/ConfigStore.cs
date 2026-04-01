@@ -43,6 +43,7 @@ public class ConfigStore
                 ActiveProfileId = persisted.ActiveProfileId,
                 SocksPort = persisted.SocksPort,
                 StartCaptureOnServiceStart = persisted.StartCaptureOnServiceStart,
+                UseTunMode = persisted.UseTunMode,
                 UseWfpTcpRedirect = persisted.UseWfpTcpRedirect
             };
         }
@@ -64,6 +65,7 @@ public class ConfigStore
             ActiveProfileId = config.ActiveProfileId,
             SocksPort = config.SocksPort,
             StartCaptureOnServiceStart = config.StartCaptureOnServiceStart,
+            UseTunMode = config.UseTunMode,
             UseWfpTcpRedirect = config.UseWfpTcpRedirect
         };
 
@@ -135,6 +137,9 @@ public class ConfigStore
 
         [JsonPropertyName("startCaptureOnServiceStart")]
         public bool StartCaptureOnServiceStart { get; set; }
+
+        [JsonPropertyName("useTunMode")]
+        public bool UseTunMode { get; set; }
 
         [JsonPropertyName("useWfpTcpRedirect")]
         public bool UseWfpTcpRedirect { get; set; }

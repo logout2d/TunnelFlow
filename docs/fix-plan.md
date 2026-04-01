@@ -3,6 +3,12 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Active design reference
+- Primary implementation direction:
+  - `docs/tunnelflow-wintun-singbox-tun-design.md`
+- Historical diagnostic/R&D reference:
+  - `docs/wfp-tcp-redirect-poc-plan.md`
+
 ## Step 1
 Add repository instructions and project memory for Codex.
 Status: in progress
@@ -44,48 +50,67 @@ Phase 2 provider skeleton: add the WFP redirect provider lifecycle/startup path 
 Status: completed
 
 ## Step 11
-Phase 3 proof of concept: add Windows-native connection-level TCP redirect compatible with LocalRelay and prove accepted connections plus original-destination lookup.
-Status: in progress
-Current narrow milestone:
-- retire the helper channel as an expansion path and keep it only as temporary test scaffolding
-- add the first real native `ALE_CONNECT_REDIRECT_V4` slice for IPv4 TCP only
-- target one test app-id / executable only
-- produce one real redirect event from an actual outbound app `connect()`
-- deliver that event into `WfpTcpRedirectProvider`
-- then extend that slice into the first true redirected accept at `LocalRelay`
-Completed sub-step:
-- add managed native-contract scaffolding:
-  - `WfpRedirectEvent`
-  - `WfpNativeInterop`
-  - `WfpNativeSession`
-  - provider ingestion of session events into the metadata store
-Completed sub-step:
-- add the first real native session/control channel:
-  - tiny native helper process
-  - real process/stdin/stdout boundary
-  - `WfpNativeSession` receives a real event from that native channel
-  - `WfpTcpRedirectProvider` ingests it into the metadata store
-Next required sub-step:
-- add the first real kernel/user-mode WFP boundary:
-  - new `TunnelFlow.WfpRedirectDriver` native project
-  - control device + shared event struct + IOCTL contract
-  - minimal `ALE_CONNECT_REDIRECT_V4` registration for IPv4/TCP
-  - one real outbound app `connect()` produces one real redirect event
-Progress update:
-- managed side can now supply the first single-process/single-relay device config through env-backed defaults without broader config/UI changes
-- native driver scaffold now rejects unconfigured test-process / relay settings and no longer matches all processes by default
-- native-driver build is still blocked locally until a WDK toolchain with `WindowsKernelModeDriver10.0.props` is available
-Follow-up sub-step after that:
-- add the minimal redirect action needed so that same real native path reaches the first true `LocalRelay` accepted connection using `source=redirect-store`
+Close out the WFP redirect exploration as a diagnostic/R&D path rather than the main delivery architecture.
+Status: completed
+Outcome:
+- packet-level TCP redirect to LocalRelay is not a viable primary product path
+- WFP redirect exploration produced useful diagnostics, scaffolding, and architecture knowledge
+- that path is now retained only as reference / experimental material, not as the main plan
 
 ## Step 12
-Phase 4 integration: route TCP proxy decisions through the new redirect provider while preserving PolicyEngine, CaptureEngine orchestration, LocalRelay, ProtocolSniffer, and SOCKS flow.
-Status: pending
+Phase 0 of the TUN pivot: align docs/plans and declare Wintun + sing-box TUN as the primary direction.
+Status: completed
 
 ## Step 13
-Phase 5 cleanup: remove obsolete TCP packet rewrite/NAT bridging logic from WinpkFilterPacketDriver once connection-level redirect is stable.
-Status: pending
+Phase 0.5 of the TUN pivot: add persisted TUN-mode scaffolding and a no-op service-side TUN orchestration seam.
+Status: completed
+Scope:
+- add a mode switch or equivalent persisted setting for the TUN path
+- add a no-op service-side TUN orchestration abstraction and DI wiring
+- keep runtime behavior unchanged while the TUN path remains a stub
 
 ## Step 14
-Investigate/patch IPv6 capture path if still required after earlier fixes.
+Phase 1 of the TUN pivot: add sing-box config generation support for TUN mode.
 Status: pending
+Scope:
+- add sing-box config-builder support for TUN inbound skeleton
+- keep old behavior unchanged unless the new mode is enabled
+
+## Step 15
+Phase 2 of the TUN pivot: wire service-controlled TUN lifecycle selection without full runtime cutover.
+Status: pending
+Scope:
+- service chooses mode cleanly
+- logs selected mode and TUN prerequisites
+- safe fallback when TUN mode is disabled or prerequisites are missing
+
+## Step 16
+Phase 3 of the TUN pivot: generate the first minimal per-app process-based route and DNS rules.
+Status: pending
+Scope:
+- one selected app routed to proxy path
+- non-selected apps remain direct
+- explicit self-exclusion / loop-prevention rules
+
+## Step 17
+Phase 4 of the TUN pivot: first real runtime validation with one selected app on Wintun + sing-box TUN.
+Status: pending
+Scope:
+- validate selected-app proxying
+- validate non-selected direct traffic
+- validate service/UI lifecycle and observability
+
+## Step 18
+Phase 5 of the TUN pivot: DNS hardening, loop prevention refinement, and compatibility tuning.
+Status: pending
+Scope:
+- tighten DNS rule behavior
+- validate `strict_route` behavior
+- refine local/LAN/private bypass handling
+
+## Step 19
+Phase 6 of the TUN pivot: de-emphasize legacy transparent-relay / WFP paths after TUN proves stable.
+Status: pending
+Scope:
+- mark legacy paths clearly
+- remove or reduce obsolete mainline assumptions
