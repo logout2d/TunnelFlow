@@ -26,6 +26,7 @@ public sealed class OrchestratorService : BackgroundService
 
     private TunnelFlowConfig _config = new();
     private bool _captureRunning;
+    private bool _legacyCaptureActive;
     private bool _tunModeActive;
     private int _singBoxRestartAttempts;
     private readonly SemaphoreSlim _captureLock = new(1, 1);
@@ -217,6 +218,18 @@ public sealed class OrchestratorService : BackgroundService
                 }
             }
 
+            var runtimePlan = BuildRuntimePlan(tunModeSelection.SelectedMode);
+            _logger.LogInformation(
+                "Tunnel runtime plan selectedMode={SelectedMode} legacyCaptureEnabled={LegacyCaptureEnabled} localRelayEnabled={LocalRelayEnabled} winpkFilterEnabled={WinpkFilterEnabled}",
+                runtimePlan.SelectedMode,
+                runtimePlan.LegacyCaptureEnabled,
+                runtimePlan.LocalRelayEnabled,
+                runtimePlan.WinpkFilterEnabled);
+            _pipeServer.PushLogLine(
+                "service",
+                "Info",
+                $"Runtime plan: selectedMode={runtimePlan.SelectedMode}, legacyCaptureEnabled={runtimePlan.LegacyCaptureEnabled}, localRelayEnabled={runtimePlan.LocalRelayEnabled}, winpkFilterEnabled={runtimePlan.WinpkFilterEnabled}");
+
             var singBoxConfig = new SingBoxConfig
             {
                 SocksPort = config.SocksPort,
@@ -247,16 +260,20 @@ public sealed class OrchestratorService : BackgroundService
                 ExcludedDestinations = serverAddresses.ToList()
             };
 
-            var redirectConfig = new WfpRedirectConfig
+            _legacyCaptureActive = runtimePlan.LegacyCaptureEnabled;
+            if (_legacyCaptureActive)
             {
-                UseWfpTcpRedirect = config.UseWfpTcpRedirect
-            };
-            _logger.LogInformation(
-                "TCP redirect feature state useWfpTcpRedirect={UseWfpTcpRedirect}",
-                redirectConfig.UseWfpTcpRedirect);
-            await _tcpRedirectProvider.StartAsync(redirectConfig, _stoppingToken);
+                var redirectConfig = new WfpRedirectConfig
+                {
+                    UseWfpTcpRedirect = config.UseWfpTcpRedirect
+                };
+                _logger.LogInformation(
+                    "TCP redirect feature state useWfpTcpRedirect={UseWfpTcpRedirect}",
+                    redirectConfig.UseWfpTcpRedirect);
+                await _tcpRedirectProvider.StartAsync(redirectConfig, _stoppingToken);
 
-            await _captureEngine.StartAsync(captureConfig, _stoppingToken);
+                await _captureEngine.StartAsync(captureConfig, _stoppingToken);
+            }
 
             _captureRunning = true;
             _singBoxRestartAttempts = 0;
@@ -275,6 +292,7 @@ public sealed class OrchestratorService : BackgroundService
             }
             catch { }
             try { await _tcpRedirectProvider.StopAsync(_stoppingToken); } catch { }
+            _legacyCaptureActive = false;
             _logger.LogError(ex, "StartCaptureAsync failed");
             _pipeServer.PushLogLine("service", "Error",
                 $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
@@ -295,8 +313,11 @@ public sealed class OrchestratorService : BackgroundService
                 return;
 
             _pipeServer.PushLogLine("service", "Info", "Stopping tunnel...");
-            await _captureEngine.StopAsync(_stoppingToken);
-            await _tcpRedirectProvider.StopAsync(_stoppingToken);
+            if (_legacyCaptureActive)
+            {
+                await _captureEngine.StopAsync(_stoppingToken);
+                await _tcpRedirectProvider.StopAsync(_stoppingToken);
+            }
             if (_tunModeActive)
             {
                 await _tunOrchestrator.StopAsync(_stoppingToken);
@@ -305,6 +326,7 @@ public sealed class OrchestratorService : BackgroundService
             await _singBoxManager.StopAsync(_stoppingToken);
 
             _captureRunning = false;
+            _legacyCaptureActive = false;
             _pipeServer.PushLogLine("service", "Info", "Tunnel stopped.");
             PushCurrentStatus();
         }
@@ -437,4 +459,23 @@ public sealed class OrchestratorService : BackgroundService
         // In deployed/installed scenarios the binary may sit next to the service exe
         return Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
     }
+
+    internal static TunnelRuntimePlan BuildRuntimePlan(TunnelMode selectedMode) =>
+        selectedMode == TunnelMode.Tun
+            ? new TunnelRuntimePlan(
+                selectedMode,
+                LegacyCaptureEnabled: false,
+                LocalRelayEnabled: false,
+                WinpkFilterEnabled: false)
+            : new TunnelRuntimePlan(
+                selectedMode,
+                LegacyCaptureEnabled: true,
+                LocalRelayEnabled: true,
+                WinpkFilterEnabled: true);
 }
+
+internal readonly record struct TunnelRuntimePlan(
+    TunnelMode SelectedMode,
+    bool LegacyCaptureEnabled,
+    bool LocalRelayEnabled,
+    bool WinpkFilterEnabled);

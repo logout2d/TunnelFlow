@@ -213,6 +213,51 @@
     - failed: 0
     - skipped: 0
 
+## TUN-mode service lifecycle split fix
+- Confirmed runtime blocker:
+  - even after the service selected TUN mode, activated Wintun successfully, and generated a correct TUN-mode sing-box config, the service still continued into the legacy transparent-proxy startup path
+  - that meant `CaptureEngine`, WinpkFilter-backed redirect behavior, and `LocalRelay` startup were still mixed into the same runtime, which polluted logs and contradicted the new TUN architecture
+- Narrow fix applied:
+  - `OrchestratorService` now builds a runtime plan from the selected mode:
+    - legacy mode:
+      - `legacyCaptureEnabled=true`
+      - `localRelayEnabled=true`
+      - `winpkFilterEnabled=true`
+    - TUN mode:
+      - `legacyCaptureEnabled=false`
+      - `localRelayEnabled=false`
+      - `winpkFilterEnabled=false`
+  - in TUN mode the service now starts only:
+    - Wintun orchestration
+    - sing-box with the TUN config
+  - in TUN mode the service no longer starts:
+    - `CaptureEngine`
+    - `LocalRelay`
+    - legacy transparent redirect behavior
+  - `SingBoxManager` now truncates/recreates the configured sing-box log output file before each start so every run has clean evidence
+- Exact files changed:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxManager.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxManagerTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Current effect:
+  - legacy runtime behavior remains unchanged
+  - TUN mode now follows the intended primary architecture without starting the old capture/relay path in parallel
+  - sing-box log output is reset on each start, which makes runtime evidence easier to interpret
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+    - passed: 2
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxManagerTests" --logger "console;verbosity=minimal"`
+    - passed: 5
+    - failed: 0
+    - skipped: 0
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

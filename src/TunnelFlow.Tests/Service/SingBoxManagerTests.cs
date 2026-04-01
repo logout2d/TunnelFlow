@@ -53,4 +53,25 @@ public class SingBoxManagerTests
         Assert.True(ready.Ready);
         Assert.Equal("process-stable-during-startup-window", ready.Reason);
     }
+
+    [Fact]
+    public async Task EnsureCleanLogOutputFileAsync_TruncatesExistingLogFile()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var logPath = Path.Combine(tempDir, "singbox.log");
+            await File.WriteAllTextAsync(logPath, "old-log-content");
+
+            await SingBoxManager.EnsureCleanLogOutputFileAsync(logPath, CancellationToken.None);
+
+            var content = await File.ReadAllTextAsync(logPath);
+            Assert.Equal(string.Empty, content);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
 }

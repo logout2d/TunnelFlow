@@ -49,6 +49,7 @@ public sealed class SingBoxManager : ISingBoxManager
             Directory.CreateDirectory(configDir);
 
         await File.WriteAllTextAsync(config.ConfigOutputPath, configJson, ct);
+        await EnsureCleanLogOutputFileAsync(config.LogOutputPath, ct);
 
         _process = new Process
         {
@@ -281,6 +282,18 @@ public sealed class SingBoxManager : ISingBoxManager
         }
 
         return false;
+    }
+
+    internal static async Task EnsureCleanLogOutputFileAsync(string? logOutputPath, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(logOutputPath))
+            return;
+
+        var logDir = Path.GetDirectoryName(logOutputPath);
+        if (!string.IsNullOrWhiteSpace(logDir))
+            Directory.CreateDirectory(logDir);
+
+        await File.WriteAllTextAsync(logOutputPath, string.Empty, ct);
     }
 
     internal static SingBoxReadinessStrategy SelectReadinessStrategy(SingBoxConfig config) =>

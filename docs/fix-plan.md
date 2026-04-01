@@ -106,6 +106,10 @@ Progress:
 - sing-box startup readiness is now mode-aware:
   - legacy mode still uses SOCKS port probing
   - TUN mode now uses short process-survival observation instead of invalid SOCKS readiness checks
+- service lifecycle is now mode-aware:
+  - legacy mode still starts CaptureEngine / LocalRelay / WinpkFilter-backed behavior
+  - TUN mode now skips the legacy capture path entirely and only runs Wintun + sing-box TUN
+- sing-box log output is now recreated/truncated before each start for clean runtime evidence
 - full end-to-end runtime validation is still pending
 
 ## Step 18
