@@ -10,6 +10,11 @@ namespace TunnelFlow.Capture.TcpRedirect.Interop;
 
 public sealed class WfpNativeInterop
 {
+    internal const string TestProcessPathEnvVar = "TUNNELFLOW_WFP_TEST_PROCESS_PATH";
+    internal const string RelayAddressEnvVar = "TUNNELFLOW_WFP_RELAY_ADDRESS";
+    internal const string RelayPortEnvVar = "TUNNELFLOW_WFP_RELAY_PORT";
+    internal const string DetailedLoggingEnvVar = "TUNNELFLOW_WFP_DETAILED_LOGGING";
+
     private readonly string? _helperPath;
 
     public WfpNativeInterop(string? helperPath = null)
@@ -21,11 +26,12 @@ public sealed class WfpNativeInterop
         WfpRedirectConfig config,
         CancellationToken ct = default)
     {
-        string devicePath = ResolveDevicePath(config);
+        WfpRedirectConfig effectiveConfig = ApplyEnvironmentDefaults(config);
+        string devicePath = ResolveDevicePath(effectiveConfig);
         SafeFileHandle? deviceHandle = TryOpenDevice(devicePath);
         if (deviceHandle is not null)
         {
-            SendConfigureRequest(deviceHandle, config);
+            SendConfigureRequest(deviceHandle, effectiveConfig);
             return Task.FromResult(WfpNativeSessionHandle.CreateDevice(deviceHandle, devicePath));
         }
 
@@ -196,6 +202,58 @@ public sealed class WfpNativeInterop
             return envPath;
 
         return WfpNativeContract.DefaultDevicePath;
+    }
+
+    internal static WfpRedirectConfig ApplyEnvironmentDefaults(WfpRedirectConfig config)
+    {
+        string? testProcessPath = string.IsNullOrWhiteSpace(config.TestProcessPath)
+            ? Environment.GetEnvironmentVariable(TestProcessPathEnvVar)
+            : config.TestProcessPath;
+
+        var relayEndpoint = config.RelayEndpoint;
+        if (relayEndpoint is null &&
+            TryParseIpv4Endpoint(
+                Environment.GetEnvironmentVariable(RelayAddressEnvVar),
+                Environment.GetEnvironmentVariable(RelayPortEnvVar),
+                out var parsedRelay))
+        {
+            relayEndpoint = parsedRelay;
+        }
+
+        bool enableDetailedLogging = config.EnableDetailedLogging;
+        if (!enableDetailedLogging &&
+            bool.TryParse(Environment.GetEnvironmentVariable(DetailedLoggingEnvVar), out var envDetailedLogging))
+        {
+            enableDetailedLogging = envDetailedLogging;
+        }
+
+        return config with
+        {
+            TestProcessPath = testProcessPath,
+            RelayEndpoint = relayEndpoint,
+            EnableDetailedLogging = enableDetailedLogging
+        };
+    }
+
+    internal static bool TryParseIpv4Endpoint(
+        string? addressText,
+        string? portText,
+        out IPEndPoint? endpoint)
+    {
+        endpoint = null;
+
+        if (string.IsNullOrWhiteSpace(addressText) ||
+            string.IsNullOrWhiteSpace(portText) ||
+            !IPAddress.TryParse(addressText, out var address) ||
+            address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork ||
+            !int.TryParse(portText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var port) ||
+            port is <= 0 or > 65535)
+        {
+            return false;
+        }
+
+        endpoint = new IPEndPoint(address, port);
+        return true;
     }
 
     private static SafeFileHandle? TryOpenDevice(string devicePath)

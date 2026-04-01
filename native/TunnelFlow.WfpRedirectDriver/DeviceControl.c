@@ -33,6 +33,13 @@ TfWfpApplyConfigureRequest(
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (Request->RelayAddressV4 == 0 ||
+        Request->RelayPort == 0 ||
+        Request->TestProcessPath[0] == L'\0')
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     ExAcquireFastMutex(&g_TfWfpGlobals.ConfigLock);
 
     RtlZeroMemory(&g_TfWfpGlobals.Config, sizeof(g_TfWfpGlobals.Config));

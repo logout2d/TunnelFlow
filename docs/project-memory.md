@@ -711,3 +711,42 @@ Google may still work in some fallback scenarios, while many other sites fail.
   - it preserves the managed provider/session/store work already completed
   - it introduces only the minimum native pieces needed to observe the first real app-driven WFP classify event
   - once a real classify event is flowing into the existing managed metadata path, the remaining gap to the first true redirected accept is narrowed to the redirect action itself, not the surrounding infrastructure
+
+## WFP device-event milestone advancement
+- Implemented in this step:
+  - `WfpNativeInterop` now applies environment defaults for the first real device-driven slice:
+    - `TUNNELFLOW_WFP_TEST_PROCESS_PATH`
+    - `TUNNELFLOW_WFP_RELAY_ADDRESS`
+    - `TUNNELFLOW_WFP_RELAY_PORT`
+    - `TUNNELFLOW_WFP_DETAILED_LOGGING`
+  - this keeps scope narrow and avoids broad config/UI changes while still allowing managed code to send a real single-process/single-relay config through the driver IOCTL path
+  - the native driver scaffold now enforces that the first event-only path is for one configured test process only:
+    - `TF_WFP_IOCTL_CONFIGURE` rejects empty test-process path / empty relay endpoint
+    - classify no longer matches "any process" when no test-process path is configured
+    - the event-only filter now uses `FWP_ACTION_CALLOUT_INSPECTION`
+- Exact files changed in this step:
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/WfpNativeInterop.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpNativeInteropTests.cs`
+  - `native/TunnelFlow.WfpRedirectDriver/DeviceControl.c`
+  - `native/TunnelFlow.WfpRedirectDriver/RedirectCallout.c`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- What is real after this step:
+  - managed code can now prepare a single-process/single-relay device config without any broader application refactor
+  - the driver scaffold has a stricter event-only classify/config contract aligned with the "one matched outbound app connect" milestone
+- What is still not validated:
+  - no real loaded driver/device was exercised yet
+  - no actual outbound app `connect()` has been observed producing an event from the driver
+- Local validation note:
+  - the local machine did not expose WDK driver build props (`WindowsKernelModeDriver10.0.props`), so native-driver build validation was skipped in this step
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpNativeInteropTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpTcpRedirectProviderEventIngestionTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0

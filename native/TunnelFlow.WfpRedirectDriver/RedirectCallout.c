@@ -36,7 +36,7 @@ TfWfpPathMatchesConfig(
 
     if (Config->TestProcessPath[0] == L'\0')
     {
-        return TRUE;
+        return FALSE;
     }
 
     {
@@ -259,7 +259,7 @@ TfWfpRegisterCallout(
     filter.weight.type = FWP_EMPTY;
     filter.numFilterConditions = 1;
     filter.filterCondition = &filterCondition;
-    filter.action.type = FWP_ACTION_CALLOUT_UNKNOWN;
+    filter.action.type = FWP_ACTION_CALLOUT_INSPECTION;
     filter.action.calloutKey = TF_WFP_CALLOUT_GUID;
 
     filterCondition.fieldKey = FWPM_CONDITION_IP_PROTOCOL;

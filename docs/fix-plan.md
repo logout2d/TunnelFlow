@@ -71,6 +71,10 @@ Next required sub-step:
   - control device + shared event struct + IOCTL contract
   - minimal `ALE_CONNECT_REDIRECT_V4` registration for IPv4/TCP
   - one real outbound app `connect()` produces one real redirect event
+Progress update:
+- managed side can now supply the first single-process/single-relay device config through env-backed defaults without broader config/UI changes
+- native driver scaffold now rejects unconfigured test-process / relay settings and no longer matches all processes by default
+- native-driver build is still blocked locally until a WDK toolchain with `WindowsKernelModeDriver10.0.props` is available
 Follow-up sub-step after that:
 - add the minimal redirect action needed so that same real native path reaches the first true `LocalRelay` accepted connection using `source=redirect-store`
 
