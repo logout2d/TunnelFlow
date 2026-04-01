@@ -103,6 +103,9 @@ Progress:
 - first real activation-capable TUN orchestrator slice is now implemented
 - service can now select effective TUN mode when Wintun prerequisites are met
 - minimal valid TUN inbound address has been added so sing-box no longer fails immediately with `missing interface address`
+- sing-box startup readiness is now mode-aware:
+  - legacy mode still uses SOCKS port probing
+  - TUN mode now uses short process-survival observation instead of invalid SOCKS readiness checks
 - full end-to-end runtime validation is still pending
 
 ## Step 18

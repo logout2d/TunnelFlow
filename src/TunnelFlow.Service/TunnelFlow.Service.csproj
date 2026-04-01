@@ -19,5 +19,8 @@
     <ProjectReference Include="..\TunnelFlow.Capture\TunnelFlow.Capture.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TunnelFlow.Tests" />
+  </ItemGroup>
 
 </Project>

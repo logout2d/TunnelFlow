@@ -180,6 +180,39 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests.Build_UseTunModeTrue_" --logger "console;verbosity=minimal"`
 
+## TUN-mode sing-box readiness fix
+- Confirmed runtime blocker:
+  - after TUN mode selection, successful Wintun activation, and successful sing-box process launch, `SingBoxManager` still always waited for the SOCKS inbound port to become responsive
+  - that readiness rule only matches the legacy architecture; in TUN mode the generated sing-box config uses a `tun` inbound and has no SOCKS listener to probe
+- Narrow fix applied:
+  - `SingBoxManager` now selects startup readiness by effective config mode:
+    - legacy mode:
+      - keep the existing SOCKS port readiness probe unchanged
+    - TUN mode:
+      - skip the SOCKS probe
+      - require that the sing-box process stays alive during a short startup observation window before marking it `Running`
+  - added explicit readiness logs for:
+    - startup mode
+    - readiness strategy
+    - readiness success/failure reason
+- Exact files changed:
+  - `src/TunnelFlow.Service/TunnelFlow.Service.csproj`
+  - `src/TunnelFlow.Service/SingBox/SingBoxManager.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxManagerTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Current effect:
+  - legacy mode startup behavior is unchanged
+  - TUN mode no longer waits on an invalid SOCKS readiness condition
+  - if sing-box exits during the TUN startup observation window, readiness fails explicitly instead of incorrectly marking the process as running
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxManagerTests" --logger "console;verbosity=minimal"`
+    - passed: 4
+    - failed: 0
+    - skipped: 0
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

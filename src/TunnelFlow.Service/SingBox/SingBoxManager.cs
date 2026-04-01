@@ -8,6 +8,9 @@ namespace TunnelFlow.Service.SingBox;
 
 public sealed class SingBoxManager : ISingBoxManager
 {
+    internal static readonly TimeSpan TunStartupObservationWindow = TimeSpan.FromSeconds(2);
+    internal static readonly TimeSpan TunStartupPollInterval = TimeSpan.FromMilliseconds(200);
+
     private readonly SingBoxConfigBuilder _configBuilder;
     private readonly ILogger<SingBoxManager> _logger;
 
@@ -70,10 +73,65 @@ public sealed class SingBoxManager : ISingBoxManager
         _process.BeginErrorReadLine();
 
         _logger.LogInformation("sing-box started (pid {Pid})", _process.Id);
+        var readinessStrategy = SelectReadinessStrategy(config);
+        _logger.LogInformation(
+            "sing-box startup readiness mode={Mode} strategy={Strategy}",
+            config.UseTunMode ? "tun" : "legacy",
+            readinessStrategy);
 
-        bool responsive = await WaitForSocksPortAsync(config.SocksPort, ct);
-        if (!responsive)
-            _logger.LogWarning("sing-box SOCKS port {Port} not responsive after 5 s", config.SocksPort);
+        switch (readinessStrategy)
+        {
+            case SingBoxReadinessStrategy.SocksPort:
+            {
+                _logger.LogInformation(
+                    "sing-box readiness strategy=socks-port port={Port}",
+                    config.SocksPort);
+
+                bool responsive = await WaitForSocksPortAsync(config.SocksPort, ct);
+                if (responsive)
+                {
+                    _logger.LogInformation(
+                        "sing-box readiness succeeded strategy=socks-port reason=socks-port-responsive port={Port}",
+                        config.SocksPort);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "sing-box readiness not confirmed strategy=socks-port reason=socks-port-not-responsive port={Port}",
+                        config.SocksPort);
+                }
+
+                break;
+            }
+
+            case SingBoxReadinessStrategy.ProcessObservation:
+            {
+                _logger.LogInformation(
+                    "sing-box readiness strategy=process-observation observationWindowMs={ObservationWindowMs}",
+                    TunStartupObservationWindow.TotalMilliseconds);
+
+                var readiness = await WaitForProcessObservationAsync(
+                    () => _process is null || _process.HasExited,
+                    TunStartupObservationWindow,
+                    TunStartupPollInterval,
+                    ct);
+
+                if (!readiness.Ready)
+                {
+                    _logger.LogError(
+                        "sing-box readiness failed strategy=process-observation reason={Reason} exitCode={ExitCode}",
+                        readiness.Reason,
+                        TryGetExitCode(_process));
+                    throw new InvalidOperationException(
+                        $"sing-box startup readiness failed in TUN mode: {readiness.Reason}");
+                }
+
+                _logger.LogInformation(
+                    "sing-box readiness succeeded strategy=process-observation reason={Reason}",
+                    readiness.Reason);
+                break;
+            }
+        }
 
         SetStatus(SingBoxStatus.Running);
     }
@@ -224,4 +282,62 @@ public sealed class SingBoxManager : ISingBoxManager
 
         return false;
     }
+
+    internal static SingBoxReadinessStrategy SelectReadinessStrategy(SingBoxConfig config) =>
+        config.UseTunMode
+            ? SingBoxReadinessStrategy.ProcessObservation
+            : SingBoxReadinessStrategy.SocksPort;
+
+    internal static async Task<SingBoxReadinessResult> WaitForProcessObservationAsync(
+        Func<bool> hasExited,
+        TimeSpan observationWindow,
+        TimeSpan pollInterval,
+        CancellationToken ct)
+    {
+        if (hasExited())
+            return new SingBoxReadinessResult(false, "process-already-exited");
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(observationWindow);
+
+        while (!cts.Token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(pollInterval, cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                break;
+            }
+
+            if (hasExited())
+                return new SingBoxReadinessResult(false, "process-exited-during-startup-window");
+        }
+
+        return new SingBoxReadinessResult(true, "process-stable-during-startup-window");
+    }
+
+    private static int? TryGetExitCode(Process? process)
+    {
+        if (process is null)
+            return null;
+
+        try
+        {
+            return process.HasExited ? process.ExitCode : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
+
+internal enum SingBoxReadinessStrategy
+{
+    SocksPort,
+    ProcessObservation
+}
+
+internal readonly record struct SingBoxReadinessResult(bool Ready, string Reason);
