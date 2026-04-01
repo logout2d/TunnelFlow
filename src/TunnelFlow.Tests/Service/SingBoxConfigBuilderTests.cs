@@ -155,10 +155,59 @@ public class SingBoxConfigBuilderTests
             rule.GetProperty("outbound").GetString() == "vless-out");
         Assert.DoesNotContain(routeRules.EnumerateArray(), rule =>
             rule.TryGetProperty("process_path", out var processPaths) &&
-            processPaths[0].GetString() == @"C:\Apps\DirectMe.exe");
-        Assert.DoesNotContain(routeRules.EnumerateArray(), rule =>
-            rule.TryGetProperty("process_path", out var processPaths) &&
             processPaths[0].GetString() == @"C:\Apps\Disabled.exe");
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_AddsDirectProcessPathRouteRules()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\DirectMe.exe",
+                DisplayName = "DirectMe",
+                Mode = RuleMode.Direct,
+                IsEnabled = true
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var routeRules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        Assert.Contains(routeRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\DirectMe.exe" &&
+            rule.GetProperty("action").GetString() == "route" &&
+            rule.GetProperty("outbound").GetString() == "direct");
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_AddsBlockProcessPathRejectRules()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\BlockMe.exe",
+                DisplayName = "BlockMe",
+                Mode = RuleMode.Block,
+                IsEnabled = true
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var routeRules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        Assert.Contains(routeRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\BlockMe.exe" &&
+            rule.GetProperty("action").GetString() == "reject" &&
+            !rule.TryGetProperty("outbound", out _));
     }
 
     [Fact]
@@ -172,6 +221,22 @@ public class SingBoxConfigBuilderTests
                 ExePath = @"C:\Apps\ProxyMe.exe",
                 DisplayName = "ProxyMe",
                 Mode = RuleMode.Proxy,
+                IsEnabled = true
+            },
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\DirectMe.exe",
+                DisplayName = "DirectMe",
+                Mode = RuleMode.Direct,
+                IsEnabled = true
+            },
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\BlockMe.exe",
+                DisplayName = "BlockMe",
+                Mode = RuleMode.Block,
                 IsEnabled = true
             }
         };
@@ -188,6 +253,12 @@ public class SingBoxConfigBuilderTests
         Assert.Equal(@"C:\Apps\ProxyMe.exe", dnsRule.GetProperty("process_path")[0].GetString());
         Assert.Equal("route", dnsRule.GetProperty("action").GetString());
         Assert.Equal("remote-dns", dnsRule.GetProperty("server").GetString());
+        Assert.DoesNotContain(dnsRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\DirectMe.exe");
+        Assert.DoesNotContain(dnsRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\BlockMe.exe");
     }
 
     [Fact]

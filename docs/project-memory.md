@@ -258,6 +258,56 @@
     - failed: 0
     - skipped: 0
 
+## TUN-mode policy expansion for Direct and Block rules
+- Confirmed current runtime milestone:
+  - TUN mode starts successfully
+  - the TunnelFlow interface is up
+  - selected Floorp traffic is routed through `outbound/vless[vless-out]`
+  - non-selected browser traffic remains direct
+- Narrow policy expansion applied:
+  - in TUN mode, `SingBoxConfigBuilder` now maps all enabled process-path app rules by mode:
+    - `Proxy`:
+      - route matched apps to `vless-out`
+      - keep corresponding DNS rules to `remote-dns`
+    - `Direct`:
+      - explicitly route matched apps to `direct`
+      - no extra DNS rule added because TUN-mode DNS already defaults to `local-dns`
+    - `Block`:
+      - explicitly reject matched apps with a process-path route rule
+      - no extra DNS rule added in this narrow step
+- Exact files changed:
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Route and DNS rule shape now covered in TUN mode:
+  - `Proxy` route rule:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "route"`
+    - `outbound = "vless-out"`
+  - `Proxy` DNS rule:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "route"`
+    - `server = "remote-dns"`
+  - `Direct` route rule:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "route"`
+    - `outbound = "direct"`
+  - `Block` route rule:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "reject"`
+- Current effect:
+  - legacy mode remains unchanged
+  - the working TUN-mode `Proxy` behavior is preserved
+  - TUN mode can now express explicit per-app `Direct` and `Block` outcomes without widening lifecycle or UI scope
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
+    - passed: 21
+    - failed: 0
+    - skipped: 0
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

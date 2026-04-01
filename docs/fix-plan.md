@@ -110,6 +110,10 @@ Progress:
   - legacy mode still starts CaptureEngine / LocalRelay / WinpkFilter-backed behavior
   - TUN mode now skips the legacy capture path entirely and only runs Wintun + sing-box TUN
 - sing-box log output is now recreated/truncated before each start for clean runtime evidence
+- TUN-mode policy mapping now supports all three app rule modes:
+  - `Proxy` -> explicit route to `vless-out`
+  - `Direct` -> explicit route to `direct`
+  - `Block` -> explicit reject rule
 - full end-to-end runtime validation is still pending
 
 ## Step 18

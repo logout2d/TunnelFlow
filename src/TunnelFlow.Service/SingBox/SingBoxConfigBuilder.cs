@@ -15,7 +15,10 @@ public class SingBoxConfigBuilder
 
     public string Build(VlessProfile profile, SingBoxConfig config)
     {
-        var proxyRules = GetEnabledProxyRules(config);
+        var tunRules = GetEnabledTunRules(config);
+        var proxyRules = tunRules
+            .Where(rule => rule.Mode == RuleMode.Proxy)
+            .ToArray();
         var logNode = new JsonObject { ["level"] = "info" };
         if (!string.IsNullOrEmpty(config.LogOutputPath))
             logNode["output"] = config.LogOutputPath;
@@ -30,7 +33,7 @@ public class SingBoxConfigBuilder
                 BuildVlessOutbound(profile),
                 new JsonObject { ["type"] = "direct", ["tag"] = "direct" }
             },
-            ["route"] = BuildRoute(config, proxyRules)
+            ["route"] = BuildRoute(config, tunRules)
         };
 
         return root.ToJsonString(_writeOptions);
@@ -107,7 +110,7 @@ public class SingBoxConfigBuilder
         return dns;
     }
 
-    private static JsonObject BuildRoute(SingBoxConfig config, IReadOnlyList<AppRule> proxyRules)
+    private static JsonObject BuildRoute(SingBoxConfig config, IReadOnlyList<AppRule> tunRules)
     {
         var rules = new JsonArray
         {
@@ -116,14 +119,9 @@ public class SingBoxConfigBuilder
 
         if (config.UseTunMode)
         {
-            foreach (var rule in proxyRules)
+            foreach (var rule in tunRules)
             {
-                rules.Add(new JsonObject
-                {
-                    ["process_path"] = new JsonArray(rule.ExePath),
-                    ["action"] = "route",
-                    ["outbound"] = "vless-out"
-                });
+                rules.Add(BuildTunRouteRule(rule));
             }
         }
 
@@ -142,13 +140,44 @@ public class SingBoxConfigBuilder
         };
     }
 
-    private static IReadOnlyList<AppRule> GetEnabledProxyRules(SingBoxConfig config) =>
+    private static IReadOnlyList<AppRule> GetEnabledTunRules(SingBoxConfig config) =>
         config.Rules
             .Where(rule =>
                 rule.IsEnabled &&
-                rule.Mode == RuleMode.Proxy &&
                 !string.IsNullOrWhiteSpace(rule.ExePath))
             .ToArray();
+
+    private static JsonObject BuildTunRouteRule(AppRule rule)
+    {
+        var processPath = new JsonArray(rule.ExePath);
+
+        return rule.Mode switch
+        {
+            RuleMode.Proxy => new JsonObject
+            {
+                ["process_path"] = processPath,
+                ["action"] = "route",
+                ["outbound"] = "vless-out"
+            },
+            RuleMode.Direct => new JsonObject
+            {
+                ["process_path"] = processPath,
+                ["action"] = "route",
+                ["outbound"] = "direct"
+            },
+            RuleMode.Block => new JsonObject
+            {
+                ["process_path"] = processPath,
+                ["action"] = "reject"
+            },
+            _ => new JsonObject
+            {
+                ["process_path"] = processPath,
+                ["action"] = "route",
+                ["outbound"] = "direct"
+            }
+        };
+    }
 
     private static JsonObject BuildVlessOutbound(VlessProfile profile)
     {
