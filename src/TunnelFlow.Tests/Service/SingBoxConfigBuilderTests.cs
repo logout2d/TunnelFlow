@@ -25,10 +25,14 @@ public class SingBoxConfigBuilderTests
         Tls = tls
     };
 
-    private static SingBoxConfig MakeConfig(int socksPort = 2080, bool useTunMode = false) => new()
+    private static SingBoxConfig MakeConfig(
+        int socksPort = 2080,
+        bool useTunMode = false,
+        IReadOnlyList<AppRule>? rules = null) => new()
     {
         SocksPort = socksPort,
         UseTunMode = useTunMode,
+        Rules = rules ?? [],
         BinaryPath = "sing-box.exe",
         ConfigOutputPath = "singbox-config.json",
         LogOutputPath = "singbox.log",
@@ -104,6 +108,85 @@ public class SingBoxConfigBuilderTests
         Assert.True(inbound.GetProperty("auto_route").GetBoolean());
         Assert.True(inbound.GetProperty("strict_route").GetBoolean());
         Assert.False(inbound.TryGetProperty("listen_port", out _));
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_AddsProxyProcessPathRouteRules_AndDirectFinal()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\ProxyMe.exe",
+                DisplayName = "ProxyMe",
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            },
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\DirectMe.exe",
+                DisplayName = "DirectMe",
+                Mode = RuleMode.Direct,
+                IsEnabled = true
+            },
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\Disabled.exe",
+                DisplayName = "Disabled",
+                Mode = RuleMode.Proxy,
+                IsEnabled = false
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var route = doc.RootElement.GetProperty("route");
+        Assert.Equal("direct", route.GetProperty("final").GetString());
+
+        var routeRules = route.GetProperty("rules");
+        Assert.Contains(routeRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\ProxyMe.exe" &&
+            rule.GetProperty("outbound").GetString() == "vless-out");
+        Assert.DoesNotContain(routeRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\DirectMe.exe");
+        Assert.DoesNotContain(routeRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_path", out var processPaths) &&
+            processPaths[0].GetString() == @"C:\Apps\Disabled.exe");
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_AddsProxyDnsRules_AndKeepsLocalDnsAsDefault()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Apps\ProxyMe.exe",
+                DisplayName = "ProxyMe",
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var dns = doc.RootElement.GetProperty("dns");
+        Assert.Equal("local-dns", dns.GetProperty("final").GetString());
+
+        var dnsRules = dns.GetProperty("rules");
+        Assert.Single(dnsRules.EnumerateArray());
+        var dnsRule = dnsRules[0];
+        Assert.Equal(@"C:\Apps\ProxyMe.exe", dnsRule.GetProperty("process_path")[0].GetString());
+        Assert.Equal("route", dnsRule.GetProperty("action").GetString());
+        Assert.Equal("remote-dns", dnsRule.GetProperty("server").GetString());
     }
 
     [Fact]

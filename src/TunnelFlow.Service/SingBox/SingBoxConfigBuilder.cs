@@ -15,6 +15,7 @@ public class SingBoxConfigBuilder
 
     public string Build(VlessProfile profile, SingBoxConfig config)
     {
+        var proxyRules = GetEnabledProxyRules(config);
         var logNode = new JsonObject { ["level"] = "info" };
         if (!string.IsNullOrEmpty(config.LogOutputPath))
             logNode["output"] = config.LogOutputPath;
@@ -22,46 +23,14 @@ public class SingBoxConfigBuilder
         var root = new JsonObject
         {
             ["log"] = logNode,
-            ["dns"] = new JsonObject
-            {
-                ["servers"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["tag"] = "remote-dns",
-                        ["type"] = "https",
-                        ["server"] = "1.1.1.1",
-                        ["detour"] = "vless-out"
-                    },
-                    new JsonObject
-                    {
-                        ["tag"] = "local-dns",
-                        ["type"] = "local"
-                    }
-                },
-                ["final"] = "remote-dns"
-            },
+            ["dns"] = BuildDns(config, proxyRules),
             ["inbounds"] = BuildInbounds(config),
             ["outbounds"] = new JsonArray
             {
                 BuildVlessOutbound(profile),
                 new JsonObject { ["type"] = "direct", ["tag"] = "direct" }
             },
-            ["route"] = new JsonObject
-            {
-                ["rules"] = new JsonArray
-                {
-                    new JsonObject { ["action"] = "sniff" },
-                    new JsonObject
-                    {
-                        ["protocol"] = "dns",
-                        ["action"] = "hijack-dns"
-                    }
-                },
-                ["final"] = "vless-out",
-                ["auto_detect_interface"] = true,
-                ["default_domain_resolver"] = "local-dns"
-            }
+            ["route"] = BuildRoute(config, proxyRules)
         };
 
         return root.ToJsonString(_writeOptions);
@@ -96,6 +65,89 @@ public class SingBoxConfigBuilder
             }
         };
     }
+
+    private static JsonObject BuildDns(SingBoxConfig config, IReadOnlyList<AppRule> proxyRules)
+    {
+        var dns = new JsonObject
+        {
+            ["servers"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["tag"] = "remote-dns",
+                    ["type"] = "https",
+                    ["server"] = "1.1.1.1",
+                    ["detour"] = "vless-out"
+                },
+                new JsonObject
+                {
+                    ["tag"] = "local-dns",
+                    ["type"] = "local"
+                }
+            },
+            ["final"] = config.UseTunMode ? "local-dns" : "remote-dns"
+        };
+
+        if (!config.UseTunMode || proxyRules.Count == 0)
+            return dns;
+
+        var rules = new JsonArray();
+        foreach (var rule in proxyRules)
+        {
+            rules.Add(new JsonObject
+            {
+                ["process_path"] = new JsonArray(rule.ExePath),
+                ["action"] = "route",
+                ["server"] = "remote-dns"
+            });
+        }
+
+        dns["rules"] = rules;
+        return dns;
+    }
+
+    private static JsonObject BuildRoute(SingBoxConfig config, IReadOnlyList<AppRule> proxyRules)
+    {
+        var rules = new JsonArray
+        {
+            new JsonObject { ["action"] = "sniff" }
+        };
+
+        if (config.UseTunMode)
+        {
+            foreach (var rule in proxyRules)
+            {
+                rules.Add(new JsonObject
+                {
+                    ["process_path"] = new JsonArray(rule.ExePath),
+                    ["action"] = "route",
+                    ["outbound"] = "vless-out"
+                });
+            }
+        }
+
+        rules.Add(new JsonObject
+        {
+            ["protocol"] = "dns",
+            ["action"] = "hijack-dns"
+        });
+
+        return new JsonObject
+        {
+            ["rules"] = rules,
+            ["final"] = config.UseTunMode ? "direct" : "vless-out",
+            ["auto_detect_interface"] = true,
+            ["default_domain_resolver"] = "local-dns"
+        };
+    }
+
+    private static IReadOnlyList<AppRule> GetEnabledProxyRules(SingBoxConfig config) =>
+        config.Rules
+            .Where(rule =>
+                rule.IsEnabled &&
+                rule.Mode == RuleMode.Proxy &&
+                !string.IsNullOrWhiteSpace(rule.ExePath))
+            .ToArray();
 
     private static JsonObject BuildVlessOutbound(VlessProfile profile)
     {

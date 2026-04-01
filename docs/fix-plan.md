@@ -86,7 +86,7 @@ Scope:
 
 ## Step 16
 Phase 3 of the TUN pivot: generate the first minimal per-app process-based route and DNS rules.
-Status: pending
+Status: completed
 Scope:
 - one selected app routed to proxy path
 - non-selected apps remain direct

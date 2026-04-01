@@ -10,6 +10,8 @@ public record SingBoxConfig
 
     public bool UseTunMode { get; init; }
 
+    public IReadOnlyList<AppRule> Rules { get; init; } = [];
+
     public string BinaryPath { get; init; } = string.Empty;
 
     public string ConfigOutputPath { get; init; } = string.Empty;

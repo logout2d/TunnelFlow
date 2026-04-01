@@ -87,6 +87,39 @@
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.TunModeSelectorTests" --logger "console;verbosity=minimal"`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
 
+## TUN pivot Phase 3 minimal process-based route and DNS rules
+- Implemented in this step:
+  - `SingBoxConfig` now carries app rules into builder generation
+  - when `UseTunMode=true`, `SingBoxConfigBuilder` now emits:
+    - proxy-app `route.rules` entries keyed by `process_path`
+    - proxy-app `dns.rules` entries keyed by `process_path`
+    - `route.final = "direct"` so non-selected apps remain direct by default
+    - `dns.final = "local-dns"` so non-selected apps keep local DNS by default
+  - legacy mode generation remains unchanged
+- Exact files changed:
+  - `src/TunnelFlow.Core/Models/SingBoxConfig.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Minimal rule shape introduced for effective TUN mode:
+  - route rule:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "route"`
+    - `outbound = "vless-out"`
+  - dns rule:
+    - `process_path = ["C:\\Path\\App.exe"]`
+    - `action = "route"`
+    - `server = "remote-dns"`
+  - only enabled `Proxy` app rules are included in this first slice
+- Current effect:
+  - config snapshots can now express one minimal per-app TUN routing model
+  - current runtime fallback behavior is unchanged because effective TUN mode is still not activated by the no-op orchestrator
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

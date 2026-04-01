@@ -181,6 +181,7 @@ public sealed class OrchestratorService : BackgroundService
             {
                 SocksPort = config.SocksPort,
                 UseTunMode = tunModeSelection.SelectedMode == TunnelMode.Tun,
+                Rules = config.Rules,
                 BinaryPath = singBoxExe,
                 ConfigOutputPath = Path.Combine(DataDir, "singbox_last.json"),
                 LogOutputPath = Path.Combine(logDir, "singbox.log"),
