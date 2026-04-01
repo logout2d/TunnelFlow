@@ -8,6 +8,7 @@ using TunnelFlow.Core.IPC.Responses;
 using TunnelFlow.Core.Models;
 using TunnelFlow.Service.Configuration;
 using TunnelFlow.Service.Ipc;
+using TunnelFlow.Service.Tun;
 
 namespace TunnelFlow.Service;
 
@@ -17,6 +18,7 @@ public sealed class OrchestratorService : BackgroundService
     private readonly ICaptureEngine _captureEngine;
     private readonly IPolicyEngine _policyEngine;
     private readonly ITcpRedirectProvider _tcpRedirectProvider;
+    private readonly ITunOrchestrator _tunOrchestrator;
     private readonly ISessionRegistry _sessionRegistry;
     private readonly ConfigStore _configStore;
     private readonly PipeServer _pipeServer;
@@ -24,6 +26,7 @@ public sealed class OrchestratorService : BackgroundService
 
     private TunnelFlowConfig _config = new();
     private bool _captureRunning;
+    private bool _tunModeActive;
     private int _singBoxRestartAttempts;
     private readonly SemaphoreSlim _captureLock = new(1, 1);
     private CancellationToken _stoppingToken;
@@ -36,6 +39,7 @@ public sealed class OrchestratorService : BackgroundService
         ICaptureEngine captureEngine,
         IPolicyEngine policyEngine,
         ITcpRedirectProvider tcpRedirectProvider,
+        ITunOrchestrator tunOrchestrator,
         ISessionRegistry sessionRegistry,
         ConfigStore configStore,
         PipeServer pipeServer,
@@ -45,6 +49,7 @@ public sealed class OrchestratorService : BackgroundService
         _captureEngine = captureEngine;
         _policyEngine = policyEngine;
         _tcpRedirectProvider = tcpRedirectProvider;
+        _tunOrchestrator = tunOrchestrator;
         _sessionRegistry = sessionRegistry;
         _configStore = configStore;
         _pipeServer = pipeServer;
@@ -133,6 +138,10 @@ public sealed class OrchestratorService : BackgroundService
             Directory.CreateDirectory(DataDir);
 
             var singBoxExe = ResolveSingBoxPath();
+            var tunModeSelection = TunModeSelector.Select(
+                config.UseTunMode,
+                _tunOrchestrator.SupportsActivation,
+                ResolveWintunPath());
 
             if (!File.Exists(singBoxExe))
             {
@@ -143,18 +152,49 @@ public sealed class OrchestratorService : BackgroundService
                 return;
             }
 
+            _logger.LogInformation(
+                "Tunnel mode selection requestedTunMode={RequestedTunMode} selectedMode={SelectedMode} tunPrerequisitesSatisfied={TunPrerequisitesSatisfied} tunActivationSupported={TunActivationSupported} selectionReason={SelectionReason} wintunPath={WintunPath}",
+                tunModeSelection.UseTunModeRequested,
+                tunModeSelection.SelectedMode,
+                tunModeSelection.TunPrerequisitesSatisfied,
+                tunModeSelection.TunActivationSupported,
+                tunModeSelection.SelectionReason,
+                tunModeSelection.WintunPath);
+
+            _pipeServer.PushLogLine(
+                "service",
+                "Info",
+                $"Tunnel mode selection: requestedTun={tunModeSelection.UseTunModeRequested}, selectedMode={tunModeSelection.SelectedMode}, tunPrerequisitesSatisfied={tunModeSelection.TunPrerequisitesSatisfied}");
+
+            if (tunModeSelection.UseTunModeRequested && tunModeSelection.SelectedMode != TunnelMode.Tun)
+            {
+                _pipeServer.PushLogLine(
+                    "service",
+                    "Warning",
+                    $"TUN mode requested but legacy mode remains active: {tunModeSelection.SelectionReason}");
+            }
+
             var logDir = Path.Combine(DataDir, "logs");
             Directory.CreateDirectory(logDir);
 
             var singBoxConfig = new SingBoxConfig
             {
                 SocksPort = config.SocksPort,
+                UseTunMode = tunModeSelection.SelectedMode == TunnelMode.Tun,
                 BinaryPath = singBoxExe,
                 ConfigOutputPath = Path.Combine(DataDir, "singbox_last.json"),
                 LogOutputPath = Path.Combine(logDir, "singbox.log"),
                 RestartDelay = TimeSpan.FromSeconds(3),
                 MaxRestartAttempts = 5
             };
+
+            if (tunModeSelection.SelectedMode == TunnelMode.Tun)
+            {
+                await _tunOrchestrator.StartAsync(
+                    new TunOrchestrationConfig { UseTunMode = true },
+                    _stoppingToken);
+                _tunModeActive = true;
+            }
 
             _pipeServer.PushLogLine("service", "Info", $"Starting sing-box: {singBoxExe}");
             await _singBoxManager.StartAsync(profile, singBoxConfig, _stoppingToken);
@@ -192,6 +232,15 @@ public sealed class OrchestratorService : BackgroundService
         }
         catch (Exception ex)
         {
+            try
+            {
+                if (_tunModeActive)
+                {
+                    await _tunOrchestrator.StopAsync(_stoppingToken);
+                    _tunModeActive = false;
+                }
+            }
+            catch { }
             try { await _tcpRedirectProvider.StopAsync(_stoppingToken); } catch { }
             _logger.LogError(ex, "StartCaptureAsync failed");
             _pipeServer.PushLogLine("service", "Error",
@@ -215,6 +264,11 @@ public sealed class OrchestratorService : BackgroundService
             _pipeServer.PushLogLine("service", "Info", "Stopping tunnel...");
             await _captureEngine.StopAsync(_stoppingToken);
             await _tcpRedirectProvider.StopAsync(_stoppingToken);
+            if (_tunModeActive)
+            {
+                await _tunOrchestrator.StopAsync(_stoppingToken);
+                _tunModeActive = false;
+            }
             await _singBoxManager.StopAsync(_stoppingToken);
 
             _captureRunning = false;
@@ -349,5 +403,20 @@ public sealed class OrchestratorService : BackgroundService
 
         // In deployed/installed scenarios the binary may sit next to the service exe
         return Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
+    }
+
+    private static string ResolveWintunPath()
+    {
+        var repoCandidate = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "third_party", "wintun", "wintun.dll"));
+        if (File.Exists(repoCandidate))
+            return repoCandidate;
+
+        var nextToServiceCandidate = Path.Combine(AppContext.BaseDirectory, "wintun.dll");
+        if (File.Exists(nextToServiceCandidate))
+            return nextToServiceCandidate;
+
+        return repoCandidate;
     }
 }

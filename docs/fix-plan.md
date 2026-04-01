@@ -78,7 +78,7 @@ Scope:
 
 ## Step 15
 Phase 2 of the TUN pivot: wire service-controlled TUN lifecycle selection without full runtime cutover.
-Status: pending
+Status: completed
 Scope:
 - service chooses mode cleanly
 - logs selected mode and TUN prerequisites

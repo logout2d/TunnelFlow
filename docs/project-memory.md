@@ -55,6 +55,38 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
 
+## TUN pivot Phase 2 service mode selection
+- Implemented in this step:
+  - `OrchestratorService` now evaluates an effective runtime mode from:
+    - requested `UseTunMode`
+    - whether a Wintun DLL appears present
+    - whether the active TUN orchestrator supports activation
+  - the effective mode is passed into `SingBoxConfig.UseTunMode`
+  - legacy mode remains the effective fallback when TUN is requested but activation is not yet supported
+- Exact files changed:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/Tun/ITunOrchestrator.cs`
+  - `src/TunnelFlow.Service/Tun/NoOpTunOrchestrator.cs`
+  - `src/TunnelFlow.Service/Tun/TunModeSelection.cs`
+  - `src/TunnelFlow.Tests/Service/TunModeSelectorTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Structured logs added:
+  - requested TUN mode
+  - selected effective mode
+  - whether TUN prerequisites appear satisfied
+  - whether TUN activation is supported yet
+  - selection reason
+  - selected Wintun path candidate
+- Current effect:
+  - legacy runtime behavior stays unchanged
+  - if `UseTunMode=true`, the service now logs why it still remains on legacy mode until a real activating TUN orchestrator exists
+  - no full runtime cutover to Wintun/TUN has been introduced yet
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.TunModeSelectorTests" --logger "console;verbosity=minimal"`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

@@ -8,6 +8,8 @@ public sealed class NoOpTunOrchestrator : ITunOrchestrator
 
     public NoOpTunOrchestrator(ILogger<NoOpTunOrchestrator> logger) => _logger = logger;
 
+    public bool SupportsActivation => false;
+
     public Task StartAsync(TunOrchestrationConfig config, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
