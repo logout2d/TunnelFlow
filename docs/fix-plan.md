@@ -71,7 +71,7 @@ Scope:
 
 ## Step 14
 Phase 1 of the TUN pivot: add sing-box config generation support for TUN mode.
-Status: pending
+Status: completed
 Scope:
 - add sing-box config-builder support for TUN inbound skeleton
 - keep old behavior unchanged unless the new mode is enabled

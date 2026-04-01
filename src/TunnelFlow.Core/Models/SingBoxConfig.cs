@@ -8,6 +8,8 @@ public record SingBoxConfig
 
     public int? DnsPort { get; init; }
 
+    public bool UseTunMode { get; init; }
+
     public string BinaryPath { get; init; } = string.Empty;
 
     public string ConfigOutputPath { get; init; } = string.Empty;

@@ -25,9 +25,10 @@ public class SingBoxConfigBuilderTests
         Tls = tls
     };
 
-    private static SingBoxConfig MakeConfig(int socksPort = 2080) => new()
+    private static SingBoxConfig MakeConfig(int socksPort = 2080, bool useTunMode = false) => new()
     {
         SocksPort = socksPort,
+        UseTunMode = useTunMode,
         BinaryPath = "sing-box.exe",
         ConfigOutputPath = "singbox-config.json",
         LogOutputPath = "singbox.log",
@@ -75,6 +76,34 @@ public class SingBoxConfigBuilderTests
             .GetProperty("type")
             .GetString();
         Assert.Equal("socks", inboundType);
+    }
+
+    [Fact]
+    public void Build_UseTunModeFalse_KeepsLegacySocksInbound()
+    {
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: false));
+
+        using var doc = JsonDocument.Parse(json);
+        var inbound = doc.RootElement.GetProperty("inbounds")[0];
+        Assert.Equal("socks", inbound.GetProperty("type").GetString());
+        Assert.Equal("127.0.0.1", inbound.GetProperty("listen").GetString());
+        Assert.Equal(2080, inbound.GetProperty("listen_port").GetInt32());
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_UsesTunInboundSkeleton()
+    {
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true));
+
+        using var doc = JsonDocument.Parse(json);
+        var inbound = doc.RootElement.GetProperty("inbounds")[0];
+        Assert.Equal("tun", inbound.GetProperty("type").GetString());
+        Assert.Equal("tun-in", inbound.GetProperty("tag").GetString());
+        Assert.Equal("TunnelFlow", inbound.GetProperty("interface_name").GetString());
+        Assert.Equal(1500, inbound.GetProperty("mtu").GetInt32());
+        Assert.True(inbound.GetProperty("auto_route").GetBoolean());
+        Assert.True(inbound.GetProperty("strict_route").GetBoolean());
+        Assert.False(inbound.TryGetProperty("listen_port", out _));
     }
 
     [Fact]

@@ -41,16 +41,7 @@ public class SingBoxConfigBuilder
                 },
                 ["final"] = "remote-dns"
             },
-            ["inbounds"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "socks",
-                    ["tag"] = "socks-in",
-                    ["listen"] = "127.0.0.1",
-                    ["listen_port"] = config.SocksPort
-                }
-            },
+            ["inbounds"] = BuildInbounds(config),
             ["outbounds"] = new JsonArray
             {
                 BuildVlessOutbound(profile),
@@ -74,6 +65,36 @@ public class SingBoxConfigBuilder
         };
 
         return root.ToJsonString(_writeOptions);
+    }
+
+    private static JsonArray BuildInbounds(SingBoxConfig config)
+    {
+        if (config.UseTunMode)
+        {
+            return new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "tun",
+                    ["tag"] = "tun-in",
+                    ["interface_name"] = "TunnelFlow",
+                    ["mtu"] = 1500,
+                    ["auto_route"] = true,
+                    ["strict_route"] = true
+                }
+            };
+        }
+
+        return new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = "socks",
+                ["tag"] = "socks-in",
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = config.SocksPort
+            }
+        };
     }
 
     private static JsonObject BuildVlessOutbound(VlessProfile profile)

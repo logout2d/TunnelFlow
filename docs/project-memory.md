@@ -29,6 +29,32 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests" --logger "console;verbosity=minimal"`
 
+## TUN pivot Phase 1 builder skeleton
+- Implemented in this step:
+  - added `UseTunMode` to `SingBoxConfig`
+  - `SingBoxConfigBuilder` now emits a minimal TUN inbound skeleton when `UseTunMode=true`
+  - legacy SOCKS inbound generation remains unchanged when `UseTunMode=false`
+  - service runtime selection is still not cut over to TUN mode yet
+- Exact files changed:
+  - `src/TunnelFlow.Core/Models/SingBoxConfig.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Minimal TUN skeleton shape now generated:
+  - inbound `type = "tun"`
+  - `tag = "tun-in"`
+  - `interface_name = "TunnelFlow"`
+  - `mtu = 1500`
+  - `auto_route = true`
+  - `strict_route = true`
+- Current effect:
+  - builder can now express the future TUN path in config snapshots/tests
+  - current service runtime behavior remains unchanged because `UseTunMode` is not yet passed into the active startup path
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests" --logger "console;verbosity=minimal"`
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
