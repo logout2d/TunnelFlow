@@ -102,6 +102,7 @@ Scope:
 Progress:
 - first real activation-capable TUN orchestrator slice is now implemented
 - service can now select effective TUN mode when Wintun prerequisites are met
+- minimal valid TUN inbound address has been added so sing-box no longer fails immediately with `missing interface address`
 - full end-to-end runtime validation is still pending
 
 ## Step 18

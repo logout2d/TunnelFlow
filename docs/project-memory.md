@@ -160,6 +160,26 @@
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.WintunTunOrchestratorTests" --logger "console;verbosity=minimal"`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.TunModeSelectorTests.Select_" --logger "console;verbosity=minimal"`
 
+## TUN inbound validity fix
+- Confirmed runtime blocker:
+  - after successful TUN mode selection and Wintun DLL activation, sing-box still crashed on startup with:
+    - `start inbound/tun[tun-in]: missing interface address`
+- Narrow fix applied:
+  - added a minimal IPv4 `address` field to the TUN inbound skeleton:
+    - `["172.19.0.1/30"]`
+- Exact files changed:
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Current effect:
+  - the builder now emits a minimally valid TUN inbound address for sing-box runtime startup
+  - legacy mode remains unchanged
+  - broader production TUN address/routing policy is still deferred
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests.Build_UseTunModeTrue_" --logger "console;verbosity=minimal"`
+
 ## WFP Redirect Docs
 - Active migration design reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`

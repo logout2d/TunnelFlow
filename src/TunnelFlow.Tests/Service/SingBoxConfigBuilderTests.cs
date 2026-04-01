@@ -104,6 +104,7 @@ public class SingBoxConfigBuilderTests
         Assert.Equal("tun", inbound.GetProperty("type").GetString());
         Assert.Equal("tun-in", inbound.GetProperty("tag").GetString());
         Assert.Equal("TunnelFlow", inbound.GetProperty("interface_name").GetString());
+        Assert.Equal("172.19.0.1/30", inbound.GetProperty("address")[0].GetString());
         Assert.Equal(1500, inbound.GetProperty("mtu").GetInt32());
         Assert.True(inbound.GetProperty("auto_route").GetBoolean());
         Assert.True(inbound.GetProperty("strict_route").GetBoolean());

@@ -47,6 +47,7 @@ public class SingBoxConfigBuilder
                     ["type"] = "tun",
                     ["tag"] = "tun-in",
                     ["interface_name"] = "TunnelFlow",
+                    ["address"] = new JsonArray("172.19.0.1/30"),
                     ["mtu"] = 1500,
                     ["auto_route"] = true,
                     ["strict_route"] = true
