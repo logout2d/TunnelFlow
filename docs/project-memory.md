@@ -291,6 +291,41 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6.4 Sessions navigation cleanup
+- Implemented in this step:
+  - removed Sessions from the visible main sidebar/navigation so it is no longer part of the normal user flow
+  - kept runtime/networking behavior unchanged
+  - intentionally left deeper Sessions internals in place for now to reduce cleanup risk
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UI behavior:
+  - before:
+    - the sidebar still exposed a visible `Sessions` navigation item
+    - `MainViewModel` still exposed a public `NavigateToSessionsCommand`
+  - after:
+    - the sidebar no longer shows Sessions as a normal navigation item
+    - the public main-view selection flow no longer exposes `NavigateToSessionsCommand`
+    - the remaining visible main navigation is:
+      - App Rules
+      - Profile
+      - Log
+- Internal code intentionally left for later cleanup:
+  - `SessionsViewModel` still exists
+  - `SessionsView.xaml` still exists
+  - session event handling in `MainViewModel` still exists
+  - this keeps the step low-risk while removing Sessions from normal user-facing flow first
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 8
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

@@ -74,7 +74,6 @@ public partial class MainViewModel : ObservableObject
     public IRelayCommand ManageServiceCommand { get; }
     public IRelayCommand NavigateToRulesCommand { get; }
     public IRelayCommand NavigateToProfileCommand { get; }
-    public IRelayCommand NavigateToSessionsCommand { get; }
     public IRelayCommand NavigateToLogCommand { get; }
 
     private RelayCommand _startCmd = null!;
@@ -108,7 +107,6 @@ public partial class MainViewModel : ObservableObject
 
         NavigateToRulesCommand = new RelayCommand(() => CurrentView = AppRules);
         NavigateToProfileCommand = new RelayCommand(() => CurrentView = Profile);
-        NavigateToSessionsCommand = new RelayCommand(() => CurrentView = Sessions);
         NavigateToLogCommand = new RelayCommand(() => CurrentView = Log);
     }
 

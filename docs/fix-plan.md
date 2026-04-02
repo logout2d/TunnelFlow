@@ -187,3 +187,8 @@ Progress:
     - elevated PowerShell fallback on access denied
 - next recommended Phase 6.4 step:
   - add a small explicit reconnect/retry UX around service recovery completion, without broadening into a full service-management surface
+- next narrow Phase 6.4 cleanup step is now completed:
+  - Sessions has been removed from the visible main navigation and normal user flow
+  - deeper Sessions internals remain temporarily in place to keep the cleanup low-risk
+- next recommended Phase 6.5 step:
+  - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable

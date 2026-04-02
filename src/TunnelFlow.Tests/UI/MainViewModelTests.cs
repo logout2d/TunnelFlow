@@ -235,4 +235,22 @@ public class MainViewModelTests
         Assert.DoesNotContain("Raw detailed failure", viewModel.ServiceActionStatus);
         Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Raw detailed failure"));
     }
+
+    [Fact]
+    public void RemainingNavigationCommands_SwitchBetweenVisibleMainViews()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client);
+
+        Assert.Same(viewModel.AppRules, viewModel.CurrentView);
+
+        viewModel.NavigateToProfileCommand.Execute(null);
+        Assert.Same(viewModel.Profile, viewModel.CurrentView);
+
+        viewModel.NavigateToLogCommand.Execute(null);
+        Assert.Same(viewModel.Log, viewModel.CurrentView);
+
+        viewModel.NavigateToRulesCommand.Execute(null);
+        Assert.Same(viewModel.AppRules, viewModel.CurrentView);
+    }
 }
