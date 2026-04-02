@@ -16,18 +16,37 @@ public partial class LogViewModel : ObservableObject
     public LogViewModel()
     {
         ClearCommand = new RelayCommand(() =>
-            Application.Current.Dispatcher.InvokeAsync(() => Lines.Clear()));
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.CheckAccess())
+            {
+                Lines.Clear();
+                return;
+            }
+
+            dispatcher.InvokeAsync(() => Lines.Clear());
+        });
     }
 
     public void AddLine(string source, string level, string message)
     {
         var line = new LogLineViewModel(source, level, message);
-        Application.Current.Dispatcher.InvokeAsync(() =>
+
+        void AppendLine()
         {
             if (Lines.Count >= MaxLines)
                 Lines.RemoveAt(0);
             Lines.Add(line);
-        });
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            AppendLine();
+            return;
+        }
+
+        dispatcher.InvokeAsync(AppendLine);
     }
 }
 

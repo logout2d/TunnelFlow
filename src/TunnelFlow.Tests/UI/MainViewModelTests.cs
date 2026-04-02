@@ -7,6 +7,27 @@ namespace TunnelFlow.Tests.UI;
 
 public class MainViewModelTests
 {
+    private sealed class FakeServiceControlManager : IServiceControlManager
+    {
+        public int StartCalls { get; private set; }
+
+        public int RestartCalls { get; private set; }
+
+        public Exception? Failure { get; set; }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            StartCalls++;
+            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
+
+        public Task RestartAsync(CancellationToken cancellationToken)
+        {
+            RestartCalls++;
+            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
+    }
+
     [Fact]
     public void ApplyStatusPayload_UpdatesTunOrientedStatusSummary()
     {
@@ -138,5 +159,80 @@ public class MainViewModelTests
         Assert.Equal("Offline Tun", viewModel.Profile.Name);
         Assert.Equal(3, viewModel.AppRules.Rules.Count);
         Assert.False(viewModel.Sessions.IsAvailable);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenDisconnected_StartsService()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = false;
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(1, serviceManager.StartCalls);
+        Assert.Equal(0, serviceManager.RestartCalls);
+        Assert.Equal(ServiceActionKind.Start, viewModel.PendingServiceAction);
+        Assert.Equal("Starting Service...", viewModel.ServiceActionLabel);
+        Assert.Equal("Waiting for service connection...", viewModel.ServiceActionStatus);
+        Assert.True(viewModel.ShowServiceActionStatus);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenConnected_RestartsService()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = true;
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(0, serviceManager.StartCalls);
+        Assert.Equal(1, serviceManager.RestartCalls);
+        Assert.Equal(ServiceActionKind.Restart, viewModel.PendingServiceAction);
+        Assert.Equal("Restarting Service...", viewModel.ServiceActionLabel);
+        Assert.Equal("Waiting for service connection...", viewModel.ServiceActionStatus);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenServiceControlFails_ShowsError()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new ServiceNotInstalledException("TunnelFlow service is not installed.")
+        };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = false;
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+        Assert.False(viewModel.ManageServiceCommand.CanExecute(null));
+        Assert.Equal("Service not installed", viewModel.ServiceActionStatus);
+        Assert.Equal("Start Service", viewModel.ServiceActionLabel);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("TunnelFlow service is not installed."));
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenGenericServiceControlFails_ShowsFriendlyStatus_AndLogsDetails()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new InvalidOperationException("Raw detailed failure")
+        };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = false;
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+        Assert.True(viewModel.ManageServiceCommand.CanExecute(null));
+        Assert.Equal("Service action failed", viewModel.ServiceActionStatus);
+        Assert.DoesNotContain("Raw detailed failure", viewModel.ServiceActionStatus);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Raw detailed failure"));
     }
 }

@@ -209,6 +209,88 @@
   - offline config is now visible, but profile/rule edits still depend on the service path
   - explicit local start/restart service controls remain the next UI/service-management step rather than part of this fallback patch
 
+## TUN Phase 6.3 minimal service recovery controls
+- Implemented in this step:
+  - the UI now has a minimal service-management recovery path without broadening into full service administration
+  - when the service is unavailable, the sidebar offers `Start Service`
+  - when the service is connected, the same control becomes `Restart Service`
+  - the existing offline config fallback remains intact, so saved config stays visible while recovery actions are available
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IServiceControlManager.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/LogViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.UI/TunnelFlow.UI.csproj`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Service-control mechanism:
+  - UI uses a narrow `IServiceControlManager` abstraction
+  - `WindowsServiceControlManager` targets the Windows service named `TunnelFlow`
+  - it first tries direct `ServiceController` start/restart
+  - if access is denied, it falls back to an elevated one-shot PowerShell command via `runas`
+  - this keeps the UI non-elevated by default and requests elevation only for the service action when needed
+- UI behavior:
+  - disconnected/offline:
+    - button label: `Start Service`
+    - action status text can show startup progress or a friendly error
+  - connected/online:
+    - button label: `Restart Service`
+    - action status text can show restart progress or a friendly error
+  - while an action is pending:
+    - labels switch to `Starting Service...` or `Restarting Service...`
+- Narrow test-safety fix:
+  - `LogViewModel` now tolerates test/offline contexts where `Application.Current` is null
+  - `AddLine` and `ClearCommand` use the WPF dispatcher when available, otherwise they update the collection directly
+  - this keeps runtime behavior unchanged while making focused UI/view-model tests deterministic
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 6
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.3 service-control polish
+- Implemented in this step:
+  - polished the UI behavior for the common dev/offline case where the Windows service is not installed
+  - kept the existing service-control mechanism unchanged:
+    - `ServiceController` first
+    - elevated PowerShell fallback on access denied
+  - moved detailed service-control failure text to the log instead of showing raw exception text under the button
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IServiceControlManager.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UI behavior:
+  - before:
+    - the service action area could surface raw service errors such as:
+      - `Service 'TunnelFlow' was not found on computer '.'`
+  - after:
+    - when the service is not installed, the UI shows:
+      - `Service not installed`
+    - the action becomes disabled after that state is detected
+    - raw failure details are no longer shown in the small status area under the button
+- Logging behavior:
+  - before:
+    - raw failure text could appear both in the UI status text and in the log
+  - after:
+    - the UI gets a short friendly status only
+    - the detailed failure message is recorded in the log via `LogViewModel`
+- Implementation note:
+  - added `ServiceNotInstalledException` so `MainViewModel` can treat the not-installed case as a distinct friendly UI state without changing the underlying control mechanism
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 7
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

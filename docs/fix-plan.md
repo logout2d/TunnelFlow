@@ -171,3 +171,19 @@ Progress:
   - this keeps the product aligned with TUN-first / future TUN-only cleanup and avoids adding new legacy-capture-first status concepts
 - next recommended Phase 6.3 step:
   - add narrow service start/restart controls to the UI so offline config visibility can be paired with an explicit way to bring the service back without leaving the app
+- next narrow Phase 6.3 step is now completed:
+  - the UI now has minimal `Start Service` / `Restart Service` controls
+  - the service-control path stays narrow and Windows-appropriate:
+    - direct `ServiceController` first
+    - elevated one-shot PowerShell fallback on access denied
+  - offline config fallback remains intact while recovery controls are available
+  - focused UI/view-model validation now passes after a narrow `LogViewModel` test-context safety fix
+- next narrow Phase 6.3 polish step is now completed:
+  - the UI now handles the "service not installed" case gracefully
+  - the service action area shows a short friendly status instead of raw Windows service exception text
+  - detailed failure text is kept in the log only
+  - the existing control mechanism remains unchanged:
+    - `ServiceController` first
+    - elevated PowerShell fallback on access denied
+- next recommended Phase 6.4 step:
+  - add a small explicit reconnect/retry UX around service recovery completion, without broadening into a full service-management surface

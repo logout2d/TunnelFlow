@@ -94,9 +94,33 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="8" Height="8" Margin="0,0,8,0"
                                  Fill="{Binding IsConnected, Converter={StaticResource BoolToColorConverter}}"/>
-                        <TextBlock Text="{Binding ConnectionStatus}"
+                        <TextBlock Text="{Binding ServiceConnectionSummary}"
                                    FontSize="12" Foreground="White"/>
                     </StackPanel>
+
+                    <Button Content="{Binding ServiceActionLabel}"
+                            Command="{Binding ManageServiceCommand}"
+                            Style="{StaticResource ActionButton}"
+                            Background="#475569"
+                            Foreground="White"
+                            Margin="0,8,0,0"/>
+
+                    <TextBlock Text="{Binding ServiceActionStatus}"
+                               Margin="0,6,0,0"
+                               FontSize="11"
+                               Foreground="#CBD5E1"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowServiceActionStatus}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <Border Background="#0F172A"
                             CornerRadius="10"

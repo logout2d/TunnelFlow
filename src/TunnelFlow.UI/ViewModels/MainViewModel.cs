@@ -14,6 +14,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
     private readonly LocalConfigSnapshotLoader _configLoader;
+    private readonly IServiceControlManager _serviceControlManager;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -32,9 +33,21 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _directRuleCount;
     [ObservableProperty] private int _blockRuleCount;
     [ObservableProperty] private string _connectionStatus = "Connecting to service...";
+    [ObservableProperty] private string _serviceActionStatus = string.Empty;
+    [ObservableProperty] private bool _isServiceInstalled = true;
     [ObservableProperty] private object _currentView;
+    [ObservableProperty] private ServiceActionKind _pendingServiceAction;
 
     public string ServiceConnectionSummary => IsConnected ? "Service: On" : "Service: Off";
+
+    public string ServiceActionLabel => PendingServiceAction switch
+    {
+        ServiceActionKind.Start => "Starting Service...",
+        ServiceActionKind.Restart => "Restarting Service...",
+        _ => IsConnected ? "Restart Service" : "Start Service"
+    };
+
+    public bool ShowServiceActionStatus => !string.IsNullOrWhiteSpace(ServiceActionStatus);
 
     public string ModeSummary => SelectedMode == TunnelStatusMode.Tun ? "TUN" : "Legacy";
 
@@ -58,6 +71,7 @@ public partial class MainViewModel : ObservableObject
 
     public IRelayCommand StartCommand { get; }
     public IRelayCommand StopCommand { get; }
+    public IRelayCommand ManageServiceCommand { get; }
     public IRelayCommand NavigateToRulesCommand { get; }
     public IRelayCommand NavigateToProfileCommand { get; }
     public IRelayCommand NavigateToSessionsCommand { get; }
@@ -65,11 +79,16 @@ public partial class MainViewModel : ObservableObject
 
     private RelayCommand _startCmd = null!;
     private RelayCommand _stopCmd = null!;
+    private RelayCommand _manageServiceCmd = null!;
 
-    public MainViewModel(ServiceClient client, LocalConfigSnapshotLoader? configLoader = null)
+    public MainViewModel(
+        ServiceClient client,
+        LocalConfigSnapshotLoader? configLoader = null,
+        IServiceControlManager? serviceControlManager = null)
     {
         _client = client;
         _configLoader = configLoader ?? new LocalConfigSnapshotLoader();
+        _serviceControlManager = serviceControlManager ?? new WindowsServiceControlManager();
 
         AppRules = new AppRulesViewModel(client);
         Profile = new ProfileViewModel(client);
@@ -79,9 +98,13 @@ public partial class MainViewModel : ObservableObject
 
         _startCmd = new RelayCommand(async () => await StartAsync(), () => !CaptureRunning && IsConnected);
         _stopCmd = new RelayCommand(async () => await StopAsync(), () => CaptureRunning && IsConnected);
+        _manageServiceCmd = new RelayCommand(
+            async () => await RequestServiceActionAsync(),
+            () => PendingServiceAction == ServiceActionKind.None && IsServiceInstalled);
 
         StartCommand = _startCmd;
         StopCommand = _stopCmd;
+        ManageServiceCommand = _manageServiceCmd;
 
         NavigateToRulesCommand = new RelayCommand(() => CurrentView = AppRules);
         NavigateToProfileCommand = new RelayCommand(() => CurrentView = Profile);
@@ -93,7 +116,9 @@ public partial class MainViewModel : ObservableObject
     {
         _startCmd.NotifyCanExecuteChanged();
         _stopCmd.NotifyCanExecuteChanged();
+        _manageServiceCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ServiceConnectionSummary));
+        OnPropertyChanged(nameof(ServiceActionLabel));
         OnPropertyChanged(nameof(EngineStatusSummary));
         OnPropertyChanged(nameof(TunnelStatusSummary));
     }
@@ -128,6 +153,18 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnBlockRuleCountChanged(int value) =>
         OnPropertyChanged(nameof(RuleCountsSummary));
+
+    partial void OnServiceActionStatusChanged(string value) =>
+        OnPropertyChanged(nameof(ShowServiceActionStatus));
+
+    partial void OnPendingServiceActionChanged(ServiceActionKind value)
+    {
+        _manageServiceCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ServiceActionLabel));
+    }
+
+    partial void OnIsServiceInstalledChanged(bool value) =>
+        _manageServiceCmd.NotifyCanExecuteChanged();
 
     public async Task InitializeAsync()
     {
@@ -313,7 +350,10 @@ public partial class MainViewModel : ObservableObject
         await DispatchAsync(() =>
         {
             IsConnected = true;
+            IsServiceInstalled = true;
             ConnectionStatus = "Connected";
+            ServiceActionStatus = string.Empty;
+            PendingServiceAction = ServiceActionKind.None;
         });
 
         await LoadStateAsync();
@@ -353,6 +393,49 @@ public partial class MainViewModel : ObservableObject
         SingBoxStatus = "Unavailable";
     }
 
+    internal async Task RequestServiceActionAsync()
+    {
+        if (PendingServiceAction != ServiceActionKind.None)
+        {
+            return;
+        }
+
+        var requestedAction = IsConnected ? ServiceActionKind.Restart : ServiceActionKind.Start;
+        PendingServiceAction = requestedAction;
+        ServiceActionStatus = requestedAction == ServiceActionKind.Start
+            ? "Starting the Windows service..."
+            : "Restarting the Windows service...";
+
+        try
+        {
+            if (requestedAction == ServiceActionKind.Start)
+            {
+                await _serviceControlManager.StartAsync(CancellationToken.None);
+                Log.AddLine("ui", "Info", "Start service requested");
+            }
+            else
+            {
+                await _serviceControlManager.RestartAsync(CancellationToken.None);
+                Log.AddLine("ui", "Info", "Restart service requested");
+            }
+
+            ServiceActionStatus = "Waiting for service connection...";
+        }
+        catch (ServiceNotInstalledException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            IsServiceInstalled = false;
+            ServiceActionStatus = "Service not installed";
+            Log.AddLine("ui", "Warning", $"Service action failed: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Service action failed";
+            Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
+        }
+    }
+
     private static string ResolveActiveProfileName(IReadOnlyList<VlessProfile> profiles, Guid? activeProfileId)
     {
         var active = profiles.FirstOrDefault(profile => profile.Id == activeProfileId)
@@ -372,4 +455,11 @@ public partial class MainViewModel : ObservableObject
 
         return dispatcher.InvokeAsync(action).Task;
     }
+}
+
+public enum ServiceActionKind
+{
+    None,
+    Start,
+    Restart
 }
