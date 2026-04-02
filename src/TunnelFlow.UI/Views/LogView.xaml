@@ -6,14 +6,25 @@
     <DockPanel Margin="24,20,24,20">
 
         <!-- Header with Clear -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <TextBlock Text="Log" FontSize="18" FontWeight="SemiBold"
-                       Foreground="#1E293B" VerticalAlignment="Center"/>
-            <Button DockPanel.Dock="Right" Content="Clear"
+        <StackPanel DockPanel.Dock="Top"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,16">
+            <TextBlock Text="Log"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#1E293B"
+                       VerticalAlignment="Center"/>
+
+            <Button Content="Clear"
                     Command="{Binding ClearCommand}"
-                    Padding="12,6" Background="#F1F5F9" Foreground="#475569"
-                    BorderBrush="#CBD5E1" Cursor="Hand"/>
-        </DockPanel>
+                    Margin="16,0,0,0"
+                    Padding="12,6"
+                    Background="#F1F5F9"
+                    Foreground="#475569"
+                    BorderBrush="#CBD5E1"
+                    Cursor="Hand"
+                    VerticalAlignment="Center"/>
+        </StackPanel>
 
         <!-- Log list -->
         <Border BorderBrush="#E2E8F0" BorderThickness="1">

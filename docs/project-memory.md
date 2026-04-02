@@ -409,6 +409,50 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6.7 App Rules and Log layout polish
+- Implemented in this step:
+  - removed the old QUIC / HTTP3 explanatory note from the App Rules view
+  - cleaned up the top header spacing in both App Rules and Log without changing behavior
+  - kept the change XAML-only and low risk
+- Exact files changed:
+  - `src/TunnelFlow.UI/Views/AppRulesView.xaml`
+  - `src/TunnelFlow.UI/Views/LogView.xaml`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Visual changes:
+  - App Rules:
+    - removed the inline QUIC / HTTP3 comment text under the header
+    - switched the header row to a simple two-column layout
+    - increased spacing below the header and between the title and the `Add Application` button
+  - Log:
+    - switched the header row to the same two-column layout
+    - increased spacing below the header and between the title and the `Clear` button
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+
+## TUN Phase 6.7 header alignment correction
+- Implemented in this step:
+  - adjusted the App Rules and Log header rows so the action buttons sit directly to the right of the titles instead of being pushed to the far right
+  - kept a compact left-aligned layout with about 16px spacing between title and button
+  - matched the Clear button sizing to the Add Application button sizing
+- Exact files changed:
+  - `src/TunnelFlow.UI/Views/AppRulesView.xaml`
+  - `src/TunnelFlow.UI/Views/LogView.xaml`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Visual changes:
+  - App Rules:
+    - header changed from a stretched two-column layout to a horizontal stack
+    - `Add Application` now appears immediately to the right of `App Rules`
+  - Log:
+    - header changed from a stretched two-column layout to a horizontal stack
+    - `Clear` now appears immediately to the right of `Log`
+    - `Clear` uses the same padding as `Add Application`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

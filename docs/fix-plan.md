@@ -197,5 +197,13 @@ Progress:
   - App Rules and Profile editing are disabled while the tunnel is running
   - the UI now reflects that runtime uses a started configuration snapshot rather than live editable state
   - small inline hints explain that the tunnel must be stopped before editing
-- next recommended Phase 6.7 step:
+- next narrow Phase 6.7 polish step is now completed:
+  - removed the old QUIC / HTTP3 comment text from App Rules
+  - cleaned up the header spacing/layout in App Rules and Log
+  - kept the change XAML-only with no behavior changes
+- next narrow Phase 6.7 header alignment correction is now completed:
+  - moved the App Rules and Log header action buttons to a compact left-aligned position beside their titles
+  - matched the Clear button sizing to the Add Application button sizing
+  - kept the change XAML-only with no behavior changes
+- next recommended Phase 6.8 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable

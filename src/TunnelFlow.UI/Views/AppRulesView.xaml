@@ -8,20 +8,26 @@
     <DockPanel Margin="24,20,24,20">
 
         <!-- Header -->
-        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-            <TextBlock Text="App Rules" FontSize="18" FontWeight="SemiBold"
-                       Foreground="#1E293B" VerticalAlignment="Center"/>
-            <Button DockPanel.Dock="Right" Content="＋ Add Application"
+        <StackPanel DockPanel.Dock="Top"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,16">
+            <TextBlock Text="App Rules"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="#1E293B"
+                       VerticalAlignment="Center"/>
+
+            <Button Content="Add Application"
                     Command="{Binding AddRuleCommand}"
                     IsEnabled="{Binding IsEditingEnabled}"
-                    Padding="12,6" Background="#3B82F6" Foreground="White"
-                    BorderThickness="0" Cursor="Hand"/>
-        </DockPanel>
-
-        <!-- QUIC notice -->
-        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,12"
-                   Text="QUIC / HTTP3 is disabled for tunneled apps (by design — forces TCP fallback)."
-                   Foreground="#64748B" FontSize="11" FontStyle="Italic"/>
+                    Margin="16,0,0,0"
+                    Padding="12,6"
+                    Background="#3B82F6"
+                    Foreground="White"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    VerticalAlignment="Center"/>
+        </StackPanel>
 
         <TextBlock DockPanel.Dock="Top"
                    Text="{Binding EditHintText}"
