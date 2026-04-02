@@ -145,3 +145,12 @@ Progress:
     - active profile id/name
     - proxy/direct/block rule counts
   - new status work is intentionally aligned with a future TUN-only cleanup and does not introduce new primary legacy capture internals
+- next narrow Phase 6 UI step is now completed:
+  - the UI consumes the richer TUN-oriented status/state fields
+  - the main window now shows a compact runtime summary card for:
+    - mode
+    - engine status
+    - tunnel status
+    - active profile
+    - proxy/direct/block rule counts
+  - the UI step keeps runtime behavior unchanged and does not introduce new primary legacy-capture status panels

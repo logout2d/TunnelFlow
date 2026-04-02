@@ -98,18 +98,66 @@
                                    FontSize="12" Foreground="White"/>
                     </StackPanel>
 
-                    <!-- Row 2: tunnel / sing-box state -->
-                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                        <Ellipse Width="8" Height="8" Margin="0,0,8,0"
-                                 Fill="{Binding CaptureRunning, Converter={StaticResource BoolToColorConverter}}"/>
-                        <TextBlock FontSize="11" Opacity="0.7" Foreground="White">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="Tunnel: {0}">
-                                    <Binding Path="SingBoxStatus"/>
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                    </StackPanel>
+                    <Border Background="#0F172A"
+                            CornerRadius="10"
+                            Margin="0,12,0,0"
+                            Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="Runtime"
+                                       Foreground="White"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"/>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode"
+                                           Foreground="#94A3B8" FontSize="11"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ModeSummary}"
+                                           Foreground="White" FontSize="11" Margin="16,0,0,0"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Engine"
+                                           Foreground="#94A3B8" FontSize="11" Margin="0,6,0,0"/>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="16,6,0,0">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,8,0"
+                                             Fill="{Binding SingBoxRunning, Converter={StaticResource BoolToColorConverter}}"/>
+                                    <TextBlock Text="{Binding EngineStatusSummary}"
+                                               Foreground="White" FontSize="11"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Tunnel"
+                                           Foreground="#94A3B8" FontSize="11" Margin="0,6,0,0"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="16,6,0,0">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,8,0"
+                                             Fill="{Binding TunnelInterfaceUp, Converter={StaticResource BoolToColorConverter}}"/>
+                                    <TextBlock Text="{Binding TunnelStatusSummary}"
+                                               Foreground="White" FontSize="11"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Profile"
+                                           Foreground="#94A3B8" FontSize="11" Margin="0,6,0,0"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ActiveProfileName}"
+                                           Foreground="White" FontSize="11" Margin="16,6,0,0"
+                                           TextTrimming="CharacterEllipsis"/>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Rules"
+                                           Foreground="#94A3B8" FontSize="11" Margin="0,6,0,0"/>
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding RuleCountsSummary}"
+                                           Foreground="White" FontSize="11" Margin="16,6,0,0"
+                                           TextWrapping="Wrap"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <Separator DockPanel.Dock="Top" Background="#334155" Margin="12,16,12,8"/>

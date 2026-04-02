@@ -22,8 +22,27 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private bool _captureRunning;
     [ObservableProperty] private string _singBoxStatus = "Stopped";
+    [ObservableProperty] private TunnelStatusMode _selectedMode = TunnelStatusMode.Legacy;
+    [ObservableProperty] private bool _singBoxRunning;
+    [ObservableProperty] private bool _tunnelInterfaceUp;
+    [ObservableProperty] private string _activeProfileName = "None selected";
+    [ObservableProperty] private int _proxyRuleCount;
+    [ObservableProperty] private int _directRuleCount;
+    [ObservableProperty] private int _blockRuleCount;
     [ObservableProperty] private string _connectionStatus = "Connecting to service...";
     [ObservableProperty] private object _currentView;
+
+    public string ModeSummary => SelectedMode == TunnelStatusMode.Tun ? "TUN" : "Legacy";
+
+    public string EngineStatusSummary => SingBoxRunning ? "Running" : SingBoxStatus;
+
+    public string TunnelStatusSummary =>
+        SelectedMode == TunnelStatusMode.Tun
+            ? (TunnelInterfaceUp ? "Up" : "Down")
+            : "Not enabled";
+
+    public string RuleCountsSummary =>
+        $"Proxy {ProxyRuleCount}  Direct {DirectRuleCount}  Block {BlockRuleCount}";
 
     public AppRulesViewModel AppRules { get; }
     public ProfileViewModel Profile { get; }
@@ -74,6 +93,30 @@ public partial class MainViewModel : ObservableObject
         _stopCmd.NotifyCanExecuteChanged();
     }
 
+    partial void OnSelectedModeChanged(TunnelStatusMode value)
+    {
+        OnPropertyChanged(nameof(ModeSummary));
+        OnPropertyChanged(nameof(TunnelStatusSummary));
+    }
+
+    partial void OnSingBoxStatusChanged(string value) =>
+        OnPropertyChanged(nameof(EngineStatusSummary));
+
+    partial void OnSingBoxRunningChanged(bool value) =>
+        OnPropertyChanged(nameof(EngineStatusSummary));
+
+    partial void OnTunnelInterfaceUpChanged(bool value) =>
+        OnPropertyChanged(nameof(TunnelStatusSummary));
+
+    partial void OnProxyRuleCountChanged(int value) =>
+        OnPropertyChanged(nameof(RuleCountsSummary));
+
+    partial void OnDirectRuleCountChanged(int value) =>
+        OnPropertyChanged(nameof(RuleCountsSummary));
+
+    partial void OnBlockRuleCountChanged(int value) =>
+        OnPropertyChanged(nameof(RuleCountsSummary));
+
     public async Task InitializeAsync()
     {
         _client.Connected += OnClientConnected;
@@ -103,6 +146,9 @@ public partial class MainViewModel : ObservableObject
         {
             IsConnected = false;
             CaptureRunning = false;
+            SingBoxRunning = false;
+            TunnelInterfaceUp = false;
+            SingBoxStatus = "Stopped";
             ConnectionStatus = "Reconnecting...";
         });
     }
@@ -120,9 +166,11 @@ public partial class MainViewModel : ObservableObject
             switch (type)
             {
                 case "StatusChanged":
-                    CaptureRunning = payload.TryGetProperty("captureRunning", out var cr) && cr.GetBoolean();
-                    SingBoxStatus = payload.TryGetProperty("singboxStatus", out var ss)
-                        ? ss.GetString() ?? "Unknown" : "Unknown";
+                    var status = JsonSerializer.Deserialize<StatusPayload>(payload, _jsonOptions);
+                    if (status is not null)
+                    {
+                        ApplyStatusPayload(status);
+                    }
                     break;
 
                 case "SessionCreated":
@@ -163,8 +211,7 @@ public partial class MainViewModel : ObservableObject
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                CaptureRunning = state.CaptureRunning;
-                SingBoxStatus = state.SingBoxStatus.ToString();
+                ApplyStatePayload(state);
                 AppRules.LoadRules(state.Rules);
                 Profile.LoadProfile(state.Profiles, state.ActiveProfileId);
                 IsConnected = true;
@@ -202,5 +249,35 @@ public partial class MainViewModel : ObservableObject
         {
             Log.AddLine("ui", "Error", $"Stop capture failed: {ex.Message}");
         }
+    }
+
+    internal void ApplyStatePayload(StatePayload state)
+    {
+        CaptureRunning = state.CaptureRunning;
+        SingBoxStatus = state.SingBoxStatus.ToString();
+        SelectedMode = state.SelectedMode;
+        SingBoxRunning = state.SingBoxRunning;
+        TunnelInterfaceUp = state.TunnelInterfaceUp;
+        ActiveProfileName = string.IsNullOrWhiteSpace(state.ActiveProfileName)
+            ? "None selected"
+            : state.ActiveProfileName;
+        ProxyRuleCount = state.ProxyRuleCount;
+        DirectRuleCount = state.DirectRuleCount;
+        BlockRuleCount = state.BlockRuleCount;
+    }
+
+    internal void ApplyStatusPayload(StatusPayload status)
+    {
+        CaptureRunning = status.CaptureRunning;
+        SingBoxStatus = status.SingBoxStatus.ToString();
+        SelectedMode = status.SelectedMode;
+        SingBoxRunning = status.SingBoxRunning;
+        TunnelInterfaceUp = status.TunnelInterfaceUp;
+        ActiveProfileName = string.IsNullOrWhiteSpace(status.ActiveProfileName)
+            ? "None selected"
+            : status.ActiveProfileName;
+        ProxyRuleCount = status.ProxyRuleCount;
+        DirectRuleCount = status.DirectRuleCount;
+        BlockRuleCount = status.BlockRuleCount;
     }
 }

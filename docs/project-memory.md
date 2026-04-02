@@ -58,6 +58,41 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6 UI runtime status card
+- Implemented in this step:
+  - repaired the partial Phase 6 UI/status patch so it compiles cleanly
+  - `MainViewModel` now consumes the richer TUN-oriented `StatePayload` / `StatusPayload`
+  - the main window sidebar now shows a compact runtime card instead of extending legacy capture-first status concepts
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.UI/Properties/InternalsVisibleTo.cs`
+  - `src/TunnelFlow.Tests/TunnelFlow.Tests.csproj`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- TUN-oriented fields now displayed in the UI:
+  - mode
+  - engine status
+  - tunnel status
+  - active profile name
+  - proxy/direct/block rule counts
+- View-model notes:
+  - `MainViewModel` now applies both `GetState` and `StatusChanged` through the richer shared contract
+  - compact summaries are exposed as:
+    - `ModeSummary`
+    - `EngineStatusSummary`
+    - `TunnelStatusSummary`
+    - `RuleCountsSummary`
+  - the UI still keeps `captureRunning` only for existing start/stop command enablement compatibility; new status presentation is TUN-oriented
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 2
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

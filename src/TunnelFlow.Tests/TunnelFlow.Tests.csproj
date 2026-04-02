@@ -24,6 +24,7 @@
     <ProjectReference Include="..\TunnelFlow.Core\TunnelFlow.Core.csproj" />
     <ProjectReference Include="..\TunnelFlow.Capture\TunnelFlow.Capture.csproj" />
     <ProjectReference Include="..\TunnelFlow.Service\TunnelFlow.Service.csproj" />
+    <ProjectReference Include="..\TunnelFlow.UI\TunnelFlow.UI.csproj" />
   </ItemGroup>
 
 </Project>
