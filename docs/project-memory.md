@@ -507,6 +507,180 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6.8 profile control-row follow-up
+- Implemented in this step:
+  - refined the top profile control row to be more compact
+  - added an explicit `Add New` action for starting a local unsaved profile
+  - kept active-profile selection behavior unchanged
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UX behavior:
+  - before:
+    - the selected-profile combo was visually wide
+    - `Set Active` was oversized relative to the row
+    - there was no explicit `Add New` path
+  - after:
+    - the selected-profile combo is narrower
+    - `Set Active` uses more compact row-sized padding
+    - `Add New` sits beside `Set Active`
+    - `Add New` clears the editable fields, clears the current selection, and enters a local unsaved new-profile state without saving anything
+    - the existing active-profile summary remains visible during that unsaved new-profile state
+- Command-state note:
+  - in the new empty-profile state, `Save` remains disabled until required fields are filled, which matches the existing validation rules
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.8 profile command-state and User ID repair
+- Implemented in this step:
+  - replaced the fragile `PasswordBox`-based User ID field with a normal bound `TextBox`
+  - removed the manual User ID sync code from `ProfileView.xaml.cs`
+  - tightened `Save Profile` and `Set Active` command-state logic so they match service-connected state and new-profile state
+  - added a small profile hint model for tunnel-running vs service-offline states
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Root causes addressed:
+  - `UserId` UI state was still driven through a `PasswordBox` plus manual code-behind synchronization, which made `Add New` clearing unreliable
+  - profile command enablement only considered `IsEditingEnabled`, so offline mode and new-profile mode still exposed invalid actions
+- Behavior after the fix:
+  - `UserId` is now a normal `TextBox` bound directly to `UserId`
+  - `Save Profile` now requires:
+    - editing enabled
+    - service connected
+    - non-empty `ServerAddress`
+    - non-empty `UserId`
+    - valid `ServerPort`
+  - `Set Active` now requires:
+    - editing enabled
+    - service connected
+    - not creating a new profile
+    - an existing selected profile
+    - selected profile not already active
+  - profile hint text now shows:
+    - `Stop the tunnel to edit profile settings.` when editing is disabled by a running tunnel
+    - `Start the service to save profile changes.` when the service is offline
+    - no hint otherwise
+  - `Add New` still:
+    - enters a local unsaved new-profile state
+    - clears editable fields
+    - does not save automatically
+    - keeps the active-profile summary visible
+- Integration note:
+  - `MainViewModel.UpdateConfigEditingState()` now also pushes service-connected state into `ProfileViewModel`
+  - this keeps the fix narrow and avoids any service/runtime behavior change
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 6
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.8 profile save/validation repair
+- Implemented in this step:
+  - added a real dirty-state model to `ProfileViewModel`
+  - `Save Profile` is now enabled only for valid unsaved changes
+  - strengthened REALITY-specific validation so incomplete REALITY profiles cannot be saved too early
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Dirty-state behavior:
+  - `ProfileViewModel` now keeps a saved-form baseline and exposes `HasUnsavedChanges`
+  - loaded profiles start clean:
+    - `HasUnsavedChanges == false`
+    - `Save Profile` disabled until the user actually edits something
+  - `Add New` establishes a clean unsaved-profile baseline
+  - editing tracked fields marks the form dirty and sets:
+    - `SaveStatus = "Unsaved changes"`
+  - returning the form to the saved baseline clears dirty state again
+  - after successful save, the current form becomes the new baseline and dirty state resets
+- Save validation behavior:
+  - before:
+    - `Save Profile` depended on:
+      - editing enabled
+      - service connected
+      - non-empty `ServerAddress`
+      - non-empty `UserId`
+      - valid `ServerPort`
+  - after:
+    - `Save Profile` depends on:
+      - editing enabled
+      - service connected
+      - `HasUnsavedChanges == true`
+      - valid base fields
+      - and when `Security == "reality"`:
+        - non-empty `RealityPublicKey`
+        - non-empty `RealityShortId`
+- Reevaluation coverage:
+  - dirty/save state now reevaluates when these editable fields change:
+    - `Name`
+    - `ServerAddress`
+    - `ServerPort`
+    - `UserId`
+    - `Flow`
+    - `Network`
+    - `Security`
+    - `Sni`
+    - `Fingerprint`
+    - `RealityPublicKey`
+    - `RealityShortId`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 8
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.8 Add New selector-visibility bug fix
+- Implemented in this step:
+  - fixed the bug where pressing `Add New` made the Profile screen fall back to the older simpler form layout by hiding the improved selector row
+  - kept the fix narrow and UI-only
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Root cause:
+  - `ProfileViewModel.ShowProfileSelector` was tied to `!IsCreatingNewProfile`
+  - the `ComboBox` in `ProfileView.xaml` also had an extra visibility trigger on `ShowProfileSelector`
+  - pressing `Add New` set `IsCreatingNewProfile=true`, which hid the improved top control row
+- Behavior after the fix:
+  - `Add New` still:
+    - clears editable fields
+    - clears the current selection
+    - enters a local unsaved new-profile state
+    - does not save automatically
+  - but now the improved top control row stays visible:
+    - selected profile picker remains visible
+    - `Set Active` remains visible
+    - `Add New` remains visible
+    - active-profile summary remains visible
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

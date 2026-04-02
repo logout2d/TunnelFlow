@@ -212,5 +212,33 @@ Progress:
   - made active profile choice explicit in the Profile view
   - added a top-of-view profile picker and clear active-profile summary
   - moved activation next to profile selection and left the form focused on editing/saving
+- next narrow Phase 6.8 profile control-row follow-up is now completed:
+  - narrowed the selected-profile control row
+  - added `Add New` as an explicit entry point for local unsaved profile creation
+  - kept save/activation behavior and active-profile summary semantics unchanged
+- next narrow Phase 6.8 Add New selector-visibility bug fix is now completed:
+  - kept the improved top profile-selection row visible during new-profile mode
+  - fixed the local UI-state bug that hid the selector row after `Add New`
+- next narrow Phase 6.8 profile repair pass is now completed:
+  - replaced the `User ID` `PasswordBox` with a direct `TextBox` binding
+  - removed the fragile `ProfileView.xaml.cs` sync path for `UserId`
+  - tightened profile action enablement so:
+    - `Save Profile` requires service connection plus valid editable fields
+    - `Set Active` is disabled in new-profile mode, offline mode, and already-active state
+  - added a small profile hint model:
+    - running tunnel -> stop the tunnel to edit
+    - offline service -> start the service to save changes
+- next narrow Phase 6.8 profile save/validation repair is now completed:
+  - added dirty-state tracking to the profile form
+  - `Save Profile` is now enabled only when:
+    - editing is enabled
+    - service is connected
+    - the form is valid
+    - and there are unsaved changes
+  - REALITY profiles now require:
+    - `RealityPublicKey`
+    - `RealityShortId`
+    before save can execute
+  - successful saves now reset the dirty baseline so the save action disables again until the next edit
 - next recommended Phase 6.9 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable
