@@ -240,5 +240,16 @@ Progress:
     - `RealityShortId`
     before save can execute
   - successful saves now reset the dirty baseline so the save action disables again until the next edit
+- next narrow Phase 6.8 profile delete flow is now completed:
+  - added `Delete Profile` for existing saved profiles only
+  - delete is disabled in `Add New` mode and when no existing selected profile is available
+  - delete now uses a lightweight confirmation step before removing a profile
+  - added the smallest clean backend path for `DeleteProfile` through IPC/service config persistence
+  - after successful delete, the selector and active-profile summary now stay consistent with the remaining profiles or fall back to a clean empty state
+- next narrow Phase 6.8 profile UI polish pass is now completed:
+  - REALITY-only fields are now shown only when `Security == "reality"`
+  - a small REALITY helper line explains that public key and short ID are required
+  - save-state presentation is now clearer in the UI while keeping the existing dirty/save logic intact
+  - the top profile selector row has been compacted slightly without changing the overall layout
 - next recommended Phase 6.9 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable

@@ -648,6 +648,81 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6.8 profile delete flow
+- Implemented in this step:
+  - added a narrow `Delete Profile` action for existing saved profiles
+  - added the smallest clean end-to-end delete path through the existing IPC/service configuration flow
+  - kept runtime/networking behavior unchanged
+- Exact files changed:
+  - `src/TunnelFlow.Core/IPC/Messages/DeleteProfileCommand.cs`
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Delete behavior:
+  - `Delete` is now available only when:
+    - editing is enabled
+    - service is connected
+    - the view is not in `Add New` mode
+    - an existing selected profile is present
+  - lightweight confirmation is shown before delete:
+    - `Delete profile "<name>"?`
+  - after successful delete:
+    - the profile is removed from the local selector list
+    - if the deleted profile was active, active profile falls forward to the first remaining profile, or `None selected` if none remain
+    - the form either selects a reasonable remaining profile or falls back to a clean empty state
+    - `SaveStatus` shows `Deleted ✓`
+- Backend path added:
+  - there was no existing profile-delete backend path in source
+  - added `DeleteProfile` IPC message + payload
+  - `PipeServer` now dispatches `DeleteProfile`
+  - `OrchestratorService` now handles delete by:
+    - removing the profile from config
+    - updating `ActiveProfileId` when the active profile is deleted
+    - saving the config
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 11
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.8 profile UI polish
+- Implemented in this step:
+  - kept the profile save/delete/validation behavior unchanged
+  - reduced profile-form confusion by only showing REALITY-only fields when `Security == "reality"`
+  - made save state presentation clearer using the existing `SaveStatus`
+  - slightly compacted the top profile selector row
+- Exact files changed:
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UI behavior:
+  - before:
+    - `Reality public key` and `Reality short ID` were always visible
+    - save state was shown as a plain single line, which made `Unsaved changes` feel easy to miss
+    - the top selector row was slightly taller than necessary
+  - after:
+    - REALITY-only fields are visible only when `Security == "reality"`
+    - a small helper line appears in REALITY mode:
+      - `REALITY requires both public key and short ID.`
+    - save state is shown in a small labeled status card:
+      - `Unsaved changes` uses a warm highlighted card
+      - `Saved ✓` uses a green success card
+      - `Deleted ✓` uses a subtle rose confirmation card
+    - the top selector row is slightly more compact via reduced padding on:
+      - profile selector
+      - `Set Active`
+      - `Add New`
+      - `Delete`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+
 ## TUN Phase 6.8 Add New selector-visibility bug fix
 - Implemented in this step:
   - fixed the bug where pressing `Add New` made the Profile screen fall back to the older simpler form layout by hiding the improved selector row
