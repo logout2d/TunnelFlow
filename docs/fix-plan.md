@@ -154,3 +154,7 @@ Progress:
     - active profile
     - proxy/direct/block rule counts
   - the UI step keeps runtime behavior unchanged and does not introduce new primary legacy-capture status panels
+- next narrow Phase 6 cleanup-preparation step is now completed:
+  - Sessions is now mode-aware in the UI
+  - in TUN mode it is shown as unavailable rather than as a normal active feature
+  - legacy mode keeps the existing Sessions grid behavior unchanged

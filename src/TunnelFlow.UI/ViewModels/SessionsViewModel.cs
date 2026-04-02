@@ -2,12 +2,22 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using TunnelFlow.Core.IPC.Responses;
 
 namespace TunnelFlow.UI.ViewModels;
 
 public partial class SessionsViewModel : ObservableObject
 {
+    [ObservableProperty] private bool _isAvailable = true;
+    [ObservableProperty] private string _unavailableMessage =
+        "Sessions are available only in legacy transparent-proxy mode.";
+
     public ObservableCollection<SessionItemViewModel> Sessions { get; } = [];
+
+    public void SetMode(TunnelStatusMode selectedMode)
+    {
+        IsAvailable = selectedMode == TunnelStatusMode.Legacy;
+    }
 
     public void AddSessionFromJson(JsonElement payload)
     {

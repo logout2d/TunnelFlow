@@ -93,6 +93,40 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6 Sessions mode-aware cleanup
+- Implemented in this step:
+  - the Sessions UI is now explicitly mode-aware
+  - in TUN mode, Sessions is no longer presented as a normal active feature
+  - legacy mode keeps the existing Sessions grid behavior unchanged
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/SessionsViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/Views/SessionsView.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UI behavior:
+  - TUN mode:
+    - the Sessions view replaces the grid with a simple message:
+      - title: `Sessions unavailable in TUN mode`
+      - body: `Sessions are available only in legacy transparent-proxy mode.`
+  - Legacy mode:
+    - the existing active-sessions grid remains visible and unchanged
+- View-model notes:
+  - `SessionsViewModel` now has:
+    - `IsAvailable`
+    - `UnavailableMessage`
+    - `SetMode(TunnelStatusMode selectedMode)`
+  - `MainViewModel` now propagates `selectedMode` into `SessionsViewModel`
+  - this keeps the cleanup narrowly UI-focused and avoids expanding legacy capture semantics elsewhere
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 2
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

@@ -95,6 +95,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedModeChanged(TunnelStatusMode value)
     {
+        Sessions.SetMode(value);
         OnPropertyChanged(nameof(ModeSummary));
         OnPropertyChanged(nameof(TunnelStatusSummary));
     }

@@ -37,6 +37,7 @@ public class MainViewModelTests
         Assert.Equal("Running", viewModel.EngineStatusSummary);
         Assert.Equal("Up", viewModel.TunnelStatusSummary);
         Assert.Equal("Proxy 2  Direct 1  Block 3", viewModel.RuleCountsSummary);
+        Assert.False(viewModel.Sessions.IsAvailable);
     }
 
     [Fact]
@@ -67,5 +68,6 @@ public class MainViewModelTests
         Assert.Equal("Not enabled", viewModel.TunnelStatusSummary);
         Assert.Equal("None selected", viewModel.ActiveProfileName);
         Assert.Equal("Proxy 0  Direct 0  Block 0", viewModel.RuleCountsSummary);
+        Assert.True(viewModel.Sessions.IsAvailable);
     }
 }
