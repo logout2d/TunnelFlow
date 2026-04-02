@@ -158,3 +158,16 @@ Progress:
   - Sessions is now mode-aware in the UI
   - in TUN mode it is shown as unavailable rather than as a normal active feature
   - legacy mode keeps the existing Sessions grid behavior unchanged
+- next narrow Phase 6 UI polish step is now completed:
+  - the sidebar connectivity indicator now explicitly describes service availability
+  - wording is now:
+    - `Service: On`
+    - `Service: Off`
+  - this keeps the existing layout and avoids broad UI redesign
+- next narrow Phase 6.2 step is now completed:
+  - the UI has an offline config fallback path
+  - when the service is unavailable, the UI now loads saved config locally from the persisted service config file instead of appearing empty
+  - runtime summaries remain explicitly unavailable while saved profiles/rules/active profile stay visible
+  - this keeps the product aligned with TUN-first / future TUN-only cleanup and avoids adding new legacy-capture-first status concepts
+- next recommended Phase 6.3 step:
+  - add narrow service start/restart controls to the UI so offline config visibility can be paired with an explicit way to bring the service back without leaving the app

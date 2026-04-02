@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TunnelFlow.Core.IPC.Messages;
 using TunnelFlow.Core.IPC.Responses;
+using TunnelFlow.Core.Models;
 using TunnelFlow.UI.Services;
 
 namespace TunnelFlow.UI.ViewModels;
@@ -12,6 +13,7 @@ namespace TunnelFlow.UI.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
+    private readonly LocalConfigSnapshotLoader _configLoader;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -32,14 +34,19 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _connectionStatus = "Connecting to service...";
     [ObservableProperty] private object _currentView;
 
+    public string ServiceConnectionSummary => IsConnected ? "Service: On" : "Service: Off";
+
     public string ModeSummary => SelectedMode == TunnelStatusMode.Tun ? "TUN" : "Legacy";
 
-    public string EngineStatusSummary => SingBoxRunning ? "Running" : SingBoxStatus;
+    public string EngineStatusSummary =>
+        !IsConnected ? "Unavailable" : (SingBoxRunning ? "Running" : SingBoxStatus);
 
     public string TunnelStatusSummary =>
-        SelectedMode == TunnelStatusMode.Tun
-            ? (TunnelInterfaceUp ? "Up" : "Down")
-            : "Not enabled";
+        !IsConnected
+            ? "Unavailable"
+            : SelectedMode == TunnelStatusMode.Tun
+                ? (TunnelInterfaceUp ? "Up" : "Down")
+                : "Not enabled";
 
     public string RuleCountsSummary =>
         $"Proxy {ProxyRuleCount}  Direct {DirectRuleCount}  Block {BlockRuleCount}";
@@ -59,9 +66,10 @@ public partial class MainViewModel : ObservableObject
     private RelayCommand _startCmd = null!;
     private RelayCommand _stopCmd = null!;
 
-    public MainViewModel(ServiceClient client)
+    public MainViewModel(ServiceClient client, LocalConfigSnapshotLoader? configLoader = null)
     {
         _client = client;
+        _configLoader = configLoader ?? new LocalConfigSnapshotLoader();
 
         AppRules = new AppRulesViewModel(client);
         Profile = new ProfileViewModel(client);
@@ -85,6 +93,9 @@ public partial class MainViewModel : ObservableObject
     {
         _startCmd.NotifyCanExecuteChanged();
         _stopCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ServiceConnectionSummary));
+        OnPropertyChanged(nameof(EngineStatusSummary));
+        OnPropertyChanged(nameof(TunnelStatusSummary));
     }
 
     partial void OnCaptureRunningChanged(bool value)
@@ -127,31 +138,19 @@ public partial class MainViewModel : ObservableObject
 
         // ConnectAsync blocks until first connection (runs on background thread via Task.Run).
         // OnClientConnected fires during ConnectAsync and calls LoadStateAsync — do NOT call it here.
+        await LoadOfflineConfigAsync();
         await _client.ConnectAsync(CancellationToken.None);
     }
 
     private void OnClientConnected(object? sender, EventArgs e)
     {
         // Runs on the pipe background thread — marshal ALL property sets to the UI thread.
-        Application.Current.Dispatcher.InvokeAsync(async () =>
-        {
-            IsConnected = true;
-            ConnectionStatus = "Connected";
-            await LoadStateAsync();
-        });
+        _ = HandleConnectedAsync();
     }
 
     private void OnClientDisconnected(object? sender, EventArgs e)
     {
-        Application.Current.Dispatcher.InvokeAsync(() =>
-        {
-            IsConnected = false;
-            CaptureRunning = false;
-            SingBoxRunning = false;
-            TunnelInterfaceUp = false;
-            SingBoxStatus = "Stopped";
-            ConnectionStatus = "Reconnecting...";
-        });
+        _ = HandleDisconnectedAsync();
     }
 
     private void OnEventReceived(object? sender, EventMessage evt)
@@ -210,7 +209,7 @@ public partial class MainViewModel : ObservableObject
             var state = JsonSerializer.Deserialize<StatePayload>(result.Value, _jsonOptions);
             if (state is null) return;
 
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await DispatchAsync(() =>
             {
                 ApplyStatePayload(state);
                 AppRules.LoadRules(state.Rules);
@@ -221,8 +220,14 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-                ConnectionStatus = $"Error: {ex.Message}");
+            await DispatchAsync(() =>
+            {
+                IsConnected = false;
+                ConnectionStatus = $"Error: {ex.Message}";
+                ApplyServiceUnavailableRuntimeState();
+            });
+
+            await LoadOfflineConfigAsync();
         }
     }
 
@@ -280,5 +285,91 @@ public partial class MainViewModel : ObservableObject
         ProxyRuleCount = status.ProxyRuleCount;
         DirectRuleCount = status.DirectRuleCount;
         BlockRuleCount = status.BlockRuleCount;
+    }
+
+    internal void ApplyOfflineConfigSnapshot(LocalConfigSnapshot snapshot)
+    {
+        if (IsConnected)
+        {
+            return;
+        }
+
+        AppRules.LoadRules(snapshot.Rules);
+        Profile.LoadProfile(snapshot.Profiles, snapshot.ActiveProfileId);
+
+        SelectedMode = snapshot.UseTunMode ? TunnelStatusMode.Tun : TunnelStatusMode.Legacy;
+        ActiveProfileName = ResolveActiveProfileName(snapshot.Profiles, snapshot.ActiveProfileId);
+
+        var enabledRules = snapshot.Rules.Where(rule => rule.IsEnabled).ToList();
+        ProxyRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Proxy);
+        DirectRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Direct);
+        BlockRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Block);
+
+        ApplyServiceUnavailableRuntimeState();
+    }
+
+    private async Task HandleConnectedAsync()
+    {
+        await DispatchAsync(() =>
+        {
+            IsConnected = true;
+            ConnectionStatus = "Connected";
+        });
+
+        await LoadStateAsync();
+    }
+
+    private async Task HandleDisconnectedAsync()
+    {
+        await DispatchAsync(() =>
+        {
+            IsConnected = false;
+            ConnectionStatus = "Reconnecting...";
+            ApplyServiceUnavailableRuntimeState();
+        });
+
+        await LoadOfflineConfigAsync();
+    }
+
+    private async Task LoadOfflineConfigAsync()
+    {
+        try
+        {
+            var snapshot = await _configLoader.LoadAsync(CancellationToken.None);
+            await DispatchAsync(() => ApplyOfflineConfigSnapshot(snapshot));
+        }
+        catch (Exception ex)
+        {
+            await DispatchAsync(() =>
+                Log.AddLine("ui", "Warning", $"Offline config load failed: {ex.Message}"));
+        }
+    }
+
+    private void ApplyServiceUnavailableRuntimeState()
+    {
+        CaptureRunning = false;
+        SingBoxRunning = false;
+        TunnelInterfaceUp = false;
+        SingBoxStatus = "Unavailable";
+    }
+
+    private static string ResolveActiveProfileName(IReadOnlyList<VlessProfile> profiles, Guid? activeProfileId)
+    {
+        var active = profiles.FirstOrDefault(profile => profile.Id == activeProfileId)
+                     ?? profiles.FirstOrDefault();
+
+        return string.IsNullOrWhiteSpace(active?.Name) ? "None selected" : active.Name;
+    }
+
+    private static Task DispatchAsync(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        return dispatcher.InvokeAsync(action).Task;
     }
 }

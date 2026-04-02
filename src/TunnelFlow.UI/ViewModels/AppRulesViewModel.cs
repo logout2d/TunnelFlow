@@ -32,7 +32,7 @@ public partial class AppRulesViewModel : ObservableObject
 
     public void LoadRules(IReadOnlyList<AppRule> rules)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        void ApplyRules()
         {
             foreach (var item in Rules)
                 item.PropertyChanged -= OnItemPropertyChanged;
@@ -45,7 +45,16 @@ public partial class AppRulesViewModel : ObservableObject
                 item.PropertyChanged += OnItemPropertyChanged;
                 Rules.Add(item);
             }
-        });
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            ApplyRules();
+            return;
+        }
+
+        dispatcher.Invoke(ApplyRules);
     }
 
     private async void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)

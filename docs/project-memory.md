@@ -127,6 +127,88 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6 service-indicator wording polish
+- Implemented in this step:
+  - the top-left connectivity indicator now uses explicit service wording instead of the vague connection text
+  - this is UI polish only; runtime/networking behavior and service contracts remain unchanged
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Wording change:
+  - before:
+    - `Connected`
+    - `Reconnecting...`
+    - `Connecting to service...`
+    - all under a generic top-left connection label
+  - after:
+    - `Service: On`
+    - `Service: Off`
+  - this keeps the existing indicator structure but makes the meaning explicit
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 2
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.2 offline config fallback
+- Implemented in this step:
+  - the UI now separates persistent saved configuration from live runtime state
+  - when the service is unavailable, the UI loads the saved config locally instead of looking like a fresh empty app
+  - service/IPC remains the primary source of truth when connected; the offline path is only a fallback
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/LocalConfigSnapshotLoader.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/AppRulesViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `src/TunnelFlow.Tests/UI/LocalConfigSnapshotLoaderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Local config source/path used by the UI:
+  - `CommonApplicationData\\TunnelFlow\\config.json`
+  - concretely:
+    - `Environment.SpecialFolder.CommonApplicationData`
+    - then `TunnelFlow\\config.json`
+- Offline behavior:
+  - before:
+    - if the service was unavailable, the UI lost access to `GetState`
+    - profiles and app rules were not loaded
+    - the app looked effectively empty even though config had been saved previously
+  - after:
+    - the UI loads the persisted config file locally on startup before IPC connects
+    - the UI reloads the same local snapshot again if the service disconnects
+    - profiles remain visible
+    - app rules remain visible
+    - active profile remains visible
+    - saved TUN mode still appears in the mode summary when offline
+    - runtime summaries now stay explicit:
+      - `Service: Off`
+      - engine summary: `Unavailable`
+      - tunnel summary: `Unavailable`
+- Compatibility notes:
+  - the local loader reuses the existing persisted config shape and decrypts `encryptedUserId` with the same machine-scope DPAPI approach as the service
+  - `AppRulesViewModel.LoadRules` now works safely without an active WPF `Application` instance, which keeps focused tests deterministic
+  - `ProfileViewModel.LoadProfile` now clears the visible profile when no saved profile exists, preventing stale values after fallback
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 3
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+- Open question left intentionally for the next phase:
+  - offline config is now visible, but profile/rule edits still depend on the service path
+  - explicit local start/restart service controls remain the next UI/service-management step rather than part of this fallback patch
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

@@ -57,7 +57,11 @@ public partial class ProfileViewModel : ObservableObject
         var active = profiles.FirstOrDefault(p => p.Id == activeProfileId)
                      ?? profiles.FirstOrDefault();
 
-        if (active is null) return;
+        if (active is null)
+        {
+            ClearProfile();
+            return;
+        }
 
         Id = active.Id;
         Name = active.Name;
@@ -72,6 +76,24 @@ public partial class ProfileViewModel : ObservableObject
         RealityPublicKey = active.Tls?.RealityPublicKey ?? "";
         RealityShortId = active.Tls?.RealityShortId ?? "";
         IsActive = active.IsActive;
+    }
+
+    private void ClearProfile()
+    {
+        Id = Guid.NewGuid();
+        Name = string.Empty;
+        ServerAddress = string.Empty;
+        ServerPort = 443;
+        UserId = string.Empty;
+        Flow = string.Empty;
+        Network = "tcp";
+        Security = "tls";
+        Sni = string.Empty;
+        Fingerprint = "chrome";
+        RealityPublicKey = string.Empty;
+        RealityShortId = string.Empty;
+        IsActive = false;
+        SaveStatus = string.Empty;
     }
 
     private async Task SaveAsync()
