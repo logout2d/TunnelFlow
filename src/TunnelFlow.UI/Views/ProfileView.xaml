@@ -35,8 +35,8 @@
                            Foreground="#475569"
                            FontWeight="Medium"/>
 
-                <DockPanel LastChildFill="False">
-                    <ComboBox Width="280"
+                <StackPanel Orientation="Horizontal">
+                    <ComboBox Width="220"
                               ItemsSource="{Binding AvailableProfiles}"
                               DisplayMemberPath="DisplayName"
                               SelectedItem="{Binding SelectedProfile}"
@@ -48,12 +48,21 @@
                             Command="{Binding ActivateCommand}"
                             IsEnabled="{Binding IsEditingEnabled}"
                             Margin="12,0,0,0"
-                            Padding="16,8"
+                            Padding="12,6"
                             Background="#22C55E"
                             Foreground="White"
                             BorderThickness="0"
                             Cursor="Hand"/>
-                </DockPanel>
+
+                    <Button Content="Add New"
+                            Command="{Binding AddNewCommand}"
+                            Margin="8,0,0,0"
+                            Padding="12,6"
+                            Background="#F1F5F9"
+                            Foreground="#475569"
+                            BorderBrush="#CBD5E1"
+                            Cursor="Hand"/>
+                </StackPanel>
             </StackPanel>
 
             <TextBlock Text="{Binding EditHintText}"
@@ -116,9 +125,8 @@
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="User ID (UUID)" VerticalAlignment="Center"
                            Margin="0,0,12,12" Foreground="#475569" FontWeight="Medium" TextWrapping="Wrap"/>
                 <Grid Grid.Row="3" Grid.Column="1" Margin="0,0,0,12">
-                    <PasswordBox x:Name="UserIdBox"
-                                 PasswordChanged="UserIdBox_PasswordChanged"
-                                 Padding="8,5" BorderBrush="#CBD5E1"/>
+                    <TextBox Text="{Binding UserId, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="8,5" BorderBrush="#CBD5E1"/>
                     <TextBlock Text="e.g. 110263b3-0a2c-4c95-b831-..." IsHitTestVisible="False"
                                Foreground="#94A3B8" FontSize="11" Padding="10,7"
                                VerticalAlignment="Center">

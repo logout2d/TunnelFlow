@@ -121,6 +121,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ServiceActionLabel));
         OnPropertyChanged(nameof(EngineStatusSummary));
         OnPropertyChanged(nameof(TunnelStatusSummary));
+        UpdateConfigEditingState();
     }
 
     partial void OnCaptureRunningChanged(bool value)
@@ -499,6 +500,7 @@ public partial class MainViewModel : ObservableObject
         var isTunnelRunning = CaptureRunning || SingBoxRunning;
         AppRules.IsEditingEnabled = !isTunnelRunning;
         Profile.IsEditingEnabled = !isTunnelRunning;
+        Profile.IsServiceConnected = IsConnected;
     }
 
     private static Task DispatchAsync(Action action)
