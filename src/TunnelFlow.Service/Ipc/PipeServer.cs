@@ -49,6 +49,7 @@ public sealed class PipeServer
     public Func<Guid, Task>? DeleteRuleHandler { get; set; }
     public Func<VlessProfile, Task>? UpsertProfileHandler { get; set; }
     public Func<Guid, Task>? ActivateProfileHandler { get; set; }
+    public Func<Guid, Task>? DeleteProfileHandler { get; set; }
     public Func<Task>? StartCaptureHandler { get; set; }
     public Func<Task>? StopCaptureHandler { get; set; }
     public Func<Task<IReadOnlyList<SessionEntry>>>? GetSessionsHandler { get; set; }
@@ -306,6 +307,16 @@ public sealed class PipeServer
                 var payload = JsonSerializer.Deserialize<ActivateProfilePayload>(cmd.Payload.Value, _serializerOptions);
                 if (payload is null) return MakeError(cmd.Id, "BAD_PAYLOAD", "Invalid payload");
                 await ActivateProfileHandler(payload.ProfileId);
+                return MakeOk(cmd.Id, null);
+            }
+
+            case "DeleteProfile":
+            {
+                if (DeleteProfileHandler is null) return MakeError(cmd.Id, "NOT_READY", "Service not ready");
+                if (cmd.Payload is null) return MakeError(cmd.Id, "BAD_PAYLOAD", "Payload required");
+                var payload = JsonSerializer.Deserialize<DeleteProfilePayload>(cmd.Payload.Value, _serializerOptions);
+                if (payload is null) return MakeError(cmd.Id, "BAD_PAYLOAD", "Invalid payload");
+                await DeleteProfileHandler(payload.ProfileId);
                 return MakeOk(cmd.Id, null);
             }
 

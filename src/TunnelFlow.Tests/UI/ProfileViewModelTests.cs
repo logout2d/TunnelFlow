@@ -6,6 +6,12 @@ namespace TunnelFlow.Tests.UI;
 
 public class ProfileViewModelTests
 {
+    private static Task<System.Text.Json.JsonElement?> SuccessfulCommandAsync(
+        string type,
+        object? payload,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<System.Text.Json.JsonElement?>(null);
+
     [Fact]
     public void LoadProfile_PopulatesChoices_AndSelectsActiveProfile()
     {
@@ -303,5 +309,148 @@ public class ProfileViewModelTests
 
         viewModel.RealityShortId = "short-id";
         Assert.True(viewModel.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void DeleteCommand_RequiresConnectedExistingSelectedProfile_AndIsDisabledInNewMode()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new ProfileViewModel(client)
+        {
+            IsServiceConnected = true
+        };
+        var primaryId = Guid.NewGuid();
+        var backupId = Guid.NewGuid();
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = primaryId,
+                Name = "Primary",
+                ServerAddress = "primary.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                IsActive = true
+            },
+            new VlessProfile
+            {
+                Id = backupId,
+                Name = "Backup",
+                ServerAddress = "backup.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "ws",
+                Security = "reality"
+            }
+        ], primaryId);
+
+        Assert.True(viewModel.DeleteCommand.CanExecute(null));
+
+        viewModel.IsServiceConnected = false;
+        Assert.False(viewModel.DeleteCommand.CanExecute(null));
+
+        viewModel.IsServiceConnected = true;
+        viewModel.AddNewCommand.Execute(null);
+        Assert.False(viewModel.DeleteCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task DeleteSelectedProfileAsync_RemovesProfile_AndSelectsRemainingActiveProfile()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var viewModel = new ProfileViewModel(
+            client,
+            confirmDelete: (_, _) => true,
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true
+        };
+        var primaryId = Guid.NewGuid();
+        var backupId = Guid.NewGuid();
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = primaryId,
+                Name = "Primary",
+                ServerAddress = "primary.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                IsActive = true
+            },
+            new VlessProfile
+            {
+                Id = backupId,
+                Name = "Backup",
+                ServerAddress = "backup.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "ws",
+                Security = "reality"
+            }
+        ], primaryId);
+
+        viewModel.SelectedProfile = viewModel.AvailableProfiles.Single(option => option.Id == backupId);
+
+        await viewModel.DeleteSelectedProfileAsync();
+
+        Assert.Contains("DeleteProfile", commands);
+        Assert.Single(viewModel.AvailableProfiles);
+        Assert.Equal(primaryId, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Primary", viewModel.Name);
+        Assert.Equal("Active profile: Primary", viewModel.ActiveProfileSummary);
+        Assert.Equal("Deleted \u2713", viewModel.SaveStatus);
+        Assert.False(viewModel.HasUnsavedChanges);
+        Assert.True(viewModel.DeleteCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task DeleteSelectedProfileAsync_WhenDeletingLastProfile_ClearsToEmptyState()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new ProfileViewModel(
+            client,
+            confirmDelete: (_, _) => true,
+            sendCommandAsync: SuccessfulCommandAsync)
+        {
+            IsServiceConnected = true
+        };
+        var primaryId = Guid.NewGuid();
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = primaryId,
+                Name = "Primary",
+                ServerAddress = "primary.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                IsActive = true
+            }
+        ], primaryId);
+
+        await viewModel.DeleteSelectedProfileAsync();
+
+        Assert.False(viewModel.ShowProfileSelector);
+        Assert.Null(viewModel.SelectedProfile);
+        Assert.Equal("None selected", viewModel.ActiveProfileDisplayName);
+        Assert.Equal(string.Empty, viewModel.Name);
+        Assert.Equal(string.Empty, viewModel.ServerAddress);
+        Assert.Equal(string.Empty, viewModel.UserId);
+        Assert.False(viewModel.DeleteCommand.CanExecute(null));
     }
 }

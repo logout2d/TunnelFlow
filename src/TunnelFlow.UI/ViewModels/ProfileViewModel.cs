@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Text.Json;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,6 +11,8 @@ namespace TunnelFlow.UI.ViewModels;
 public partial class ProfileViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
+    private readonly Func<string, string, bool> _confirmDelete;
+    private readonly Func<string, object?, CancellationToken, Task<JsonElement?>> _sendCommandAsync;
     private readonly ObservableCollection<ProfileChoiceItem> _availableProfiles = [];
     private readonly List<VlessProfile> _profiles = [];
     private bool _suppressSelectionChange;
@@ -41,6 +44,7 @@ public partial class ProfileViewModel : ObservableObject
     public IRelayCommand SaveCommand { get; }
     public IRelayCommand ActivateCommand { get; }
     public IRelayCommand AddNewCommand { get; }
+    public IRelayCommand DeleteCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled || !IsServiceConnected;
     public string EditHintText => !IsEditingEnabled
         ? "Stop the tunnel to edit profile settings."
@@ -66,10 +70,17 @@ public partial class ProfileViewModel : ObservableObject
     private readonly RelayCommand _saveCmd;
     private readonly RelayCommand _activateCmd;
     private readonly RelayCommand _addNewCmd;
+    private readonly RelayCommand _deleteCmd;
 
-    public ProfileViewModel(ServiceClient client)
+    public ProfileViewModel(
+        ServiceClient client,
+        Func<string, string, bool>? confirmDelete = null,
+        Func<string, object?, CancellationToken, Task<JsonElement?>>? sendCommandAsync = null)
     {
         _client = client;
+        _confirmDelete = confirmDelete ?? ((message, title) =>
+            MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes);
+        _sendCommandAsync = sendCommandAsync ?? client.SendCommandAsync;
         AvailableProfiles = new ReadOnlyObservableCollection<ProfileChoiceItem>(_availableProfiles);
 
         _saveCmd = new RelayCommand(
@@ -91,6 +102,10 @@ public partial class ProfileViewModel : ObservableObject
             BeginCreateNewProfile,
             () => IsEditingEnabled);
         AddNewCommand = _addNewCmd;
+        _deleteCmd = new RelayCommand(
+            async () => await DeleteSelectedProfileAsync(),
+            CanDeleteSelectedProfile);
+        DeleteCommand = _deleteCmd;
     }
 
     partial void OnNameChanged(string value) => HandleEditableFieldChanged();
@@ -115,6 +130,7 @@ public partial class ProfileViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowProfileSelector));
         _activateCmd.NotifyCanExecuteChanged();
+        _deleteCmd.NotifyCanExecuteChanged();
     }
     partial void OnIsEditingEnabledChanged(bool value)
     {
@@ -125,6 +141,7 @@ public partial class ProfileViewModel : ObservableObject
     partial void OnSelectedProfileChanged(ProfileChoiceItem? value)
     {
         _activateCmd.NotifyCanExecuteChanged();
+        _deleteCmd.NotifyCanExecuteChanged();
 
         if (_suppressSelectionChange || value is null)
         {
@@ -204,7 +221,7 @@ public partial class ProfileViewModel : ObservableObject
         var profile = BuildProfile();
         try
         {
-            await _client.SendCommandAsync("UpsertProfile", profile, CancellationToken.None);
+            await _sendCommandAsync("UpsertProfile", profile, CancellationToken.None);
             UpsertProfile(profile);
             RefreshProfileChoices(profile.Id);
             IsCreatingNewProfile = false;
@@ -224,7 +241,7 @@ public partial class ProfileViewModel : ObservableObject
 
         try
         {
-            await _client.SendCommandAsync("ActivateProfile", new { profileId = Id }, CancellationToken.None);
+            await _sendCommandAsync("ActivateProfile", new { profileId = Id }, CancellationToken.None);
             _activeProfileId = Id;
             for (var i = 0; i < _profiles.Count; i++)
             {
@@ -234,6 +251,43 @@ public partial class ProfileViewModel : ObservableObject
             RefreshProfileChoices(Id);
             IsActive = true;
             SaveStatus = "Activated \u2713";
+        }
+        catch (Exception ex)
+        {
+            SaveStatus = $"Error: {ex.Message}";
+        }
+    }
+
+    internal async Task DeleteSelectedProfileAsync()
+    {
+        if (!CanDeleteSelectedProfile())
+        {
+            return;
+        }
+
+        var selectedProfile = SelectedProfile;
+        if (selectedProfile is null)
+        {
+            return;
+        }
+
+        var profile = _profiles.FirstOrDefault(p => p.Id == selectedProfile.Id);
+        if (profile is null)
+        {
+            return;
+        }
+
+        var displayName = ResolveProfileName(profile);
+        if (!_confirmDelete($"Delete profile \"{displayName}\"?", "Delete Profile"))
+        {
+            return;
+        }
+
+        try
+        {
+            await _sendCommandAsync("DeleteProfile", new { profileId = profile.Id }, CancellationToken.None);
+            RemoveProfile(profile.Id);
+            SaveStatus = "Deleted \u2713";
         }
         catch (Exception ex)
         {
@@ -379,6 +433,7 @@ public partial class ProfileViewModel : ObservableObject
         _saveCmd.NotifyCanExecuteChanged();
         _activateCmd.NotifyCanExecuteChanged();
         _addNewCmd.NotifyCanExecuteChanged();
+        _deleteCmd.NotifyCanExecuteChanged();
     }
 
     private void SetSavedFormState(ProfileFormState savedFormState, bool clearStatus)
@@ -443,6 +498,36 @@ public partial class ProfileViewModel : ObservableObject
             Fingerprint.Trim(),
             RealityPublicKey.Trim(),
             RealityShortId.Trim());
+
+    private bool CanDeleteSelectedProfile() =>
+        IsEditingEnabled &&
+        IsServiceConnected &&
+        !IsCreatingNewProfile &&
+        SelectedProfile is not null &&
+        _profiles.Any(profile => profile.Id == SelectedProfile.Id);
+
+    private void RemoveProfile(Guid profileId)
+    {
+        _profiles.RemoveAll(profile => profile.Id == profileId);
+
+        if (_activeProfileId == profileId)
+        {
+            _activeProfileId = _profiles.FirstOrDefault()?.Id;
+        }
+
+        var nextProfile = _profiles.FirstOrDefault(profile => profile.Id == _activeProfileId)
+                          ?? _profiles.FirstOrDefault();
+
+        if (nextProfile is null)
+        {
+            ClearProfile();
+            return;
+        }
+
+        RefreshProfileChoices(nextProfile.Id);
+        IsCreatingNewProfile = false;
+        ApplyProfile(nextProfile);
+    }
 }
 
 public sealed record ProfileChoiceItem(Guid Id, string DisplayName);

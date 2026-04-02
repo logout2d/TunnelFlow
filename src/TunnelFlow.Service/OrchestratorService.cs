@@ -455,6 +455,20 @@ public sealed class OrchestratorService : BackgroundService
             }
         };
 
+        _pipeServer.DeleteProfileHandler = async profileId =>
+        {
+            var removed = _config.Profiles.RemoveAll(p => p.Id == profileId);
+            if (removed == 0)
+                throw new InvalidOperationException($"Profile {profileId} not found");
+
+            if (_config.ActiveProfileId == profileId)
+            {
+                _config.ActiveProfileId = _config.Profiles.FirstOrDefault()?.Id;
+            }
+
+            await _configStore.SaveAsync(_config);
+        };
+
         _pipeServer.StartCaptureHandler = () => StartCaptureAsync();
         _pipeServer.StopCaptureHandler = () => StopCaptureAsync();
 
