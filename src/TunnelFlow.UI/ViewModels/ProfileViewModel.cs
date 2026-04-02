@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TunnelFlow.Core.Models;
@@ -9,8 +10,13 @@ namespace TunnelFlow.UI.ViewModels;
 public partial class ProfileViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
+    private readonly ObservableCollection<ProfileChoiceItem> _availableProfiles = [];
+    private readonly List<VlessProfile> _profiles = [];
+    private bool _suppressSelectionChange;
+    private Guid? _activeProfileId;
 
     [ObservableProperty] private bool _isEditingEnabled = true;
+    [ObservableProperty] private ProfileChoiceItem? _selectedProfile;
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private string _serverAddress = "";
     [ObservableProperty] private int _serverPort = 443;
@@ -31,6 +37,12 @@ public partial class ProfileViewModel : ObservableObject
     public IRelayCommand ActivateCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled;
     public string EditHintText => "Stop the tunnel to edit profile settings.";
+    public ReadOnlyObservableCollection<ProfileChoiceItem> AvailableProfiles { get; }
+    public bool ShowProfileSelector => AvailableProfiles.Count > 0;
+    public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
+        ? "None selected"
+        : GetActiveProfile()!.Name;
+    public string ActiveProfileSummary => $"Active profile: {ActiveProfileDisplayName}";
 
     public static IReadOnlyList<string> Networks { get; } = ["tcp", "ws", "grpc"];
     public static IReadOnlyList<string> Securities { get; } = ["tls", "reality", "none"];
@@ -42,6 +54,7 @@ public partial class ProfileViewModel : ObservableObject
     public ProfileViewModel(ServiceClient client)
     {
         _client = client;
+        AvailableProfiles = new ReadOnlyObservableCollection<ProfileChoiceItem>(_availableProfiles);
 
         _saveCmd = new RelayCommand(
             async () => await SaveAsync(),
@@ -52,44 +65,56 @@ public partial class ProfileViewModel : ObservableObject
         SaveCommand = _saveCmd;
         _activateCmd = new RelayCommand(
             async () => await ActivateAsync(),
-            () => IsEditingEnabled);
+            () => IsEditingEnabled && !IsActive);
         ActivateCommand = _activateCmd;
     }
 
     partial void OnServerAddressChanged(string value) => _saveCmd.NotifyCanExecuteChanged();
     partial void OnUserIdChanged(string value) => _saveCmd.NotifyCanExecuteChanged();
     partial void OnServerPortChanged(int value) => _saveCmd.NotifyCanExecuteChanged();
+    partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
     partial void OnIsEditingEnabledChanged(bool value)
     {
         _saveCmd.NotifyCanExecuteChanged();
         _activateCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ShowEditHint));
     }
+    partial void OnSelectedProfileChanged(ProfileChoiceItem? value)
+    {
+        if (_suppressSelectionChange || value is null)
+        {
+            return;
+        }
+
+        var profile = _profiles.FirstOrDefault(p => p.Id == value.Id);
+        if (profile is null)
+        {
+            return;
+        }
+
+        ApplyProfile(profile);
+    }
 
     public void LoadProfile(IReadOnlyList<VlessProfile> profiles, Guid? activeProfileId)
     {
-        var active = profiles.FirstOrDefault(p => p.Id == activeProfileId)
-                     ?? profiles.FirstOrDefault();
+        _profiles.Clear();
+        _profiles.AddRange(profiles);
+        _activeProfileId = activeProfileId
+            ?? _profiles.FirstOrDefault(p => p.IsActive)?.Id
+            ?? _profiles.FirstOrDefault()?.Id;
 
-        if (active is null)
+        RefreshProfileChoices(_activeProfileId);
+
+        var selected = _profiles.FirstOrDefault(p => p.Id == _activeProfileId)
+                       ?? _profiles.FirstOrDefault();
+
+        if (selected is null)
         {
             ClearProfile();
             return;
         }
 
-        Id = active.Id;
-        Name = active.Name;
-        ServerAddress = active.ServerAddress;
-        ServerPort = active.ServerPort;
-        UserId = active.UserId;
-        Flow = active.Flow;
-        Network = active.Network;
-        Security = active.Security;
-        Sni = active.Tls?.Sni ?? "";
-        Fingerprint = active.Tls?.Fingerprint ?? "chrome";
-        RealityPublicKey = active.Tls?.RealityPublicKey ?? "";
-        RealityShortId = active.Tls?.RealityShortId ?? "";
-        IsActive = active.IsActive;
+        ApplyProfile(selected);
     }
 
     private void ClearProfile()
@@ -108,6 +133,14 @@ public partial class ProfileViewModel : ObservableObject
         RealityShortId = string.Empty;
         IsActive = false;
         SaveStatus = string.Empty;
+        _activeProfileId = null;
+        _availableProfiles.Clear();
+        _suppressSelectionChange = true;
+        SelectedProfile = null;
+        _suppressSelectionChange = false;
+        OnPropertyChanged(nameof(ShowProfileSelector));
+        OnPropertyChanged(nameof(ActiveProfileDisplayName));
+        OnPropertyChanged(nameof(ActiveProfileSummary));
     }
 
     private async Task SaveAsync()
@@ -116,6 +149,8 @@ public partial class ProfileViewModel : ObservableObject
         try
         {
             await _client.SendCommandAsync("UpsertProfile", profile, CancellationToken.None);
+            UpsertProfile(profile);
+            RefreshProfileChoices(profile.Id);
             SaveStatus = "Saved \u2713";
         }
         catch (Exception ex)
@@ -132,6 +167,13 @@ public partial class ProfileViewModel : ObservableObject
         try
         {
             await _client.SendCommandAsync("ActivateProfile", new { profileId = Id }, CancellationToken.None);
+            _activeProfileId = Id;
+            for (var i = 0; i < _profiles.Count; i++)
+            {
+                _profiles[i] = _profiles[i] with { IsActive = _profiles[i].Id == Id };
+            }
+
+            RefreshProfileChoices(Id);
             IsActive = true;
             SaveStatus = "Activated \u2713";
         }
@@ -178,4 +220,63 @@ public partial class ProfileViewModel : ObservableObject
                     }
         };
     }
+
+    private void ApplyProfile(VlessProfile profile)
+    {
+        Id = profile.Id;
+        Name = profile.Name;
+        ServerAddress = profile.ServerAddress;
+        ServerPort = profile.ServerPort;
+        UserId = profile.UserId;
+        Flow = profile.Flow;
+        Network = profile.Network;
+        Security = profile.Security;
+        Sni = profile.Tls?.Sni ?? "";
+        Fingerprint = profile.Tls?.Fingerprint ?? "chrome";
+        RealityPublicKey = profile.Tls?.RealityPublicKey ?? "";
+        RealityShortId = profile.Tls?.RealityShortId ?? "";
+        IsActive = profile.Id == _activeProfileId;
+    }
+
+    private void RefreshProfileChoices(Guid? selectedProfileId)
+    {
+        _availableProfiles.Clear();
+        foreach (var profile in _profiles)
+        {
+            _availableProfiles.Add(new ProfileChoiceItem(
+                profile.Id,
+                profile.Id == _activeProfileId
+                    ? $"{ResolveProfileName(profile)} (Active)"
+                    : ResolveProfileName(profile)));
+        }
+
+        _suppressSelectionChange = true;
+        SelectedProfile = _availableProfiles.FirstOrDefault(p => p.Id == selectedProfileId)
+            ?? _availableProfiles.FirstOrDefault();
+        _suppressSelectionChange = false;
+
+        OnPropertyChanged(nameof(ShowProfileSelector));
+        OnPropertyChanged(nameof(ActiveProfileDisplayName));
+        OnPropertyChanged(nameof(ActiveProfileSummary));
+    }
+
+    private void UpsertProfile(VlessProfile profile)
+    {
+        var index = _profiles.FindIndex(existing => existing.Id == profile.Id);
+        if (index >= 0)
+        {
+            _profiles[index] = profile;
+            return;
+        }
+
+        _profiles.Add(profile);
+    }
+
+    private VlessProfile? GetActiveProfile() =>
+        _profiles.FirstOrDefault(profile => profile.Id == _activeProfileId);
+
+    private static string ResolveProfileName(VlessProfile profile) =>
+        string.IsNullOrWhiteSpace(profile.Name) ? "Unnamed profile" : profile.Name;
 }
+
+public sealed record ProfileChoiceItem(Guid Id, string DisplayName);

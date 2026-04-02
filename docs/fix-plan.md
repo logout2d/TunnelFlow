@@ -208,5 +208,9 @@ Progress:
 - next narrow Phase 6.7 Log cleanup step is now completed:
   - removed the Clear button from the Log view to reduce unnecessary UI noise
   - kept the rest of the Log layout unchanged
-- next recommended Phase 6.8 step:
+- next narrow Phase 6.8 profile selection UX cleanup is now completed:
+  - made active profile choice explicit in the Profile view
+  - added a top-of-view profile picker and clear active-profile summary
+  - moved activation next to profile selection and left the form focused on editing/saving
+- next recommended Phase 6.9 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable

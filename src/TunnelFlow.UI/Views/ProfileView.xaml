@@ -8,23 +8,53 @@
         <StackPanel Margin="24,20,24,20" MaxWidth="520">
 
             <!-- Header -->
-            <DockPanel Margin="0,0,0,16">
+            <StackPanel Margin="0,0,0,16">
                 <TextBlock Text="VLESS Profile" FontSize="18" FontWeight="SemiBold"
-                           Foreground="#1E293B" VerticalAlignment="Center"/>
-                <TextBlock Text=" (Active)" Foreground="#22C55E" FontWeight="Medium"
-                           VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </DockPanel>
+                           Foreground="#1E293B"/>
+                <TextBlock Text="{Binding ActiveProfileSummary}"
+                           Margin="0,6,0,0"
+                           Foreground="#22C55E"
+                           FontWeight="Medium"/>
+            </StackPanel>
+
+            <!-- Profile selection -->
+            <StackPanel Margin="0,0,0,16">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowProfileSelector}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+
+                <TextBlock Text="Selected profile"
+                           Margin="0,0,0,6"
+                           Foreground="#475569"
+                           FontWeight="Medium"/>
+
+                <DockPanel LastChildFill="False">
+                    <ComboBox Width="280"
+                              ItemsSource="{Binding AvailableProfiles}"
+                              DisplayMemberPath="DisplayName"
+                              SelectedItem="{Binding SelectedProfile}"
+                              IsEnabled="{Binding IsEditingEnabled}"
+                              Padding="8,5"
+                              BorderBrush="#CBD5E1"/>
+
+                    <Button Content="Set Active"
+                            Command="{Binding ActivateCommand}"
+                            IsEnabled="{Binding IsEditingEnabled}"
+                            Margin="12,0,0,0"
+                            Padding="16,8"
+                            Background="#22C55E"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand"/>
+                </DockPanel>
+            </StackPanel>
 
             <TextBlock Text="{Binding EditHintText}"
                        Margin="0,0,0,16"
@@ -162,10 +192,6 @@
             <StackPanel Orientation="Horizontal" Margin="0,20,0,0" IsEnabled="{Binding IsEditingEnabled}">
                 <Button Content="Save Profile" Command="{Binding SaveCommand}"
                         Padding="16,8" Background="#3B82F6" Foreground="White"
-                        BorderThickness="0" Cursor="Hand"/>
-                <Button Content="Set as Active" Command="{Binding ActivateCommand}"
-                        Margin="8,0,0,0" Padding="16,8"
-                        Background="#22C55E" Foreground="White"
                         BorderThickness="0" Cursor="Hand"/>
             </StackPanel>
 

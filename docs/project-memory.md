@@ -471,6 +471,42 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
     - passed
 
+## TUN Phase 6.8 profile selection UX cleanup
+- Implemented in this step:
+  - made profile selection an explicit top-of-view choice instead of relying on a secondary activation action at the bottom of the edit form
+  - kept runtime behavior unchanged and preserved the existing save/activate commands
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UX behavior:
+  - before:
+    - the view loaded the active profile into the form
+    - `Set as Active` lived beside `Save Profile` at the bottom, so activation felt like a secondary form action
+    - the current active profile was only indicated by a small `(Active)` tag in the header
+  - after:
+    - the view shows an explicit `Selected profile` picker near the top when profiles exist
+    - the current active profile is called out clearly as `Active profile: <name>`
+    - active profiles are also labeled as `(Active)` in the picker
+    - activation moved up next to the picker as `Set Active`
+    - the bottom action row now focuses on `Save Profile`
+- View-model notes:
+  - `ProfileViewModel` now tracks:
+    - available profile choices
+    - selected profile
+    - current active profile id/display name
+  - selecting a different profile updates the edit form fields immediately
+  - activating a profile updates the local picker/summary state immediately after the service call succeeds
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 2
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage
