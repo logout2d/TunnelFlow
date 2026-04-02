@@ -453,6 +453,24 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
     - passed
 
+## TUN Phase 6.7 Log cleanup
+- Implemented in this step:
+  - removed the Clear button from the Log view
+  - kept the rest of the Log layout unchanged so the header stays simple and low-noise
+- Exact files changed:
+  - `src/TunnelFlow.UI/Views/LogView.xaml`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UI change:
+  - before:
+    - the Log header showed `Log` plus a `Clear` button
+  - after:
+    - the Log header shows only `Log`
+  - no view-model or runtime behavior changed in this step
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

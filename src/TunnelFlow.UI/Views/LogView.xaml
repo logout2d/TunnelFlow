@@ -5,7 +5,7 @@
 
     <DockPanel Margin="24,20,24,20">
 
-        <!-- Header with Clear -->
+        <!-- Header -->
         <StackPanel DockPanel.Dock="Top"
                     Orientation="Horizontal"
                     Margin="0,0,0,16">
@@ -14,16 +14,6 @@
                        FontWeight="SemiBold"
                        Foreground="#1E293B"
                        VerticalAlignment="Center"/>
-
-            <Button Content="Clear"
-                    Command="{Binding ClearCommand}"
-                    Margin="16,0,0,0"
-                    Padding="12,6"
-                    Background="#F1F5F9"
-                    Foreground="#475569"
-                    BorderBrush="#CBD5E1"
-                    Cursor="Hand"
-                    VerticalAlignment="Center"/>
         </StackPanel>
 
         <!-- Log list -->

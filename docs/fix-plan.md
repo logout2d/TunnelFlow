@@ -205,5 +205,8 @@ Progress:
   - moved the App Rules and Log header action buttons to a compact left-aligned position beside their titles
   - matched the Clear button sizing to the Add Application button sizing
   - kept the change XAML-only with no behavior changes
+- next narrow Phase 6.7 Log cleanup step is now completed:
+  - removed the Clear button from the Log view to reduce unnecessary UI noise
+  - kept the rest of the Log layout unchanged
 - next recommended Phase 6.8 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable
