@@ -131,7 +131,17 @@ Scope:
 
 ## Step 19
 Phase 6 of the TUN pivot: de-emphasize legacy transparent-relay / WFP paths after TUN proves stable.
-Status: pending
+Status: in progress
 Scope:
 - mark legacy paths clearly
 - remove or reduce obsolete mainline assumptions
+Progress:
+- first Phase 6 step is now in place:
+  - service state/status plumbing is TUN-oriented rather than legacy-capture-oriented
+  - shared `GetState` / `StatusChanged` contracts now include:
+    - selected mode
+    - sing-box running state
+    - tunnel interface up/down summary
+    - active profile id/name
+    - proxy/direct/block rule counts
+  - new status work is intentionally aligned with a future TUN-only cleanup and does not introduce new primary legacy capture internals

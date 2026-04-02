@@ -6,6 +6,58 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## TUN Phase 6 status-model plumbing
+- Implemented in this step:
+  - extended the shared state/status contract with a TUN-oriented runtime summary
+  - kept runtime networking behavior unchanged
+  - explicitly kept new status work aligned with the TUN-first / future TUN-only direction rather than legacy capture internals
+- Exact files changed:
+  - `src/TunnelFlow.Core/IPC/Responses/TunnelStatusMode.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatusPayload.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatePayload.cs`
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- New status fields added:
+  - `selectedMode`
+  - `singBoxRunning`
+  - `tunnelInterfaceUp`
+  - `activeProfileId`
+  - `activeProfileName`
+  - `proxyRuleCount`
+  - `directRuleCount`
+  - `blockRuleCount`
+- Population notes:
+  - `selectedMode`
+    - uses the active runtime mode while running
+    - falls back to current mode selection logic from config/prerequisites while stopped
+  - `singBoxRunning`
+    - derived from `SingBoxStatus == Running`
+  - `tunnelInterfaceUp`
+    - currently a narrow service-side TUN summary:
+      - true only when selected mode is `Tun`
+      - TUN activation is active
+      - sing-box is running
+    - this is intentionally TUN-oriented and avoids expanding legacy capture-state semantics
+  - `activeProfileId` / `activeProfileName`
+    - derived from the current saved config and active profile lookup
+  - rule counts
+    - count enabled process-path rules by mode (`Proxy` / `Direct` / `Block`)
+    - this matches the current TUN policy model more closely than legacy capture internals
+- Contract notes:
+  - `GetState` now returns the richer TUN-oriented summary via `StatePayload`
+  - `StatusChanged` now uses a typed `StatusPayload` instead of an ad hoc hand-built JSON object
+  - legacy `captureRunning` and `singboxStatus` compatibility fields remain present so existing UI plumbing continues to compile
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+    - passed: 5
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

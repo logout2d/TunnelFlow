@@ -28,6 +28,7 @@ public sealed class OrchestratorService : BackgroundService
     private bool _captureRunning;
     private bool _legacyCaptureActive;
     private bool _tunModeActive;
+    private TunnelMode _selectedMode = TunnelMode.Legacy;
     private int _singBoxRestartAttempts;
     private readonly SemaphoreSlim _captureLock = new(1, 1);
     private CancellationToken _stoppingToken;
@@ -219,6 +220,7 @@ public sealed class OrchestratorService : BackgroundService
             }
 
             var runtimePlan = BuildRuntimePlan(tunModeSelection.SelectedMode);
+            _selectedMode = tunModeSelection.SelectedMode;
             _logger.LogInformation(
                 "Tunnel runtime plan selectedMode={SelectedMode} legacyCaptureEnabled={LegacyCaptureEnabled} localRelayEnabled={LocalRelayEnabled} winpkFilterEnabled={WinpkFilterEnabled}",
                 runtimePlan.SelectedMode,
@@ -322,7 +324,7 @@ public sealed class OrchestratorService : BackgroundService
             _logger.LogError(ex, "StartCaptureAsync failed");
             _pipeServer.PushLogLine("service", "Error",
                 $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
-            _pipeServer.PushStatusChanged(captureRunning: false, SingBoxStatus.Stopped);
+            PushCurrentStatus();
         }
         finally
         {
@@ -460,17 +462,50 @@ public sealed class OrchestratorService : BackgroundService
             Task.FromResult(_captureEngine.GetActiveSessions());
     }
 
-    private StatePayload BuildStatePayload() => new()
+    private StatePayload BuildStatePayload()
     {
-        Rules = _config.Rules,
-        Profiles = _config.Profiles,
-        ActiveProfileId = _config.ActiveProfileId,
-        CaptureRunning = _captureRunning,
-        SingBoxStatus = _singBoxManager.GetStatus()
-    };
+        var summary = BuildStatusSummary();
+        return new StatePayload
+        {
+            Rules = _config.Rules,
+            Profiles = _config.Profiles,
+            ActiveProfileId = summary.ActiveProfileId,
+            ActiveProfileName = summary.ActiveProfileName,
+            CaptureRunning = summary.CaptureRunning,
+            SingBoxStatus = summary.SingBoxStatus,
+            SelectedMode = summary.SelectedMode,
+            SingBoxRunning = summary.SingBoxRunning,
+            TunnelInterfaceUp = summary.TunnelInterfaceUp,
+            ProxyRuleCount = summary.ProxyRuleCount,
+            DirectRuleCount = summary.DirectRuleCount,
+            BlockRuleCount = summary.BlockRuleCount
+        };
+    }
 
     private void PushCurrentStatus() =>
-        _pipeServer.PushStatusChanged(_captureRunning, _singBoxManager.GetStatus());
+        _pipeServer.PushStatusChanged(ToStatusPayload(BuildStatusSummary()));
+
+    private ServiceStatusSummary BuildStatusSummary()
+    {
+        var selectedMode = GetEffectiveStatusMode();
+        return BuildStatusSummary(
+            _config,
+            selectedMode,
+            _captureRunning,
+            _tunModeActive,
+            _singBoxManager.GetStatus());
+    }
+
+    private TunnelMode GetEffectiveStatusMode()
+    {
+        if (_captureRunning)
+            return _selectedMode;
+
+        return TunModeSelector.Select(
+            _config.UseTunMode,
+            _tunOrchestrator.SupportsActivation,
+            _tunOrchestrator.ResolvedWintunPath).SelectedMode;
+    }
 
     private static string ResolveSingBoxPath()
     {
@@ -499,6 +534,73 @@ public sealed class OrchestratorService : BackgroundService
                 LocalRelayEnabled: true,
                 WinpkFilterEnabled: true);
 
+    internal static ServiceStatusSummary BuildStatusSummary(
+        TunnelFlowConfig config,
+        TunnelMode selectedMode,
+        bool captureRunning,
+        bool tunModeActive,
+        SingBoxStatus singBoxStatus)
+    {
+        var activeProfile = config.ActiveProfileId is null
+            ? null
+            : config.Profiles.FirstOrDefault(profile => profile.Id == config.ActiveProfileId);
+
+        var proxyRuleCount = 0;
+        var directRuleCount = 0;
+        var blockRuleCount = 0;
+
+        foreach (var rule in config.Rules.Where(rule =>
+                     rule.IsEnabled &&
+                     !string.IsNullOrWhiteSpace(rule.ExePath)))
+        {
+            switch (rule.Mode)
+            {
+                case RuleMode.Proxy:
+                    proxyRuleCount++;
+                    break;
+                case RuleMode.Direct:
+                    directRuleCount++;
+                    break;
+                case RuleMode.Block:
+                    blockRuleCount++;
+                    break;
+            }
+        }
+
+        return new ServiceStatusSummary(
+            SelectedMode: MapTunnelStatusMode(selectedMode),
+            CaptureRunning: captureRunning,
+            SingBoxStatus: singBoxStatus,
+            SingBoxRunning: singBoxStatus == SingBoxStatus.Running,
+            TunnelInterfaceUp: selectedMode == TunnelMode.Tun &&
+                               tunModeActive &&
+                               singBoxStatus == SingBoxStatus.Running,
+            ActiveProfileId: config.ActiveProfileId,
+            ActiveProfileName: activeProfile?.Name,
+            ProxyRuleCount: proxyRuleCount,
+            DirectRuleCount: directRuleCount,
+            BlockRuleCount: blockRuleCount);
+    }
+
+    private static StatusPayload ToStatusPayload(ServiceStatusSummary summary) => new()
+    {
+        CaptureRunning = summary.CaptureRunning,
+        SingBoxStatus = summary.SingBoxStatus,
+        SelectedMode = summary.SelectedMode,
+        SingBoxRunning = summary.SingBoxRunning,
+        TunnelInterfaceUp = summary.TunnelInterfaceUp,
+        ActiveProfileId = summary.ActiveProfileId,
+        ActiveProfileName = summary.ActiveProfileName,
+        ProxyRuleCount = summary.ProxyRuleCount,
+        DirectRuleCount = summary.DirectRuleCount,
+        BlockRuleCount = summary.BlockRuleCount
+    };
+
+    private static TunnelStatusMode MapTunnelStatusMode(TunnelMode selectedMode) =>
+        selectedMode == TunnelMode.Tun
+            ? TunnelStatusMode.Tun
+            : TunnelStatusMode.Legacy;
+
     internal static IReadOnlyList<TunPolicySummary> BuildTunPolicySummaries(IReadOnlyList<AppRule> rules) =>
         rules
             .Where(rule => rule.IsEnabled && !string.IsNullOrWhiteSpace(rule.ExePath))
@@ -517,6 +619,18 @@ internal readonly record struct TunnelRuntimePlan(
     bool LegacyCaptureEnabled,
     bool LocalRelayEnabled,
     bool WinpkFilterEnabled);
+
+internal readonly record struct ServiceStatusSummary(
+    TunnelStatusMode SelectedMode,
+    bool CaptureRunning,
+    SingBoxStatus SingBoxStatus,
+    bool SingBoxRunning,
+    bool TunnelInterfaceUp,
+    Guid? ActiveProfileId,
+    string? ActiveProfileName,
+    int ProxyRuleCount,
+    int DirectRuleCount,
+    int BlockRuleCount);
 
 internal readonly record struct TunPolicySummary(
     string AppPath,

@@ -1,6 +1,8 @@
 using TunnelFlow.Service;
 using TunnelFlow.Service.Tun;
 using TunnelFlow.Core.Models;
+using TunnelFlow.Core.IPC.Responses;
+using TunnelFlow.Service.Configuration;
 
 namespace TunnelFlow.Tests.Service;
 
@@ -85,5 +87,116 @@ public class OrchestratorServiceTests
             summary.RuleMode == RuleMode.Block &&
             summary.MappedAction == "reject" &&
             summary.MappedOutbound is null);
+    }
+
+    [Fact]
+    public void BuildStatusSummary_TunMode_BuildsTunOrientedRuntimeSnapshot()
+    {
+        var activeProfileId = Guid.NewGuid();
+        var config = new TunnelFlowConfig
+        {
+            ActiveProfileId = activeProfileId,
+            Profiles =
+            {
+                new VlessProfile
+                {
+                    Id = activeProfileId,
+                    Name = "Primary",
+                    ServerAddress = "example.com",
+                    ServerPort = 443,
+                    UserId = Guid.NewGuid().ToString()
+                }
+            },
+            Rules =
+            {
+                new AppRule
+                {
+                    Id = Guid.NewGuid(),
+                    ExePath = @"C:\Apps\Proxy.exe",
+                    DisplayName = "Proxy",
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = true
+                },
+                new AppRule
+                {
+                    Id = Guid.NewGuid(),
+                    ExePath = @"C:\Apps\Direct.exe",
+                    DisplayName = "Direct",
+                    Mode = RuleMode.Direct,
+                    IsEnabled = true
+                },
+                new AppRule
+                {
+                    Id = Guid.NewGuid(),
+                    ExePath = @"C:\Apps\Block.exe",
+                    DisplayName = "Block",
+                    Mode = RuleMode.Block,
+                    IsEnabled = true
+                },
+                new AppRule
+                {
+                    Id = Guid.NewGuid(),
+                    ExePath = @"",
+                    DisplayName = "Ignored",
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = true
+                }
+            }
+        };
+
+        var summary = OrchestratorService.BuildStatusSummary(
+            config,
+            TunnelMode.Tun,
+            captureRunning: true,
+            tunModeActive: true,
+            SingBoxStatus.Running);
+
+        Assert.Equal(TunnelStatusMode.Tun, summary.SelectedMode);
+        Assert.True(summary.CaptureRunning);
+        Assert.Equal(SingBoxStatus.Running, summary.SingBoxStatus);
+        Assert.True(summary.SingBoxRunning);
+        Assert.True(summary.TunnelInterfaceUp);
+        Assert.Equal(activeProfileId, summary.ActiveProfileId);
+        Assert.Equal("Primary", summary.ActiveProfileName);
+        Assert.Equal(1, summary.ProxyRuleCount);
+        Assert.Equal(1, summary.DirectRuleCount);
+        Assert.Equal(1, summary.BlockRuleCount);
+    }
+
+    [Fact]
+    public void BuildStatusSummary_LegacyMode_KeepsLegacySelectionAndInterfaceDown()
+    {
+        var config = new TunnelFlowConfig
+        {
+            Rules =
+            {
+                new AppRule
+                {
+                    Id = Guid.NewGuid(),
+                    ExePath = @"C:\Apps\Disabled.exe",
+                    DisplayName = "Disabled",
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = false
+                }
+            }
+        };
+
+        var summary = OrchestratorService.BuildStatusSummary(
+            config,
+            TunnelMode.Legacy,
+            captureRunning: false,
+            tunModeActive: false,
+            SingBoxStatus.Stopped);
+
+        Assert.Equal(TunnelStatusMode.Legacy, summary.SelectedMode);
+        Assert.False(summary.CaptureRunning);
+        Assert.Equal(SingBoxStatus.Stopped, summary.SingBoxStatus);
+        Assert.False(summary.SingBoxRunning);
+        Assert.False(summary.TunnelInterfaceUp);
+        Assert.Null(summary.ActiveProfileId);
+        Assert.Null(summary.ActiveProfileName);
+        Assert.Equal(0, summary.ProxyRuleCount);
+        Assert.Equal(0, summary.DirectRuleCount);
+        Assert.Equal(0, summary.BlockRuleCount);
     }
 }

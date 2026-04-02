@@ -108,15 +108,8 @@ public sealed class PipeServer
 
     // --- Push event methods ---
 
-    public void PushStatusChanged(bool captureRunning, SingBoxStatus singBoxStatus)
-    {
-        var payload = new JsonObject
-        {
-            ["captureRunning"] = captureRunning,
-            ["singboxStatus"] = singBoxStatus.ToString()
-        };
-        BroadcastEvent("StatusChanged", payload);
-    }
+    public void PushStatusChanged(StatusPayload status) =>
+        BroadcastEvent("StatusChanged", JsonSerializer.SerializeToNode(status, _compactOptions));
 
     public void PushLogLine(string source, string level, string message)
     {

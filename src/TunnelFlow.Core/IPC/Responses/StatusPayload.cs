@@ -3,25 +3,12 @@ using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.Core.IPC.Responses;
 
-/// <summary>Full configuration and runtime snapshot returned for a <c>GetState</c> command.</summary>
-public record StatePayload
+public record StatusPayload
 {
-    [JsonPropertyName("rules")]
-    public required IReadOnlyList<AppRule> Rules { get; init; }
-
-    [JsonPropertyName("profiles")]
-    public required IReadOnlyList<VlessProfile> Profiles { get; init; }
-
-    [JsonPropertyName("activeProfileId")]
-    public Guid? ActiveProfileId { get; init; }
-
-    [JsonPropertyName("activeProfileName")]
-    public string? ActiveProfileName { get; init; }
-
     [JsonPropertyName("captureRunning")]
     public bool CaptureRunning { get; init; }
 
-    [JsonPropertyName("singBoxStatus")]
+    [JsonPropertyName("singboxStatus")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public SingBoxStatus SingBoxStatus { get; init; }
 
@@ -33,6 +20,12 @@ public record StatePayload
 
     [JsonPropertyName("tunnelInterfaceUp")]
     public bool TunnelInterfaceUp { get; init; }
+
+    [JsonPropertyName("activeProfileId")]
+    public Guid? ActiveProfileId { get; init; }
+
+    [JsonPropertyName("activeProfileName")]
+    public string? ActiveProfileName { get; init; }
 
     [JsonPropertyName("proxyRuleCount")]
     public int ProxyRuleCount { get; init; }
