@@ -190,5 +190,12 @@ Progress:
 - next narrow Phase 6.4 cleanup step is now completed:
   - Sessions has been removed from the visible main navigation and normal user flow
   - deeper Sessions internals remain temporarily in place to keep the cleanup low-risk
-- next recommended Phase 6.5 step:
+- next narrow Phase 6.5 polish step is now completed:
+  - reconnect-loop noise in the user-facing UI log has been reduced
+  - expected offline/retry behavior is now summarized with friendly service transition messages instead of repeated low-level transport errors
+- next narrow Phase 6.6 UX-consistency step is now completed:
+  - App Rules and Profile editing are disabled while the tunnel is running
+  - the UI now reflects that runtime uses a started configuration snapshot rather than live editable state
+  - small inline hints explain that the tunnel must be stopped before editing
+- next recommended Phase 6.7 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable

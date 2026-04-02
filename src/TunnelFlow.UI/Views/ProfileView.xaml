@@ -26,8 +26,24 @@
                 </TextBlock>
             </DockPanel>
 
+            <TextBlock Text="{Binding EditHintText}"
+                       Margin="0,0,0,16"
+                       Foreground="#64748B"
+                       FontSize="11">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowEditHint}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
             <!-- Fields -->
-            <Grid>
+            <Grid IsEnabled="{Binding IsEditingEnabled}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="120"/>
                     <ColumnDefinition Width="*"/>
@@ -143,7 +159,7 @@
             </Grid>
 
             <!-- Buttons -->
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+            <StackPanel Orientation="Horizontal" Margin="0,20,0,0" IsEnabled="{Binding IsEditingEnabled}">
                 <Button Content="Save Profile" Command="{Binding SaveCommand}"
                         Padding="16,8" Background="#3B82F6" Foreground="White"
                         BorderThickness="0" Cursor="Hand"/>

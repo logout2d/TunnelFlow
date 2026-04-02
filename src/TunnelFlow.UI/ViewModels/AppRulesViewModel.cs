@@ -12,11 +12,17 @@ namespace TunnelFlow.UI.ViewModels;
 public partial class AppRulesViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
+    private readonly RelayCommand _addRuleCmd;
+    private readonly RelayCommand<AppRuleItemViewModel> _removeRuleCmd;
+
+    [ObservableProperty] private bool _isEditingEnabled = true;
 
     public ObservableCollection<AppRuleItemViewModel> Rules { get; } = [];
 
     public IRelayCommand AddRuleCommand { get; }
     public IRelayCommand<AppRuleItemViewModel> RemoveRuleCommand { get; }
+    public bool ShowEditHint => !IsEditingEnabled;
+    public string EditHintText => "Stop the tunnel to edit rules.";
 
     public static IReadOnlyList<string> AvailableModes { get; } = ["Proxy", "Direct", "Block"];
 
@@ -24,10 +30,22 @@ public partial class AppRulesViewModel : ObservableObject
     {
         _client = client;
 
-        AddRuleCommand = new RelayCommand(async () => await AddRuleAsync());
-        RemoveRuleCommand = new RelayCommand<AppRuleItemViewModel>(
+        _addRuleCmd = new RelayCommand(
+            async () => await AddRuleAsync(),
+            () => IsEditingEnabled);
+        _removeRuleCmd = new RelayCommand<AppRuleItemViewModel>(
             async item => await RemoveRuleAsync(item!),
-            item => item is not null);
+            item => IsEditingEnabled && item is not null);
+
+        AddRuleCommand = _addRuleCmd;
+        RemoveRuleCommand = _removeRuleCmd;
+    }
+
+    partial void OnIsEditingEnabledChanged(bool value)
+    {
+        _addRuleCmd.NotifyCanExecuteChanged();
+        _removeRuleCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ShowEditHint));
     }
 
     public void LoadRules(IReadOnlyList<AppRule> rules)

@@ -326,6 +326,89 @@
     - failed: 0
     - skipped: 0
 
+## TUN Phase 6.5 reconnect-log polish
+- Implemented in this step:
+  - reduced reconnect-loop noise in the user-facing UI log without changing the reconnect mechanism itself
+  - kept internal reconnect behavior intact
+  - replaced repetitive low-level transport chatter with a small set of user-facing transition messages
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Logging behavior:
+  - before:
+    - `ServiceClient.DiagnosticMessage` was forwarded directly into the UI log
+    - users could see repeated low-level lines such as:
+      - `Connect failed (retry in Xs): ...`
+      - `ReadLoop error: ...`
+      - transport-level exception names/messages during expected offline retry behavior
+  - after:
+    - expected reconnect diagnostics are summarized instead of repeated
+    - the normal user-facing transitions are now:
+      - `Service disconnected`
+      - `Waiting for service...`
+      - `Service connected`
+    - repeated reconnect failures no longer spam the visible log
+- Implementation note:
+  - `MainViewModel` now translates `ServiceClient.DiagnosticMessage` through a narrow UI-side filter
+  - expected reconnect diagnostics are suppressed from the visible log and collapsed into a one-time `Waiting for service...` message until the next successful reconnect
+  - unexpected diagnostics still go to the UI log as `client / Debug`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 10
+    - failed: 0
+    - skipped: 0
+
+## TUN Phase 6.6 editing freeze while running
+- Implemented in this step:
+  - App Rules and Profile editing are now read-only while the tunnel is running
+  - this keeps the UI aligned with the started configuration snapshot model without introducing live reload behavior
+  - runtime/networking behavior remains unchanged
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/AppRulesViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/Views/AppRulesView.xaml`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Behavior change:
+  - before:
+    - rules and profile settings remained editable while the tunnel was running
+    - this was inconsistent with the runtime using a started snapshot
+  - after:
+    - when the tunnel is running, both views become read-only
+    - when the tunnel is stopped, the previous editing behavior returns unchanged
+- Disabled while running:
+  - App Rules:
+    - add application
+    - enable/disable checkbox
+    - mode combobox
+    - remove button
+  - Profile:
+    - field editing
+    - save profile
+    - set as active
+- Hint text added:
+  - App Rules:
+    - `Stop the tunnel to edit rules.`
+  - Profile:
+    - `Stop the tunnel to edit profile settings.`
+- Implementation note:
+  - `MainViewModel` now drives a shared read-only state into `AppRulesViewModel` and `ProfileViewModel`
+  - the freeze is keyed off the running state (`CaptureRunning || SingBoxRunning`) so the UI stays conservative across both current runtime paths
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 11
+    - failed: 0
+    - skipped: 0
+
 ## TUN pivot Phase 0.5 service skeleton
 - Implemented in this step:
   - persisted `UseTunMode` flag in service config storage

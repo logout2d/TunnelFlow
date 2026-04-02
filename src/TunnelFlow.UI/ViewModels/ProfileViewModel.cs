@@ -10,6 +10,7 @@ public partial class ProfileViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
 
+    [ObservableProperty] private bool _isEditingEnabled = true;
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private string _serverAddress = "";
     [ObservableProperty] private int _serverPort = 443;
@@ -28,12 +29,15 @@ public partial class ProfileViewModel : ObservableObject
 
     public IRelayCommand SaveCommand { get; }
     public IRelayCommand ActivateCommand { get; }
+    public bool ShowEditHint => !IsEditingEnabled;
+    public string EditHintText => "Stop the tunnel to edit profile settings.";
 
     public static IReadOnlyList<string> Networks { get; } = ["tcp", "ws", "grpc"];
     public static IReadOnlyList<string> Securities { get; } = ["tls", "reality", "none"];
     public static IReadOnlyList<string> Fingerprints { get; } = ["chrome", "firefox", "safari", "random"];
 
     private readonly RelayCommand _saveCmd;
+    private readonly RelayCommand _activateCmd;
 
     public ProfileViewModel(ServiceClient client)
     {
@@ -41,16 +45,26 @@ public partial class ProfileViewModel : ObservableObject
 
         _saveCmd = new RelayCommand(
             async () => await SaveAsync(),
-            () => !string.IsNullOrWhiteSpace(ServerAddress) &&
+            () => IsEditingEnabled &&
+                  !string.IsNullOrWhiteSpace(ServerAddress) &&
                   !string.IsNullOrWhiteSpace(UserId) &&
                   ServerPort > 0 && ServerPort <= 65535);
         SaveCommand = _saveCmd;
-        ActivateCommand = new RelayCommand(async () => await ActivateAsync());
+        _activateCmd = new RelayCommand(
+            async () => await ActivateAsync(),
+            () => IsEditingEnabled);
+        ActivateCommand = _activateCmd;
     }
 
     partial void OnServerAddressChanged(string value) => _saveCmd.NotifyCanExecuteChanged();
     partial void OnUserIdChanged(string value) => _saveCmd.NotifyCanExecuteChanged();
     partial void OnServerPortChanged(int value) => _saveCmd.NotifyCanExecuteChanged();
+    partial void OnIsEditingEnabledChanged(bool value)
+    {
+        _saveCmd.NotifyCanExecuteChanged();
+        _activateCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ShowEditHint));
+    }
 
     public void LoadProfile(IReadOnlyList<VlessProfile> profiles, Guid? activeProfileId)
     {

@@ -60,6 +60,8 @@ public class MainViewModelTests
         Assert.Equal("Running", viewModel.EngineStatusSummary);
         Assert.Equal("Up", viewModel.TunnelStatusSummary);
         Assert.Equal("Proxy 2  Direct 1  Block 3", viewModel.RuleCountsSummary);
+        Assert.False(viewModel.AppRules.IsEditingEnabled);
+        Assert.False(viewModel.Profile.IsEditingEnabled);
         Assert.False(viewModel.Sessions.IsAvailable);
     }
 
@@ -93,6 +95,8 @@ public class MainViewModelTests
         Assert.Equal("Unavailable", viewModel.TunnelStatusSummary);
         Assert.Equal("None selected", viewModel.ActiveProfileName);
         Assert.Equal("Proxy 0  Direct 0  Block 0", viewModel.RuleCountsSummary);
+        Assert.True(viewModel.AppRules.IsEditingEnabled);
+        Assert.True(viewModel.Profile.IsEditingEnabled);
         Assert.True(viewModel.Sessions.IsAvailable);
     }
 
@@ -252,5 +256,94 @@ public class MainViewModelTests
 
         viewModel.NavigateToRulesCommand.Execute(null);
         Assert.Same(viewModel.AppRules, viewModel.CurrentView);
+    }
+
+    [Fact]
+    public void HandleClientDiagnosticMessage_ReconnectNoise_IsSummarizedOnce()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client);
+
+        viewModel.HandleClientDiagnosticMessage("Connect failed (retry in 1s): IOException: pipe unavailable");
+        viewModel.HandleClientDiagnosticMessage("Connect failed (retry in 2s): IOException: pipe unavailable");
+        viewModel.HandleClientDiagnosticMessage("ReadLoop error: IOException: broken pipe");
+
+        var waitingLines = viewModel.Log.Lines.Where(line => line.Message == "Waiting for service...").ToList();
+
+        Assert.Single(waitingLines);
+        Assert.DoesNotContain(viewModel.Log.Lines, line => line.Message.Contains("Connect failed"));
+        Assert.DoesNotContain(viewModel.Log.Lines, line => line.Message.Contains("ReadLoop error"));
+    }
+
+    [Fact]
+    public void RecordServiceConnectionTransitions_LogsFriendlyMessages()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client);
+
+        viewModel.RecordServiceDisconnectedForUi();
+        viewModel.RecordServiceConnectedForUi();
+
+        Assert.Contains(viewModel.Log.Lines, line => line.Message == "Service disconnected");
+        Assert.Contains(viewModel.Log.Lines, line => line.Message == "Waiting for service...");
+        Assert.Contains(viewModel.Log.Lines, line => line.Message == "Service connected");
+    }
+
+    [Fact]
+    public void EditingCommands_DisableWhileTunnelIsRunning_AndReEnableWhenStopped()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client);
+
+        viewModel.Profile.ServerAddress = "vpn.example.com";
+        viewModel.Profile.UserId = "11111111-1111-1111-1111-111111111111";
+        viewModel.Profile.ServerPort = 443;
+
+        Assert.True(viewModel.AppRules.AddRuleCommand.CanExecute(null));
+        Assert.True(viewModel.Profile.SaveCommand.CanExecute(null));
+        Assert.True(viewModel.Profile.ActivateCommand.CanExecute(null));
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true,
+            ActiveProfileName = "Primary"
+        });
+
+        Assert.False(viewModel.AppRules.IsEditingEnabled);
+        Assert.False(viewModel.Profile.IsEditingEnabled);
+        Assert.False(viewModel.AppRules.AddRuleCommand.CanExecute(null));
+        Assert.False(viewModel.Profile.SaveCommand.CanExecute(null));
+        Assert.False(viewModel.Profile.ActivateCommand.CanExecute(null));
+        Assert.True(viewModel.AppRules.ShowEditHint);
+        Assert.True(viewModel.Profile.ShowEditHint);
+        Assert.Equal("Stop the tunnel to edit rules.", viewModel.AppRules.EditHintText);
+        Assert.Equal("Stop the tunnel to edit profile settings.", viewModel.Profile.EditHintText);
+
+        viewModel.ApplyStatePayload(new StatePayload
+        {
+            Rules = Array.Empty<AppRule>(),
+            Profiles = Array.Empty<VlessProfile>(),
+            CaptureRunning = false,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        viewModel.Profile.ServerAddress = "vpn.example.com";
+        viewModel.Profile.UserId = "11111111-1111-1111-1111-111111111111";
+        viewModel.Profile.ServerPort = 443;
+
+        Assert.True(viewModel.AppRules.IsEditingEnabled);
+        Assert.True(viewModel.Profile.IsEditingEnabled);
+        Assert.True(viewModel.AppRules.AddRuleCommand.CanExecute(null));
+        Assert.True(viewModel.Profile.SaveCommand.CanExecute(null));
+        Assert.True(viewModel.Profile.ActivateCommand.CanExecute(null));
+        Assert.False(viewModel.AppRules.ShowEditHint);
+        Assert.False(viewModel.Profile.ShowEditHint);
     }
 }

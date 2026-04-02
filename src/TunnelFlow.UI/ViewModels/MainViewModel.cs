@@ -15,6 +15,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ServiceClient _client;
     private readonly LocalConfigSnapshotLoader _configLoader;
     private readonly IServiceControlManager _serviceControlManager;
+    private bool _waitingForServiceLogged;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -94,6 +95,7 @@ public partial class MainViewModel : ObservableObject
         Sessions = new SessionsViewModel();
         Log = new LogViewModel();
         _currentView = AppRules;
+        UpdateConfigEditingState();
 
         _startCmd = new RelayCommand(async () => await StartAsync(), () => !CaptureRunning && IsConnected);
         _stopCmd = new RelayCommand(async () => await StopAsync(), () => CaptureRunning && IsConnected);
@@ -125,6 +127,7 @@ public partial class MainViewModel : ObservableObject
     {
         _startCmd.NotifyCanExecuteChanged();
         _stopCmd.NotifyCanExecuteChanged();
+        UpdateConfigEditingState();
     }
 
     partial void OnSelectedModeChanged(TunnelStatusMode value)
@@ -137,8 +140,11 @@ public partial class MainViewModel : ObservableObject
     partial void OnSingBoxStatusChanged(string value) =>
         OnPropertyChanged(nameof(EngineStatusSummary));
 
-    partial void OnSingBoxRunningChanged(bool value) =>
+    partial void OnSingBoxRunningChanged(bool value)
+    {
         OnPropertyChanged(nameof(EngineStatusSummary));
+        UpdateConfigEditingState();
+    }
 
     partial void OnTunnelInterfaceUpChanged(bool value) =>
         OnPropertyChanged(nameof(TunnelStatusSummary));
@@ -169,7 +175,7 @@ public partial class MainViewModel : ObservableObject
         _client.Connected += OnClientConnected;
         _client.Disconnected += OnClientDisconnected;
         _client.EventReceived += OnEventReceived;
-        _client.DiagnosticMessage += (_, msg) => Log.AddLine("client", "Debug", msg);
+        _client.DiagnosticMessage += (_, msg) => HandleClientDiagnosticMessage(msg);
 
         // ConnectAsync blocks until first connection (runs on background thread via Task.Run).
         // OnClientConnected fires during ConnectAsync and calls LoadStateAsync — do NOT call it here.
@@ -352,6 +358,7 @@ public partial class MainViewModel : ObservableObject
             ConnectionStatus = "Connected";
             ServiceActionStatus = string.Empty;
             PendingServiceAction = ServiceActionKind.None;
+            RecordServiceConnectedForUi();
         });
 
         await LoadStateAsync();
@@ -364,6 +371,7 @@ public partial class MainViewModel : ObservableObject
             IsConnected = false;
             ConnectionStatus = "Reconnecting...";
             ApplyServiceUnavailableRuntimeState();
+            RecordServiceDisconnectedForUi();
         });
 
         await LoadOfflineConfigAsync();
@@ -389,6 +397,7 @@ public partial class MainViewModel : ObservableObject
         SingBoxRunning = false;
         TunnelInterfaceUp = false;
         SingBoxStatus = "Unavailable";
+        UpdateConfigEditingState();
     }
 
     internal async Task RequestServiceActionAsync()
@@ -434,12 +443,62 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    internal void HandleClientDiagnosticMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        if (IsExpectedReconnectDiagnostic(message))
+        {
+            LogWaitingForServiceIfNeeded();
+            return;
+        }
+
+        Log.AddLine("client", "Debug", message);
+    }
+
+    internal void RecordServiceConnectedForUi()
+    {
+        _waitingForServiceLogged = false;
+        Log.AddLine("ui", "Info", "Service connected");
+    }
+
+    internal void RecordServiceDisconnectedForUi()
+    {
+        Log.AddLine("ui", "Warning", "Service disconnected");
+        LogWaitingForServiceIfNeeded();
+    }
+
+    private void LogWaitingForServiceIfNeeded()
+    {
+        if (_waitingForServiceLogged)
+        {
+            return;
+        }
+
+        _waitingForServiceLogged = true;
+        Log.AddLine("ui", "Info", "Waiting for service...");
+    }
+
+    private static bool IsExpectedReconnectDiagnostic(string message) =>
+        message.StartsWith("Connect failed", StringComparison.OrdinalIgnoreCase) ||
+        message.StartsWith("ReadLoop error", StringComparison.OrdinalIgnoreCase);
+
     private static string ResolveActiveProfileName(IReadOnlyList<VlessProfile> profiles, Guid? activeProfileId)
     {
         var active = profiles.FirstOrDefault(profile => profile.Id == activeProfileId)
                      ?? profiles.FirstOrDefault();
 
         return string.IsNullOrWhiteSpace(active?.Name) ? "None selected" : active.Name;
+    }
+
+    private void UpdateConfigEditingState()
+    {
+        var isTunnelRunning = CaptureRunning || SingBoxRunning;
+        AppRules.IsEditingEnabled = !isTunnelRunning;
+        Profile.IsEditingEnabled = !isTunnelRunning;
     }
 
     private static Task DispatchAsync(Action action)
