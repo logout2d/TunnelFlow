@@ -13,11 +13,31 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         Environment.GetFolderPath(Environment.SpecialFolder.System),
         @"WindowsPowerShell\v1.0\powershell.exe");
 
+    public Task InstallAsync(CancellationToken cancellationToken) =>
+        InvokeBootstrapperAsync("install", cancellationToken);
+
+    public Task RepairAsync(CancellationToken cancellationToken) =>
+        InvokeBootstrapperAsync("repair", cancellationToken);
+
     public Task StartAsync(CancellationToken cancellationToken) =>
-        Task.Run(() => StartCore(), cancellationToken);
+        InvokeBootstrapperOrFallbackAsync("start-service", StartCore, cancellationToken);
 
     public Task RestartAsync(CancellationToken cancellationToken) =>
-        Task.Run(() => RestartCore(), cancellationToken);
+        InvokeBootstrapperOrFallbackAsync("restart-service", RestartCore, cancellationToken);
+
+    private static Task InvokeBootstrapperOrFallbackAsync(
+        string verb,
+        Action fallbackAction,
+        CancellationToken cancellationToken)
+    {
+        var bootstrapperPath = ResolveBootstrapperExecutablePath();
+        if (bootstrapperPath is not null)
+        {
+            return InvokeBootstrapperAsync(bootstrapperPath, verb, cancellationToken);
+        }
+
+        return Task.Run(fallbackAction, cancellationToken);
+    }
 
     private static void StartCore()
     {
@@ -67,6 +87,67 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         }
     }
 
+    private static Task InvokeBootstrapperAsync(string verb, CancellationToken cancellationToken)
+    {
+        var bootstrapperPath = ResolveBootstrapperExecutablePath();
+        if (bootstrapperPath is null)
+        {
+            throw new InvalidOperationException(
+                "TunnelFlow.Bootstrapper.exe was not found. Build or deploy the bootstrapper, or use the existing service recovery path.");
+        }
+
+        return InvokeBootstrapperAsync(bootstrapperPath, verb, cancellationToken);
+    }
+
+    private static async Task InvokeBootstrapperAsync(
+        string bootstrapperPath,
+        string verb,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = bootstrapperPath,
+                Arguments = verb,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = Path.GetDirectoryName(bootstrapperPath) ?? AppContext.BaseDirectory
+            }) ?? throw new InvalidOperationException($"Failed to start bootstrapper verb '{verb}'.");
+
+            await process.WaitForExitAsync(cancellationToken);
+            EnsureBootstrapperSucceeded(verb, process.ExitCode);
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            throw new InvalidOperationException("Service action was canceled by the user.", ex);
+        }
+    }
+
+    private static void EnsureBootstrapperSucceeded(string verb, int exitCode)
+    {
+        switch (exitCode)
+        {
+            case 0:
+                return;
+            case 4 when string.Equals(verb, "install", StringComparison.OrdinalIgnoreCase):
+                return;
+            case 5:
+                throw new ServiceNotInstalledException("TunnelFlow service is not installed.");
+            case 3:
+                throw new InvalidOperationException("TunnelFlow.Service.exe could not be resolved for the bootstrapper command.");
+            case 7:
+                throw new InvalidOperationException("Service action was canceled by the user.");
+            case 8:
+                throw new InvalidOperationException("Service action requires administrator approval.");
+            case 9:
+                throw new InvalidOperationException($"Bootstrapper verb '{verb}' is not implemented.");
+            default:
+                throw new InvalidOperationException(
+                    $"Bootstrapper command '{verb}' failed with exit code {exitCode}.");
+        }
+    }
+
     private static ServiceController CreateController()
     {
         try
@@ -76,6 +157,62 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         catch (InvalidOperationException ex)
         {
             throw new ServiceNotInstalledException("TunnelFlow service is not installed.", ex);
+        }
+    }
+
+    private static string? ResolveBootstrapperExecutablePath()
+    {
+        var candidates = new List<string>();
+
+        AddCandidate(candidates, Path.Combine(AppContext.BaseDirectory, "TunnelFlow.Bootstrapper.exe"));
+
+        var repoRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+        if (repoRoot is not null)
+        {
+            AddCandidate(candidates, Path.Combine(
+                repoRoot,
+                "src",
+                "TunnelFlow.Bootstrapper",
+                "bin",
+                "Debug",
+                "net8.0-windows",
+                "TunnelFlow.Bootstrapper.exe"));
+
+            AddCandidate(candidates, Path.Combine(
+                repoRoot,
+                "src",
+                "TunnelFlow.Bootstrapper",
+                "bin",
+                "Release",
+                "net8.0-windows",
+                "TunnelFlow.Bootstrapper.exe"));
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static string? FindRepositoryRoot(string startDirectory)
+    {
+        var current = new DirectoryInfo(startDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "TunnelFlow.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private static void AddCandidate(List<string> candidates, string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!candidates.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+        {
+            candidates.Add(fullPath);
         }
     }
 

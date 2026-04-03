@@ -157,6 +157,86 @@
   - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
     - pending for this step until validation completes
 
+## Bootstrapper Phase 2 narrow UI integration
+- Implemented in this step:
+  - integrated the existing sidebar service-action flow with `TunnelFlow.Bootstrapper.exe`
+  - kept the UI change narrow:
+    - no new page
+    - no updater logic
+    - no runtime/TUN changes
+  - preserved friendly user-facing status text and existing log behavior
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IServiceControlManager.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact UI service behavior before:
+  - disconnected service action:
+    - `Start Service`
+  - connected service action:
+    - `Restart Service`
+  - not-installed state:
+    - showed `Service not installed`
+    - action was disabled after detection
+  - implementation path:
+    - `ServiceController` first
+    - PowerShell `runas` fallback on access denied
+- Exact UI service behavior after:
+  - not installed:
+    - button label becomes `Install Service`
+    - action stays available
+    - invokes bootstrapper `install`
+  - disconnected but installed:
+    - button label becomes `Repair Service`
+    - invokes bootstrapper `repair`
+  - connected:
+    - button label stays `Restart Service`
+    - invokes bootstrapper `restart-service`
+  - in-progress labels now include:
+    - `Installing Service...`
+    - `Repairing Service...`
+    - `Restarting Service...`
+- Bootstrapper command bridge details:
+  - `WindowsServiceControlManager` now supports:
+    - `InstallAsync`
+    - `RepairAsync`
+    - `StartAsync`
+    - `RestartAsync`
+  - bootstrapper resolution now checks:
+    - sibling `TunnelFlow.Bootstrapper.exe`
+    - repo-relative Debug bootstrapper build
+    - repo-relative Release bootstrapper build
+  - bootstrapper is invoked elevated via `ProcessStartInfo` with:
+    - `UseShellExecute = true`
+    - manifest-based elevation
+- Fallback behavior:
+  - `start-service` and `restart-service` still fall back to the old direct `ServiceController` path if the bootstrapper executable is absent
+  - `install` and `repair` require the bootstrapper executable and fail clearly if it is missing
+- Friendly-status/log behavior:
+  - UI continues to show short status text:
+    - `Waiting for service connection...`
+    - `Service not installed`
+    - `Service action failed`
+  - detailed failure text still goes to the log only
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 12
+    - failed: 0
+    - skipped: 0
+- Narrow repair note after validation:
+  - the only failing test was `EditingCommands_DisableWhileTunnelIsRunning_AndReEnableWhenStopped`
+  - root cause:
+    - the test setup was stale
+    - `Profile.SaveCommand` requires service connection
+    - `Profile.ActivateCommand` requires an existing non-active selected profile
+  - fix:
+    - updated the test setup to mark the view-model connected and load/select a real inactive existing profile before asserting enabled command state
+  - no production behavior change was required for that repair
+
 ## TUN Phase 6 status-model plumbing
 - Implemented in this step:
   - extended the shared state/status contract with a TUN-oriented runtime summary

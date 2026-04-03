@@ -2,6 +2,10 @@ namespace TunnelFlow.UI.Services;
 
 public interface IServiceControlManager
 {
+    Task InstallAsync(CancellationToken cancellationToken);
+
+    Task RepairAsync(CancellationToken cancellationToken);
+
     Task StartAsync(CancellationToken cancellationToken);
 
     Task RestartAsync(CancellationToken cancellationToken);

@@ -9,11 +9,27 @@ public class MainViewModelTests
 {
     private sealed class FakeServiceControlManager : IServiceControlManager
     {
+        public int InstallCalls { get; private set; }
+
+        public int RepairCalls { get; private set; }
+
         public int StartCalls { get; private set; }
 
         public int RestartCalls { get; private set; }
 
         public Exception? Failure { get; set; }
+
+        public Task InstallAsync(CancellationToken cancellationToken)
+        {
+            InstallCalls++;
+            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
+
+        public Task RepairAsync(CancellationToken cancellationToken)
+        {
+            RepairCalls++;
+            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
@@ -166,21 +182,45 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public async Task RequestServiceActionAsync_WhenDisconnected_StartsService()
+    public async Task RequestServiceActionAsync_WhenDisconnected_RepairsService()
     {
         using var client = new ServiceClient();
         var serviceManager = new FakeServiceControlManager();
         var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
 
         viewModel.IsConnected = false;
+        viewModel.IsServiceInstalled = true;
         await viewModel.RequestServiceActionAsync();
 
-        Assert.Equal(1, serviceManager.StartCalls);
+        Assert.Equal(0, serviceManager.InstallCalls);
+        Assert.Equal(1, serviceManager.RepairCalls);
+        Assert.Equal(0, serviceManager.StartCalls);
         Assert.Equal(0, serviceManager.RestartCalls);
-        Assert.Equal(ServiceActionKind.Start, viewModel.PendingServiceAction);
-        Assert.Equal("Starting Service...", viewModel.ServiceActionLabel);
+        Assert.Equal(ServiceActionKind.Repair, viewModel.PendingServiceAction);
+        Assert.Equal("Repairing Service...", viewModel.ServiceActionLabel);
         Assert.Equal("Waiting for service connection...", viewModel.ServiceActionStatus);
         Assert.True(viewModel.ShowServiceActionStatus);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenServiceIsNotInstalled_InstallsService()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = false;
+        viewModel.IsServiceInstalled = false;
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(1, serviceManager.InstallCalls);
+        Assert.Equal(0, serviceManager.RepairCalls);
+        Assert.Equal(0, serviceManager.StartCalls);
+        Assert.Equal(0, serviceManager.RestartCalls);
+        Assert.Equal(ServiceActionKind.Install, viewModel.PendingServiceAction);
+        Assert.Equal("Installing Service...", viewModel.ServiceActionLabel);
+        Assert.Equal("Waiting for service connection...", viewModel.ServiceActionStatus);
+        Assert.True(viewModel.IsServiceInstalled);
     }
 
     [Fact]
@@ -193,6 +233,8 @@ public class MainViewModelTests
         viewModel.IsConnected = true;
         await viewModel.RequestServiceActionAsync();
 
+        Assert.Equal(0, serviceManager.InstallCalls);
+        Assert.Equal(0, serviceManager.RepairCalls);
         Assert.Equal(0, serviceManager.StartCalls);
         Assert.Equal(1, serviceManager.RestartCalls);
         Assert.Equal(ServiceActionKind.Restart, viewModel.PendingServiceAction);
@@ -214,9 +256,9 @@ public class MainViewModelTests
         await viewModel.RequestServiceActionAsync();
 
         Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
-        Assert.False(viewModel.ManageServiceCommand.CanExecute(null));
+        Assert.True(viewModel.ManageServiceCommand.CanExecute(null));
         Assert.Equal("Service not installed", viewModel.ServiceActionStatus);
-        Assert.Equal("Start Service", viewModel.ServiceActionLabel);
+        Assert.Equal("Install Service", viewModel.ServiceActionLabel);
         Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("TunnelFlow service is not installed."));
     }
 
@@ -294,6 +336,34 @@ public class MainViewModelTests
     {
         using var client = new ServiceClient();
         var viewModel = new MainViewModel(client);
+        var activeProfileId = Guid.NewGuid();
+        var inactiveProfileId = Guid.NewGuid();
+
+        viewModel.IsConnected = true;
+        viewModel.Profile.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = activeProfileId,
+                Name = "Active",
+                ServerAddress = "active.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls"
+            },
+            new VlessProfile
+            {
+                Id = inactiveProfileId,
+                Name = "Inactive",
+                ServerAddress = "inactive.example.com",
+                ServerPort = 443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "tcp",
+                Security = "tls"
+            }
+        ], activeProfileId);
+        viewModel.Profile.SelectedProfile = viewModel.Profile.AvailableProfiles.Single(profile => profile.Id == inactiveProfileId);
 
         viewModel.Profile.ServerAddress = "vpn.example.com";
         viewModel.Profile.UserId = "11111111-1111-1111-1111-111111111111";

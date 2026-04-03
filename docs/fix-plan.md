@@ -341,3 +341,30 @@ Outcome:
 - missing-resolution errors now list checked candidate paths and suggest `--service-exe <path>`
 Next recommended step:
 - Phase 2: integrate `TunnelFlow.Bootstrapper` into the UI service-control path while keeping the current explicit Windows lifecycle surface narrow
+
+## Step 24
+Phase 2 of the Windows bootstrapper approach: narrow UI integration for service lifecycle actions.
+Status: completed
+Scope:
+- integrate the existing sidebar service-action flow with `TunnelFlow.Bootstrapper`
+- support at minimum:
+  - `install`
+  - `repair`
+  - `restart-service`
+- keep the UI change narrow and preserve friendly status/log behavior
+Outcome:
+- UI service action now selects among:
+  - `Install Service`
+  - `Repair Service`
+  - `Restart Service`
+- bootstrapper verbs now invoked from UI:
+  - `install`
+  - `repair`
+  - `restart-service`
+- `start-service` / `restart-service` retain the old direct service-control fallback if the bootstrapper executable is missing
+- not-installed state no longer disables the service action; it now offers install directly
+- focused UI/view-model validation is now green after a narrow test-setup repair:
+  - `Profile.SaveCommand` and `Profile.ActivateCommand` were already correctly gated by service connection and existing-profile selection
+  - the affected `MainViewModel` test now sets up those preconditions explicitly
+Next recommended step:
+- Phase 2.1: add a narrow explicit `Repair Service` / `Install Service` failure mapping layer so more bootstrapper exit codes can be surfaced as friendlier UI statuses without broadening into a full service-management surface

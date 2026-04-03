@@ -43,9 +43,11 @@ public partial class MainViewModel : ObservableObject
 
     public string ServiceActionLabel => PendingServiceAction switch
     {
+        ServiceActionKind.Install => "Installing Service...",
+        ServiceActionKind.Repair => "Repairing Service...",
         ServiceActionKind.Start => "Starting Service...",
         ServiceActionKind.Restart => "Restarting Service...",
-        _ => IsConnected ? "Restart Service" : "Start Service"
+        _ => !IsServiceInstalled ? "Install Service" : (IsConnected ? "Restart Service" : "Repair Service")
     };
 
     public bool ShowServiceActionStatus => !string.IsNullOrWhiteSpace(ServiceActionStatus);
@@ -101,7 +103,7 @@ public partial class MainViewModel : ObservableObject
         _stopCmd = new RelayCommand(async () => await StopAsync(), () => CaptureRunning && IsConnected);
         _manageServiceCmd = new RelayCommand(
             async () => await RequestServiceActionAsync(),
-            () => PendingServiceAction == ServiceActionKind.None && IsServiceInstalled);
+            () => PendingServiceAction == ServiceActionKind.None);
 
         StartCommand = _startCmd;
         StopCommand = _stopCmd;
@@ -408,25 +410,43 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var requestedAction = IsConnected ? ServiceActionKind.Restart : ServiceActionKind.Start;
+        var requestedAction = !IsServiceInstalled
+            ? ServiceActionKind.Install
+            : IsConnected
+                ? ServiceActionKind.Restart
+                : ServiceActionKind.Repair;
         PendingServiceAction = requestedAction;
-        ServiceActionStatus = requestedAction == ServiceActionKind.Start
-            ? "Starting the Windows service..."
-            : "Restarting the Windows service...";
+        ServiceActionStatus = requestedAction switch
+        {
+            ServiceActionKind.Install => "Installing the Windows service...",
+            ServiceActionKind.Repair => "Repairing the Windows service...",
+            ServiceActionKind.Start => "Starting the Windows service...",
+            _ => "Restarting the Windows service..."
+        };
 
         try
         {
-            if (requestedAction == ServiceActionKind.Start)
+            switch (requestedAction)
             {
-                await _serviceControlManager.StartAsync(CancellationToken.None);
-                Log.AddLine("ui", "Info", "Start service requested");
-            }
-            else
-            {
-                await _serviceControlManager.RestartAsync(CancellationToken.None);
-                Log.AddLine("ui", "Info", "Restart service requested");
+                case ServiceActionKind.Install:
+                    await _serviceControlManager.InstallAsync(CancellationToken.None);
+                    Log.AddLine("ui", "Info", "Install service requested");
+                    break;
+                case ServiceActionKind.Repair:
+                    await _serviceControlManager.RepairAsync(CancellationToken.None);
+                    Log.AddLine("ui", "Info", "Repair service requested");
+                    break;
+                case ServiceActionKind.Start:
+                    await _serviceControlManager.StartAsync(CancellationToken.None);
+                    Log.AddLine("ui", "Info", "Start service requested");
+                    break;
+                default:
+                    await _serviceControlManager.RestartAsync(CancellationToken.None);
+                    Log.AddLine("ui", "Info", "Restart service requested");
+                    break;
             }
 
+            IsServiceInstalled = true;
             ServiceActionStatus = "Waiting for service connection...";
         }
         catch (ServiceNotInstalledException ex)
@@ -519,6 +539,8 @@ public partial class MainViewModel : ObservableObject
 public enum ServiceActionKind
 {
     None,
+    Install,
+    Repair,
     Start,
     Restart
 }
