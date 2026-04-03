@@ -387,3 +387,114 @@ Outcome:
   - preserves `C:\ProgramData\TunnelFlow`
 Next recommended step:
 - Phase 2.3: improve UI-facing bootstrapper exit-code mapping for install/repair/uninstall so more lifecycle failures become short friendly statuses without expanding into a full management UI
+
+## Step 26
+Phase 2.3 of the Windows bootstrapper approach: narrow UI integration for uninstall.
+Status: completed
+Scope:
+- add a small destructive uninstall action to the existing sidebar service-control area
+- require confirmation
+- keep the UI change minimal and avoid a separate management page
+Outcome:
+- installed state now shows a secondary `Uninstall Service` action
+- uninstall uses bootstrapper `uninstall`
+- confirmation is required before execution
+- successful uninstall transitions the UI cleanly to:
+  - not installed
+  - disconnected/offline runtime summaries
+  - `Install Service` as the primary remaining service action
+- focused `MainViewModel` validation is green
+Next recommended step:
+- Phase 2.4: improve bootstrapper exit-code to UI-status mapping for uninstall/install/repair so common failure cases become more specific than the current generic `Service action failed`
+
+## Step 27
+Phase 2.4 of the Windows bootstrapper approach: fix service install-state detection in UI startup/offline flow.
+Status: completed
+Scope:
+- add an explicit installed/not-installed probe to the service-control layer
+- use that probe during startup and disconnected/offline UI state
+- keep the change narrow and avoid redesigning the sidebar
+Outcome:
+- cold startup/offline state no longer assumes the service is installed
+- UI now correctly shows:
+  - not installed -> `Install Service`, uninstall hidden
+  - installed but disconnected -> `Repair Service`, uninstall visible
+  - connected -> `Restart Service`, uninstall visible
+- focused `MainViewModel` validation is green
+Next recommended step:
+- Phase 2.5: improve UI-facing bootstrapper failure mapping so install/repair/uninstall common errors become specific short statuses instead of the current generic `Service action failed`
+
+## Step 28
+Phase 2.4.1 of the Windows bootstrapper approach: fix the service-action reconnect race in UI state.
+Status: completed
+Scope:
+- keep the lifecycle actions unchanged:
+  - `Install Service`
+  - `Repair Service`
+  - `Restart Service`
+- prevent stale post-action waiting text from overwriting a newer connected state
+- keep the fix narrow to `MainViewModel` state handling and focused tests
+Outcome:
+- successful reconnect now always wins over stale `Waiting for service connection...` UI state
+- `RequestServiceActionAsync()` now sets the waiting status only if:
+  - the UI is still disconnected
+  - and the pending action still matches the original request
+- focused `MainViewModel` validation is green, including a race-specific reconnect test
+Next recommended step:
+- Phase 2.5: improve UI-facing bootstrapper failure mapping so install/repair/uninstall common errors become specific short statuses instead of the current generic `Service action failed`
+
+## Step 29
+Phase 2.5 of the Windows bootstrapper approach: narrow service-management polish in the UI.
+Status: completed
+Scope:
+- improve lifecycle failure/status mapping without changing bootstrapper architecture
+- keep detailed failure text in the log, with short friendly UI statuses
+- disable disruptive repair/uninstall actions while the tunnel is running
+Outcome:
+- lifecycle status mapping is now more specific:
+  - `Administrator approval required`
+  - `Service bootstrapper not available`
+  - `Install timed out`
+  - `Repair timed out`
+  - `Uninstall timed out`
+  - `Install failed`
+  - `Repair failed`
+  - `Uninstall failed`
+- raw exception text remains log-only
+- when the tunnel is active:
+  - `Repair Service` is not executable
+  - `Uninstall Service` is hidden / not executable
+- focused `MainViewModel` validation is green
+Next recommended step:
+- Phase 2.6: add one narrow UI hint or tooltip for disabled service actions during active tunnel runtime so the user understands why repair/uninstall are unavailable without expanding into a larger management surface
+
+## Step 30
+Phase 2.5.1 of the Windows bootstrapper approach: fix active-tunnel service-action consistency.
+Status: completed
+Scope:
+- keep service lifecycle availability internally consistent while the tunnel is active
+- avoid special-casing connected restart when other disruptive actions are already blocked
+- keep the change narrow to `MainViewModel` command gating and focused tests
+Outcome:
+- active tunnel now disables all disruptive service lifecycle actions consistently:
+  - `Restart Service`
+  - `Repair Service`
+  - `Uninstall Service`
+- focused `MainViewModel` validation is green
+Next recommended step:
+- Phase 2.6: add one narrow UI hint or tooltip for disabled service actions during active tunnel runtime so the user understands why service actions are unavailable without expanding into a larger management surface
+
+## Step 31
+Phase 2.5.2 of the Windows bootstrapper approach: polish uninstall visibility during active tunnel runtime.
+Status: completed
+Scope:
+- keep uninstall consistent with the primary service action in the sidebar
+- preserve the active-tunnel rule that disruptive service actions are unavailable
+- keep the change narrow to UI visibility/enabled-state behavior
+Outcome:
+- when the service is installed and the tunnel is active:
+  - `Uninstall Service` remains visible
+  - `Uninstall Service` is disabled
+- focused `MainViewModel` validation is green
+Next recommended step:
+- Phase 2.6: add one narrow UI hint or tooltip for disabled service actions during active tunnel runtime so the user understands why service actions are unavailable without expanding into a larger management surface

@@ -275,9 +275,261 @@
     - generic `sc.exe`/unexpected uninstall failure
 - Validation:
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
-    - pending for this step until validation completes
+    - passed
   - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
-    - pending for this step until validation completes
+    - passed
+
+## Bootstrapper uninstall UI integration
+- Implemented in this step:
+  - added a narrow confirmed `Uninstall Service` action to the existing sidebar service-control area
+  - kept the uninstall action clearly secondary/destructive
+  - preserved the existing TUN-first main UI structure
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IServiceControlManager.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- UI behavior before:
+  - service lifecycle actions exposed:
+    - `Install Service`
+    - `Repair Service`
+    - `Restart Service`
+  - there was no uninstall path in the UI
+- UI behavior after:
+  - when the service is installed, a secondary `Uninstall Service` action is shown under the main service action
+  - the action:
+    - requests confirmation first
+    - invokes bootstrapper `uninstall`
+    - on success, transitions the UI into the not-installed/offline state
+  - when the service is not installed:
+    - the uninstall action is hidden
+    - the main action remains `Install Service`
+- Confirmation behavior:
+  - message:
+    - `Uninstall the TunnelFlow Windows service? Saved configuration in ProgramData will be kept.`
+  - title:
+    - `Uninstall Service`
+- Friendly state/log behavior:
+  - success:
+    - `IsServiceInstalled = false`
+    - `IsConnected = false`
+    - status text becomes `Service not installed`
+    - detailed runtime state is reset to unavailable
+  - failure:
+    - UI still shows short friendly `Service action failed`
+    - details go to the log
+  - cancel:
+    - no action is taken
+    - no status text is shown
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 14
+    - failed: 0
+    - skipped: 0
+
+## Service install-state detection fix
+- Implemented in this step:
+  - fixed the UI bug where cold startup/offline state defaulted to an installed/disconnected assumption
+  - added an explicit service-installed probe in the service-control layer
+  - updated `MainViewModel` startup/offline flow to use the real installed state
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IServiceControlManager.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact cause of the bug:
+  - `MainViewModel` defaulted `IsServiceInstalled = true`
+  - startup/offline/disconnect flow loaded offline config but did not explicitly probe whether the Windows service actually existed
+  - that left the sidebar showing:
+    - `Repair Service`
+    - `Uninstall Service`
+    even when the service was not installed
+- Exact fix applied:
+  - added `IsInstalledAsync(CancellationToken)` to `IServiceControlManager`
+  - `WindowsServiceControlManager` now implements it with a direct Windows service existence check
+  - `MainViewModel.InitializeAsync()` now probes install state before loading offline config
+  - `HandleDisconnectedAsync()` now refreshes install state before applying offline/disconnected UI state
+  - when not connected:
+    - installed -> `ConnectionStatus = "Reconnecting..."`
+    - not installed -> `ConnectionStatus = "Service not installed"`
+- Resulting UI behavior:
+  - not installed:
+    - primary action: `Install Service`
+    - uninstall hidden
+  - installed but disconnected:
+    - primary action: `Repair Service`
+    - uninstall visible
+  - connected:
+    - primary action: `Restart Service`
+    - uninstall visible
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 16
+    - failed: 0
+    - skipped: 0
+
+## Service action reconnect-race fix
+- Implemented in this step:
+  - fixed the UI race where `RequestServiceActionAsync()` could restore `Waiting for service connection...` after the UI had already reconnected and cleared service-action state
+  - kept scope narrow:
+    - no bootstrapper architecture changes
+    - no runtime/TUN changes
+    - no broader service-management redesign
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact cause of the race:
+  - `HandleConnectedAsync()` correctly clears:
+    - `ServiceActionStatus`
+    - `PendingServiceAction`
+  - but `RequestServiceActionAsync()` was still unconditionally setting:
+    - `ServiceActionStatus = "Waiting for service connection..."`
+    after its awaited service-control call returned
+  - if reconnect completed during that await, the later continuation overwrote the already-correct connected state
+- Exact fix applied:
+  - after a successful install/repair/restart call, `MainViewModel` now updates the post-action waiting state only if:
+    - the UI is still disconnected
+    - and `PendingServiceAction` still matches the action that started the request
+  - if reconnect has already happened, the connected state now wins and the stale waiting text is not restored
+- Focused test coverage added/updated:
+  - added:
+    - `RequestServiceActionAsync_WhenReconnectWins_DoesNotRestoreWaitingStatus`
+  - updated:
+    - `RequestServiceActionAsync_WhenConnected_RestartsService`
+    - connected restart now keeps the in-progress restart status unless/until disconnect/reconnect transitions actually occur
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 17
+    - failed: 0
+    - skipped: 0
+
+## Service-management polish pass
+- Implemented in this step:
+  - improved user-facing lifecycle failure/status mapping in the UI
+  - disabled disruptive repair/uninstall actions while the tunnel is active
+  - kept scope narrow:
+    - no bootstrapper architecture changes
+    - no updater changes
+    - no runtime/TUN behavior changes
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IServiceControlManager.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact status mapping added/changed:
+  - `Service not installed`
+    - unchanged for missing-service state
+  - `Administrator approval required`
+    - now shown for lifecycle access-denied / canceled-elevation cases
+  - `Service bootstrapper not available`
+    - now shown when `TunnelFlow.Bootstrapper.exe` cannot be resolved
+  - `Install timed out`
+  - `Repair timed out`
+  - `Uninstall timed out`
+    - now shown for lifecycle timeout failures
+  - `Install failed`
+  - `Repair failed`
+  - `Uninstall failed`
+    - now shown for generic action-specific failures instead of the old generic `Service action failed`
+- Detailed error behavior:
+  - short friendly status text stays in the UI
+  - raw exception detail remains in the log only
+- Exact availability behavior added:
+  - when the tunnel is active (`CaptureRunning || SingBoxRunning`):
+    - `Repair Service` is not executable
+    - `Uninstall Service` is hidden and not executable
+  - `Install Service` remains available for the not-installed path
+  - connected `Restart Service` behavior is unchanged
+- Focused validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 24
+    - failed: 0
+    - skipped: 0
+
+## Active-tunnel service-action consistency fix
+- Implemented in this step:
+  - fixed the remaining UI inconsistency where `Restart Service` was still available while the tunnel was active
+  - kept scope narrow:
+    - no bootstrapper changes
+    - no updater changes
+    - no runtime/TUN behavior changes
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact cause of the inconsistency:
+  - `MainViewModel` already hid `Uninstall Service` when the tunnel was active
+  - but the primary service-action command used a looser gate that still allowed the connected path, so `Restart Service` remained available
+- Exact availability behavior before:
+  - active tunnel:
+    - `Restart Service` still available
+    - `Repair Service` unavailable
+    - `Uninstall Service` hidden/unavailable
+- Exact availability behavior after:
+  - active tunnel:
+    - `Restart Service` unavailable
+    - `Repair Service` unavailable
+    - `Uninstall Service` remains hidden/unavailable
+  - inactive tunnel:
+    - existing install / repair / restart behavior remains unchanged
+- Exact fix applied:
+  - `MainViewModel` now uses one consistent `IsTunnelActive` gate for service-action availability
+  - the primary manage-service command no longer special-cases connected restart while the tunnel is active
+- Focused validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 25
+    - failed: 0
+    - skipped: 0
+
+## Uninstall visibility polish for active tunnel state
+- Implemented in this step:
+  - kept `Uninstall Service` visible while the tunnel is active, instead of hiding it
+  - preserved the current rule that disruptive service actions remain unavailable during active tunnel runtime
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact UI behavior before:
+  - active tunnel:
+    - `Restart Service` visible but disabled
+    - `Uninstall Service` disappeared entirely
+- Exact UI behavior after:
+  - active tunnel:
+    - `Restart Service` remains visible and disabled
+    - `Uninstall Service` remains visible and disabled
+  - not-installed state is unchanged:
+    - uninstall remains hidden
+- Exact fix applied:
+  - `ShowUninstallServiceAction` now follows service installation state only
+  - uninstall command enablement still follows the existing active-tunnel gate
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 25
+    - failed: 0
+    - skipped: 0
 
 ## TUN Phase 6 status-model plumbing
 - Implemented in this step:

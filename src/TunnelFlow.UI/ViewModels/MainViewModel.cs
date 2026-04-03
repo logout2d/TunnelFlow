@@ -15,6 +15,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ServiceClient _client;
     private readonly LocalConfigSnapshotLoader _configLoader;
     private readonly IServiceControlManager _serviceControlManager;
+    private readonly Func<string, string, bool> _confirmServiceAction;
     private bool _waitingForServiceLogged;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
@@ -39,6 +40,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private object _currentView;
     [ObservableProperty] private ServiceActionKind _pendingServiceAction;
 
+    private bool IsTunnelActive => CaptureRunning || SingBoxRunning;
+
     public string ServiceConnectionSummary => IsConnected ? "Service: On" : "Service: Off";
 
     public string ServiceActionLabel => PendingServiceAction switch
@@ -50,7 +53,13 @@ public partial class MainViewModel : ObservableObject
         _ => !IsServiceInstalled ? "Install Service" : (IsConnected ? "Restart Service" : "Repair Service")
     };
 
+    public string UninstallServiceLabel => PendingServiceAction == ServiceActionKind.Uninstall
+        ? "Uninstalling Service..."
+        : "Uninstall Service";
+
     public bool ShowServiceActionStatus => !string.IsNullOrWhiteSpace(ServiceActionStatus);
+
+    public bool ShowUninstallServiceAction => IsServiceInstalled;
 
     public string ModeSummary => SelectedMode == TunnelStatusMode.Tun ? "TUN" : "Legacy";
 
@@ -75,6 +84,7 @@ public partial class MainViewModel : ObservableObject
     public IRelayCommand StartCommand { get; }
     public IRelayCommand StopCommand { get; }
     public IRelayCommand ManageServiceCommand { get; }
+    public IRelayCommand UninstallServiceCommand { get; }
     public IRelayCommand NavigateToRulesCommand { get; }
     public IRelayCommand NavigateToProfileCommand { get; }
     public IRelayCommand NavigateToLogCommand { get; }
@@ -82,15 +92,19 @@ public partial class MainViewModel : ObservableObject
     private RelayCommand _startCmd = null!;
     private RelayCommand _stopCmd = null!;
     private RelayCommand _manageServiceCmd = null!;
+    private RelayCommand _uninstallServiceCmd = null!;
 
     public MainViewModel(
         ServiceClient client,
         LocalConfigSnapshotLoader? configLoader = null,
-        IServiceControlManager? serviceControlManager = null)
+        IServiceControlManager? serviceControlManager = null,
+        Func<string, string, bool>? confirmServiceAction = null)
     {
         _client = client;
         _configLoader = configLoader ?? new LocalConfigSnapshotLoader();
         _serviceControlManager = serviceControlManager ?? new WindowsServiceControlManager();
+        _confirmServiceAction = confirmServiceAction ?? ((message, title) =>
+            MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes);
 
         AppRules = new AppRulesViewModel(client);
         Profile = new ProfileViewModel(client);
@@ -103,11 +117,15 @@ public partial class MainViewModel : ObservableObject
         _stopCmd = new RelayCommand(async () => await StopAsync(), () => CaptureRunning && IsConnected);
         _manageServiceCmd = new RelayCommand(
             async () => await RequestServiceActionAsync(),
-            () => PendingServiceAction == ServiceActionKind.None);
+            CanExecuteManageServiceAction);
+        _uninstallServiceCmd = new RelayCommand(
+            async () => await RequestUninstallServiceAsync(),
+            CanExecuteUninstallServiceAction);
 
         StartCommand = _startCmd;
         StopCommand = _stopCmd;
         ManageServiceCommand = _manageServiceCmd;
+        UninstallServiceCommand = _uninstallServiceCmd;
 
         NavigateToRulesCommand = new RelayCommand(() => CurrentView = AppRules);
         NavigateToProfileCommand = new RelayCommand(() => CurrentView = Profile);
@@ -119,8 +137,10 @@ public partial class MainViewModel : ObservableObject
         _startCmd.NotifyCanExecuteChanged();
         _stopCmd.NotifyCanExecuteChanged();
         _manageServiceCmd.NotifyCanExecuteChanged();
+        _uninstallServiceCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ServiceConnectionSummary));
         OnPropertyChanged(nameof(ServiceActionLabel));
+        OnPropertyChanged(nameof(UninstallServiceLabel));
         OnPropertyChanged(nameof(EngineStatusSummary));
         OnPropertyChanged(nameof(TunnelStatusSummary));
         UpdateConfigEditingState();
@@ -130,6 +150,9 @@ public partial class MainViewModel : ObservableObject
     {
         _startCmd.NotifyCanExecuteChanged();
         _stopCmd.NotifyCanExecuteChanged();
+        _manageServiceCmd.NotifyCanExecuteChanged();
+        _uninstallServiceCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ShowUninstallServiceAction));
         UpdateConfigEditingState();
     }
 
@@ -146,6 +169,9 @@ public partial class MainViewModel : ObservableObject
     partial void OnSingBoxRunningChanged(bool value)
     {
         OnPropertyChanged(nameof(EngineStatusSummary));
+        _manageServiceCmd.NotifyCanExecuteChanged();
+        _uninstallServiceCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ShowUninstallServiceAction));
         UpdateConfigEditingState();
     }
 
@@ -167,11 +193,18 @@ public partial class MainViewModel : ObservableObject
     partial void OnPendingServiceActionChanged(ServiceActionKind value)
     {
         _manageServiceCmd.NotifyCanExecuteChanged();
+        _uninstallServiceCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ServiceActionLabel));
+        OnPropertyChanged(nameof(UninstallServiceLabel));
     }
 
-    partial void OnIsServiceInstalledChanged(bool value) =>
+    partial void OnIsServiceInstalledChanged(bool value)
+    {
         _manageServiceCmd.NotifyCanExecuteChanged();
+        _uninstallServiceCmd.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ServiceActionLabel));
+        OnPropertyChanged(nameof(ShowUninstallServiceAction));
+    }
 
     public async Task InitializeAsync()
     {
@@ -182,6 +215,7 @@ public partial class MainViewModel : ObservableObject
 
         // ConnectAsync blocks until first connection (runs on background thread via Task.Run).
         // OnClientConnected fires during ConnectAsync and calls LoadStateAsync — do NOT call it here.
+        await RefreshServiceInstallationStateAsync();
         await LoadOfflineConfigAsync();
         await _client.ConnectAsync(CancellationToken.None);
     }
@@ -377,7 +411,29 @@ public partial class MainViewModel : ObservableObject
             RecordServiceDisconnectedForUi();
         });
 
+        await RefreshServiceInstallationStateAsync();
         await LoadOfflineConfigAsync();
+    }
+
+    internal async Task RefreshServiceInstallationStateAsync()
+    {
+        try
+        {
+            var isInstalled = await _serviceControlManager.IsInstalledAsync(CancellationToken.None);
+            await DispatchAsync(() =>
+            {
+                IsServiceInstalled = isInstalled;
+                if (!IsConnected)
+                {
+                    ConnectionStatus = isInstalled ? "Reconnecting..." : "Service not installed";
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            await DispatchAsync(() =>
+                Log.AddLine("ui", "Warning", $"Service install-state probe failed: {ex.Message}"));
+        }
     }
 
     private async Task LoadOfflineConfigAsync()
@@ -405,7 +461,7 @@ public partial class MainViewModel : ObservableObject
 
     internal async Task RequestServiceActionAsync()
     {
-        if (PendingServiceAction != ServiceActionKind.None)
+        if (!CanExecuteManageServiceAction())
         {
             return;
         }
@@ -446,8 +502,14 @@ public partial class MainViewModel : ObservableObject
                     break;
             }
 
-            IsServiceInstalled = true;
-            ServiceActionStatus = "Waiting for service connection...";
+            await DispatchAsync(() =>
+            {
+                IsServiceInstalled = true;
+                if (!IsConnected && PendingServiceAction == requestedAction)
+                {
+                    ServiceActionStatus = "Waiting for service connection...";
+                }
+            });
         }
         catch (ServiceNotInstalledException ex)
         {
@@ -456,10 +518,90 @@ public partial class MainViewModel : ObservableObject
             ServiceActionStatus = "Service not installed";
             Log.AddLine("ui", "Warning", $"Service action failed: {ex.Message}");
         }
+        catch (ServiceControlAccessDeniedException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Administrator approval required";
+            Log.AddLine("ui", "Warning", $"Service action failed: {ex.Message}");
+        }
+        catch (ServiceControlTimeoutException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = $"{GetServiceActionDisplayName(requestedAction)} timed out";
+            Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
+        }
+        catch (ServiceBootstrapperMissingException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Service bootstrapper not available";
+            Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
+        }
         catch (Exception ex)
         {
             PendingServiceAction = ServiceActionKind.None;
-            ServiceActionStatus = "Service action failed";
+            ServiceActionStatus = $"{GetServiceActionDisplayName(requestedAction)} failed";
+            Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
+        }
+    }
+
+    internal async Task RequestUninstallServiceAsync()
+    {
+        if (!CanExecuteUninstallServiceAction())
+        {
+            return;
+        }
+
+        if (!_confirmServiceAction(
+                "Uninstall the TunnelFlow Windows service? Saved configuration in ProgramData will be kept.",
+                "Uninstall Service"))
+        {
+            return;
+        }
+
+        PendingServiceAction = ServiceActionKind.Uninstall;
+        ServiceActionStatus = "Uninstalling the Windows service...";
+
+        try
+        {
+            await _serviceControlManager.UninstallAsync(CancellationToken.None);
+            Log.AddLine("ui", "Info", "Uninstall service requested");
+            PendingServiceAction = ServiceActionKind.None;
+            IsConnected = false;
+            IsServiceInstalled = false;
+            ConnectionStatus = "Service not installed";
+            ApplyServiceUnavailableRuntimeState();
+            ServiceActionStatus = "Service not installed";
+        }
+        catch (ServiceNotInstalledException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            IsConnected = false;
+            IsServiceInstalled = false;
+            ServiceActionStatus = "Service not installed";
+            Log.AddLine("ui", "Warning", $"Service action failed: {ex.Message}");
+        }
+        catch (ServiceControlAccessDeniedException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Administrator approval required";
+            Log.AddLine("ui", "Warning", $"Service action failed: {ex.Message}");
+        }
+        catch (ServiceControlTimeoutException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Uninstall timed out";
+            Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
+        }
+        catch (ServiceBootstrapperMissingException ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Service bootstrapper not available";
+            Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            PendingServiceAction = ServiceActionKind.None;
+            ServiceActionStatus = "Uninstall failed";
             Log.AddLine("ui", "Error", $"Service action failed: {ex.Message}");
         }
     }
@@ -517,11 +659,33 @@ public partial class MainViewModel : ObservableObject
 
     private void UpdateConfigEditingState()
     {
-        var isTunnelRunning = CaptureRunning || SingBoxRunning;
-        AppRules.IsEditingEnabled = !isTunnelRunning;
-        Profile.IsEditingEnabled = !isTunnelRunning;
+        AppRules.IsEditingEnabled = !IsTunnelActive;
+        Profile.IsEditingEnabled = !IsTunnelActive;
         Profile.IsServiceConnected = IsConnected;
     }
+
+    private bool CanExecuteManageServiceAction()
+    {
+        if (PendingServiceAction != ServiceActionKind.None)
+        {
+            return false;
+        }
+
+        return !IsTunnelActive;
+    }
+
+    private bool CanExecuteUninstallServiceAction() =>
+        IsServiceInstalled && !IsTunnelActive && PendingServiceAction == ServiceActionKind.None;
+
+    private static string GetServiceActionDisplayName(ServiceActionKind action) => action switch
+    {
+        ServiceActionKind.Install => "Install",
+        ServiceActionKind.Repair => "Repair",
+        ServiceActionKind.Uninstall => "Uninstall",
+        ServiceActionKind.Start => "Start",
+        ServiceActionKind.Restart => "Restart",
+        _ => "Service action"
+    };
 
     private static Task DispatchAsync(Action action)
     {
@@ -541,6 +705,7 @@ public enum ServiceActionKind
     None,
     Install,
     Repair,
+    Uninstall,
     Start,
     Restart
 }

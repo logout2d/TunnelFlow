@@ -9,9 +9,14 @@ public class MainViewModelTests
 {
     private sealed class FakeServiceControlManager : IServiceControlManager
     {
+        public bool IsInstalled { get; set; } = true;
+        public Func<string, Task>? OnActionAsync { get; set; }
+
         public int InstallCalls { get; private set; }
 
         public int RepairCalls { get; private set; }
+
+        public int UninstallCalls { get; private set; }
 
         public int StartCalls { get; private set; }
 
@@ -19,28 +24,47 @@ public class MainViewModelTests
 
         public Exception? Failure { get; set; }
 
+        public Task<bool> IsInstalledAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(IsInstalled);
+
         public Task InstallAsync(CancellationToken cancellationToken)
         {
             InstallCalls++;
-            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+            return OnActionAsync is not null
+                ? OnActionAsync("install")
+                : Failure is null ? Task.CompletedTask : Task.FromException(Failure);
         }
 
         public Task RepairAsync(CancellationToken cancellationToken)
         {
             RepairCalls++;
-            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+            return OnActionAsync is not null
+                ? OnActionAsync("repair")
+                : Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+        }
+
+        public Task UninstallAsync(CancellationToken cancellationToken)
+        {
+            UninstallCalls++;
+            return OnActionAsync is not null
+                ? OnActionAsync("uninstall")
+                : Failure is null ? Task.CompletedTask : Task.FromException(Failure);
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
             StartCalls++;
-            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+            return OnActionAsync is not null
+                ? OnActionAsync("start-service")
+                : Failure is null ? Task.CompletedTask : Task.FromException(Failure);
         }
 
         public Task RestartAsync(CancellationToken cancellationToken)
         {
             RestartCalls++;
-            return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
+            return OnActionAsync is not null
+                ? OnActionAsync("restart-service")
+                : Failure is null ? Task.CompletedTask : Task.FromException(Failure);
         }
     }
 
@@ -182,6 +206,38 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task RefreshServiceInstallationStateAsync_WhenServiceIsNotInstalled_ShowsInstallAndHidesUninstall()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager { IsInstalled = false };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = false;
+        await viewModel.RefreshServiceInstallationStateAsync();
+
+        Assert.False(viewModel.IsServiceInstalled);
+        Assert.Equal("Install Service", viewModel.ServiceActionLabel);
+        Assert.False(viewModel.ShowUninstallServiceAction);
+        Assert.Equal("Service not installed", viewModel.ConnectionStatus);
+    }
+
+    [Fact]
+    public async Task RefreshServiceInstallationStateAsync_WhenServiceIsInstalled_ShowsRepairAndShowsUninstall()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager { IsInstalled = true };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager);
+
+        viewModel.IsConnected = false;
+        await viewModel.RefreshServiceInstallationStateAsync();
+
+        Assert.True(viewModel.IsServiceInstalled);
+        Assert.Equal("Repair Service", viewModel.ServiceActionLabel);
+        Assert.True(viewModel.ShowUninstallServiceAction);
+        Assert.Equal("Reconnecting...", viewModel.ConnectionStatus);
+    }
+
+    [Fact]
     public async Task RequestServiceActionAsync_WhenDisconnected_RepairsService()
     {
         using var client = new ServiceClient();
@@ -194,12 +250,69 @@ public class MainViewModelTests
 
         Assert.Equal(0, serviceManager.InstallCalls);
         Assert.Equal(1, serviceManager.RepairCalls);
+        Assert.Equal(0, serviceManager.UninstallCalls);
         Assert.Equal(0, serviceManager.StartCalls);
         Assert.Equal(0, serviceManager.RestartCalls);
         Assert.Equal(ServiceActionKind.Repair, viewModel.PendingServiceAction);
         Assert.Equal("Repairing Service...", viewModel.ServiceActionLabel);
         Assert.Equal("Waiting for service connection...", viewModel.ServiceActionStatus);
         Assert.True(viewModel.ShowServiceActionStatus);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenTunnelIsRunning_DoesNotAllowRepair()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = false,
+            IsServiceInstalled = true
+        };
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true
+        });
+
+        Assert.False(viewModel.ManageServiceCommand.CanExecute(null));
+
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(0, serviceManager.RepairCalls);
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenTunnelIsRunning_DoesNotAllowRestart()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = true,
+            IsServiceInstalled = true
+        };
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true
+        });
+
+        Assert.False(viewModel.ManageServiceCommand.CanExecute(null));
+
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal(0, serviceManager.RestartCalls);
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
     }
 
     [Fact]
@@ -215,6 +328,7 @@ public class MainViewModelTests
 
         Assert.Equal(1, serviceManager.InstallCalls);
         Assert.Equal(0, serviceManager.RepairCalls);
+        Assert.Equal(0, serviceManager.UninstallCalls);
         Assert.Equal(0, serviceManager.StartCalls);
         Assert.Equal(0, serviceManager.RestartCalls);
         Assert.Equal(ServiceActionKind.Install, viewModel.PendingServiceAction);
@@ -235,11 +349,47 @@ public class MainViewModelTests
 
         Assert.Equal(0, serviceManager.InstallCalls);
         Assert.Equal(0, serviceManager.RepairCalls);
+        Assert.Equal(0, serviceManager.UninstallCalls);
         Assert.Equal(0, serviceManager.StartCalls);
         Assert.Equal(1, serviceManager.RestartCalls);
         Assert.Equal(ServiceActionKind.Restart, viewModel.PendingServiceAction);
         Assert.Equal("Restarting Service...", viewModel.ServiceActionLabel);
-        Assert.Equal("Waiting for service connection...", viewModel.ServiceActionStatus);
+        Assert.Equal("Restarting the Windows service...", viewModel.ServiceActionStatus);
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenReconnectWins_DoesNotRestoreWaitingStatus()
+    {
+        using var client = new ServiceClient();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        MainViewModel? viewModel = null;
+        var serviceManager = new FakeServiceControlManager
+        {
+            OnActionAsync = async verb =>
+            {
+                Assert.Equal("repair", verb);
+                viewModel!.IsConnected = true;
+                viewModel.IsServiceInstalled = true;
+                viewModel.ConnectionStatus = "Connected";
+                viewModel.ServiceActionStatus = string.Empty;
+                viewModel.PendingServiceAction = ServiceActionKind.None;
+                gate.SetResult();
+                await Task.Yield();
+            }
+        };
+        viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = false,
+            IsServiceInstalled = true
+        };
+
+        await viewModel.RequestServiceActionAsync();
+        await gate.Task;
+
+        Assert.True(viewModel.IsConnected);
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+        Assert.Equal(string.Empty, viewModel.ServiceActionStatus);
+        Assert.Equal("Restart Service", viewModel.ServiceActionLabel);
     }
 
     [Fact]
@@ -263,6 +413,94 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task RequestUninstallServiceAsync_WhenConfirmed_UninstallsAndTransitionsToNotInstalled()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var confirmations = new List<(string Message, string Title)>();
+        var viewModel = new MainViewModel(
+            client,
+            serviceControlManager: serviceManager,
+            confirmServiceAction: (message, title) =>
+            {
+                confirmations.Add((message, title));
+                return true;
+            });
+
+        viewModel.IsConnected = true;
+        viewModel.IsServiceInstalled = true;
+
+        await viewModel.RequestUninstallServiceAsync();
+
+        Assert.Single(confirmations);
+        Assert.Equal("Uninstall Service", confirmations[0].Title);
+        Assert.Equal(0, serviceManager.InstallCalls);
+        Assert.Equal(0, serviceManager.RepairCalls);
+        Assert.Equal(1, serviceManager.UninstallCalls);
+        Assert.Equal(0, serviceManager.StartCalls);
+        Assert.Equal(0, serviceManager.RestartCalls);
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+        Assert.False(viewModel.IsConnected);
+        Assert.False(viewModel.IsServiceInstalled);
+        Assert.Equal("Service not installed", viewModel.ServiceActionStatus);
+        Assert.Equal("Install Service", viewModel.ServiceActionLabel);
+        Assert.False(viewModel.ShowUninstallServiceAction);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Uninstall service requested"));
+    }
+
+    [Fact]
+    public async Task RequestUninstallServiceAsync_WhenTunnelIsRunning_DoesNotAllowUninstall()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = true,
+            IsServiceInstalled = true
+        };
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true
+        });
+
+        Assert.True(viewModel.ShowUninstallServiceAction);
+        Assert.False(viewModel.UninstallServiceCommand.CanExecute(null));
+
+        await viewModel.RequestUninstallServiceAsync();
+
+        Assert.Equal(0, serviceManager.UninstallCalls);
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+    }
+
+    [Fact]
+    public async Task RequestUninstallServiceAsync_WhenCanceled_DoesNothing()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager();
+        var viewModel = new MainViewModel(
+            client,
+            serviceControlManager: serviceManager,
+            confirmServiceAction: (_, _) => false);
+
+        viewModel.IsConnected = true;
+        viewModel.IsServiceInstalled = true;
+
+        await viewModel.RequestUninstallServiceAsync();
+
+        Assert.Equal(0, serviceManager.UninstallCalls);
+        Assert.True(viewModel.IsConnected);
+        Assert.True(viewModel.IsServiceInstalled);
+        Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
+        Assert.False(viewModel.ShowServiceActionStatus);
+        Assert.True(viewModel.ShowUninstallServiceAction);
+    }
+
+    [Fact]
     public async Task RequestServiceActionAsync_WhenGenericServiceControlFails_ShowsFriendlyStatus_AndLogsDetails()
     {
         using var client = new ServiceClient();
@@ -277,9 +515,112 @@ public class MainViewModelTests
 
         Assert.Equal(ServiceActionKind.None, viewModel.PendingServiceAction);
         Assert.True(viewModel.ManageServiceCommand.CanExecute(null));
-        Assert.Equal("Service action failed", viewModel.ServiceActionStatus);
+        Assert.Equal("Repair failed", viewModel.ServiceActionStatus);
         Assert.DoesNotContain("Raw detailed failure", viewModel.ServiceActionStatus);
         Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Raw detailed failure"));
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenAccessDenied_ShowsFriendlyStatus_AndLogsDetails()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new ServiceControlAccessDeniedException("Administrator approval was denied.")
+        };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = false,
+            IsServiceInstalled = true
+        };
+
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal("Administrator approval required", viewModel.ServiceActionStatus);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Administrator approval was denied."));
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenTimeout_ShowsFriendlyStatus_AndLogsDetails()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new ServiceControlTimeoutException("Repair timed out.")
+        };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = false,
+            IsServiceInstalled = true
+        };
+
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal("Repair timed out", viewModel.ServiceActionStatus);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Repair timed out."));
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenBootstrapperMissing_ShowsFriendlyStatus_AndLogsDetails()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new ServiceBootstrapperMissingException("TunnelFlow.Bootstrapper.exe was not found.")
+        };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = false,
+            IsServiceInstalled = false
+        };
+
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal("Service bootstrapper not available", viewModel.ServiceActionStatus);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("TunnelFlow.Bootstrapper.exe was not found."));
+    }
+
+    [Fact]
+    public async Task RequestServiceActionAsync_WhenInstallFails_ShowsFriendlyStatus_AndLogsDetails()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new InvalidOperationException("Create service failed.")
+        };
+        var viewModel = new MainViewModel(client, serviceControlManager: serviceManager)
+        {
+            IsConnected = false,
+            IsServiceInstalled = false
+        };
+
+        await viewModel.RequestServiceActionAsync();
+
+        Assert.Equal("Install failed", viewModel.ServiceActionStatus);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Create service failed."));
+    }
+
+    [Fact]
+    public async Task RequestUninstallServiceAsync_WhenGenericFailure_ShowsFriendlyStatus_AndLogsDetails()
+    {
+        using var client = new ServiceClient();
+        var serviceManager = new FakeServiceControlManager
+        {
+            Failure = new InvalidOperationException("Delete failed with raw details.")
+        };
+        var viewModel = new MainViewModel(
+            client,
+            serviceControlManager: serviceManager,
+            confirmServiceAction: (_, _) => true)
+        {
+            IsConnected = true,
+            IsServiceInstalled = true
+        };
+
+        await viewModel.RequestUninstallServiceAsync();
+
+        Assert.Equal("Uninstall failed", viewModel.ServiceActionStatus);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Delete failed with raw details."));
     }
 
     [Fact]

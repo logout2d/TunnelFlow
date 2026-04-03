@@ -105,6 +105,25 @@
                             Foreground="White"
                             Margin="0,8,0,0"/>
 
+                    <Button Content="{Binding UninstallServiceLabel}"
+                            Command="{Binding UninstallServiceCommand}"
+                            Background="#7F1D1D"
+                            Foreground="#FEE2E2"
+                            Margin="0,6,0,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource ActionButton}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Setter Property="Background" Value="#7F1D1D"/>
+                                <Setter Property="Foreground" Value="#FEE2E2"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowUninstallServiceAction}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
                     <TextBlock Text="{Binding ServiceActionStatus}"
                                Margin="0,6,0,0"
                                FontSize="11"
