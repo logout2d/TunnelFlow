@@ -253,6 +253,15 @@ Progress:
   - the top profile selector row has been compacted slightly without changing the overall layout
 - next recommended Phase 6.9 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable
+- next TUN-only cleanup Phase 3 step is now completed:
+  - removed the remaining service-side runtime planning/fallback branch that still orchestrated around legacy capture startup
+  - `OrchestratorService` now fails closed when TUN mode is disabled or prerequisites are unmet instead of falling back to legacy mode
+  - orchestration is now aligned around the intended TUN-only runtime path:
+    - validate TUN selection
+    - start `ITunOrchestrator`
+    - build TUN sing-box config
+    - start sing-box in TUN mode
+  - the compiled legacy capture stack, `ndisapi.net`, and session IPC/contracts remain intentionally in place for later dedicated removal phases
 
 ## Step 20
 Design: elevated helper/bootstrapper component for system lifecycle management.

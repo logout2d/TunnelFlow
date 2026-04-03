@@ -1,4 +1,3 @@
-using System.Net;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TunnelFlow.Capture.Policy;
@@ -17,14 +16,12 @@ public sealed class OrchestratorService : BackgroundService
     private readonly ICaptureEngine _captureEngine;
     private readonly IPolicyEngine _policyEngine;
     private readonly ITunOrchestrator _tunOrchestrator;
-    private readonly ISessionRegistry _sessionRegistry;
     private readonly ConfigStore _configStore;
     private readonly PipeServer _pipeServer;
     private readonly ILogger<OrchestratorService> _logger;
 
     private TunnelFlowConfig _config = new();
     private bool _captureRunning;
-    private bool _legacyCaptureActive;
     private bool _tunModeActive;
     private TunnelMode _selectedMode = TunnelMode.Legacy;
     private int _singBoxRestartAttempts;
@@ -39,7 +36,6 @@ public sealed class OrchestratorService : BackgroundService
         ICaptureEngine captureEngine,
         IPolicyEngine policyEngine,
         ITunOrchestrator tunOrchestrator,
-        ISessionRegistry sessionRegistry,
         ConfigStore configStore,
         PipeServer pipeServer,
         ILogger<OrchestratorService> logger)
@@ -48,7 +44,6 @@ public sealed class OrchestratorService : BackgroundService
         _captureEngine = captureEngine;
         _policyEngine = policyEngine;
         _tunOrchestrator = tunOrchestrator;
-        _sessionRegistry = sessionRegistry;
         _configStore = configStore;
         _pipeServer = pipeServer;
         _logger = logger;
@@ -117,22 +112,6 @@ public sealed class OrchestratorService : BackgroundService
                 return;
             }
 
-            // Resolve server IP for self-exclusion (non-negotiable per CURSOR_RULES.md §1)
-            IPAddress[] serverAddresses;
-            try
-            {
-                serverAddresses = await Dns.GetHostAddressesAsync(profile.ServerAddress);
-            }
-            catch (Exception ex)
-            {
-                _pipeServer.PushLogLine("service", "Error",
-                    $"Cannot start: failed to resolve {profile.ServerAddress}: {ex.Message}");
-                return;
-            }
-
-            _pipeServer.PushLogLine("service", "Info",
-                $"Resolved {profile.ServerAddress} → {string.Join(", ", serverAddresses.Select(a => a.ToString()))}");
-
             Directory.CreateDirectory(DataDir);
 
             var singBoxExe = ResolveSingBoxPath();
@@ -164,100 +143,83 @@ public sealed class OrchestratorService : BackgroundService
                 "Info",
                 $"Tunnel mode selection: requestedTun={tunModeSelection.UseTunModeRequested}, selectedMode={tunModeSelection.SelectedMode}, tunPrerequisitesSatisfied={tunModeSelection.TunPrerequisitesSatisfied}, wintunPath={tunModeSelection.WintunPath}");
 
-            if (tunModeSelection.UseTunModeRequested && tunModeSelection.SelectedMode != TunnelMode.Tun)
+            var tunOnlyStartBlockReason = GetTunOnlyStartBlockReason(tunModeSelection);
+            if (tunOnlyStartBlockReason is not null)
             {
-                _pipeServer.PushLogLine(
-                    "service",
-                    "Warning",
-                    $"TUN mode requested but legacy mode remains active: {tunModeSelection.SelectionReason}");
+                _logger.LogWarning(
+                    "TUN-only runtime blocked start requestedTunMode={RequestedTunMode} selectedMode={SelectedMode} selectionReason={SelectionReason} wintunPath={WintunPath}",
+                    tunModeSelection.UseTunModeRequested,
+                    tunModeSelection.SelectedMode,
+                    tunModeSelection.SelectionReason,
+                    tunModeSelection.WintunPath);
+                _pipeServer.PushLogLine("service", "Error", tunOnlyStartBlockReason);
+                return;
             }
 
             var logDir = Path.Combine(DataDir, "logs");
             Directory.CreateDirectory(logDir);
 
-            if (tunModeSelection.SelectedMode == TunnelMode.Tun)
+            try
             {
-                try
-                {
-                    _pipeServer.PushLogLine(
-                        "service",
-                        "Info",
-                        $"TUN activation attempt: wintunPath={tunModeSelection.WintunPath}");
-                    await _tunOrchestrator.StartAsync(
-                        new TunOrchestrationConfig
-                        {
-                            UseTunMode = true,
-                            WintunPath = tunModeSelection.WintunPath
-                        },
-                        _stoppingToken);
-                    _tunModeActive = true;
-                    _pipeServer.PushLogLine(
-                        "service",
-                        "Info",
-                        $"TUN activation succeeded: wintunPath={tunModeSelection.WintunPath}");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "TUN activation failed; falling back to legacy mode wintunPath={WintunPath}",
-                        tunModeSelection.WintunPath);
-                    _pipeServer.PushLogLine(
-                        "service",
-                        "Warning",
-                        $"TUN activation failed, falling back to legacy mode: {ex.Message}");
-                    tunModeSelection = tunModeSelection with
-                    {
-                        SelectedMode = TunnelMode.Legacy,
-                        SelectionReason = "tun-activation-failed"
-                    };
-                    _tunModeActive = false;
-                }
-            }
-
-            var runtimePlan = BuildRuntimePlan(tunModeSelection.SelectedMode);
-            _selectedMode = tunModeSelection.SelectedMode;
-            _logger.LogInformation(
-                "Tunnel runtime plan selectedMode={SelectedMode} legacyCaptureEnabled={LegacyCaptureEnabled} localRelayEnabled={LocalRelayEnabled} winpkFilterEnabled={WinpkFilterEnabled}",
-                runtimePlan.SelectedMode,
-                runtimePlan.LegacyCaptureEnabled,
-                runtimePlan.LocalRelayEnabled,
-                runtimePlan.WinpkFilterEnabled);
-            _pipeServer.PushLogLine(
-                "service",
-                "Info",
-                $"Runtime plan: selectedMode={runtimePlan.SelectedMode}, legacyCaptureEnabled={runtimePlan.LegacyCaptureEnabled}, localRelayEnabled={runtimePlan.LocalRelayEnabled}, winpkFilterEnabled={runtimePlan.WinpkFilterEnabled}");
-
-            if (tunModeSelection.SelectedMode == TunnelMode.Tun)
-            {
-                var tunPolicySummaries = BuildTunPolicySummaries(config.Rules);
-                _logger.LogInformation(
-                    "TUN policy summary count={Count}",
-                    tunPolicySummaries.Count);
                 _pipeServer.PushLogLine(
                     "service",
                     "Info",
-                    $"TUN policy summary count={tunPolicySummaries.Count}");
+                    $"TUN activation attempt: wintunPath={tunModeSelection.WintunPath}");
+                await _tunOrchestrator.StartAsync(
+                    new TunOrchestrationConfig
+                    {
+                        UseTunMode = true,
+                        WintunPath = tunModeSelection.WintunPath
+                    },
+                    _stoppingToken);
+                _tunModeActive = true;
+                _pipeServer.PushLogLine(
+                    "service",
+                    "Info",
+                    $"TUN activation succeeded: wintunPath={tunModeSelection.WintunPath}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "TUN activation failed in TUN-only runtime wintunPath={WintunPath}",
+                    tunModeSelection.WintunPath);
+                _pipeServer.PushLogLine(
+                    "service",
+                    "Error",
+                    $"Cannot start: TUN activation failed: {ex.Message}");
+                return;
+            }
 
-                foreach (var summary in tunPolicySummaries)
-                {
-                    _logger.LogInformation(
-                        "TUN policy appPath={AppPath} ruleMode={RuleMode} mappedAction={MappedAction} mappedOutbound={MappedOutbound}",
-                        summary.AppPath,
-                        summary.RuleMode,
-                        summary.MappedAction,
-                        summary.MappedOutbound ?? "(none)");
-                    _pipeServer.PushLogLine(
-                        "service",
-                        "Info",
-                        $"TUN policy: appPath={summary.AppPath}, ruleMode={summary.RuleMode}, mappedAction={summary.MappedAction}, mappedOutbound={summary.MappedOutbound ?? "(none)"}");
-                }
+            _selectedMode = TunnelMode.Tun;
+
+            var tunPolicySummaries = BuildTunPolicySummaries(config.Rules);
+            _logger.LogInformation(
+                "TUN policy summary count={Count}",
+                tunPolicySummaries.Count);
+            _pipeServer.PushLogLine(
+                "service",
+                "Info",
+                $"TUN policy summary count={tunPolicySummaries.Count}");
+
+            foreach (var summary in tunPolicySummaries)
+            {
+                _logger.LogInformation(
+                    "TUN policy appPath={AppPath} ruleMode={RuleMode} mappedAction={MappedAction} mappedOutbound={MappedOutbound}",
+                    summary.AppPath,
+                    summary.RuleMode,
+                    summary.MappedAction,
+                    summary.MappedOutbound ?? "(none)");
+                _pipeServer.PushLogLine(
+                    "service",
+                    "Info",
+                    $"TUN policy: appPath={summary.AppPath}, ruleMode={summary.RuleMode}, mappedAction={summary.MappedAction}, mappedOutbound={summary.MappedOutbound ?? "(none)"}");
             }
 
             var singBoxConfig = new SingBoxConfig
             {
                 SocksPort = config.SocksPort,
-                UseTunMode = tunModeSelection.SelectedMode == TunnelMode.Tun,
+                UseTunMode = true,
                 Rules = config.Rules,
                 BinaryPath = singBoxExe,
                 ConfigOutputPath = Path.Combine(DataDir, "singbox_last.json"),
@@ -268,27 +230,6 @@ public sealed class OrchestratorService : BackgroundService
 
             _pipeServer.PushLogLine("service", "Info", $"Starting sing-box: {singBoxExe}");
             await _singBoxManager.StartAsync(profile, singBoxConfig, _stoppingToken);
-
-            // Self-exclusion: sing-box binary + this service binary (non-negotiable per CURSOR_RULES.md §1)
-            var excludedPaths = new List<string> { singBoxExe };
-            var servicePath = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(servicePath))
-                excludedPaths.Add(servicePath);
-
-            var captureConfig = new CaptureConfig
-            {
-                SocksPort = config.SocksPort,
-                SocksAddress = IPAddress.Loopback,
-                Rules = config.Rules,
-                ExcludedProcessPaths = excludedPaths,
-                ExcludedDestinations = serverAddresses.ToList()
-            };
-
-            _legacyCaptureActive = runtimePlan.LegacyCaptureEnabled;
-            if (_legacyCaptureActive)
-            {
-                await _captureEngine.StartAsync(captureConfig, _stoppingToken);
-            }
 
             _captureRunning = true;
             _singBoxRestartAttempts = 0;
@@ -306,7 +247,6 @@ public sealed class OrchestratorService : BackgroundService
                 }
             }
             catch { }
-            _legacyCaptureActive = false;
             _logger.LogError(ex, "StartCaptureAsync failed");
             _pipeServer.PushLogLine("service", "Error",
                 $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
@@ -327,10 +267,6 @@ public sealed class OrchestratorService : BackgroundService
                 return;
 
             _pipeServer.PushLogLine("service", "Info", "Stopping tunnel...");
-            if (_legacyCaptureActive)
-            {
-                await _captureEngine.StopAsync(_stoppingToken);
-            }
             if (_tunModeActive)
             {
                 await _tunOrchestrator.StopAsync(_stoppingToken);
@@ -339,7 +275,6 @@ public sealed class OrchestratorService : BackgroundService
             await _singBoxManager.StopAsync(_stoppingToken);
 
             _captureRunning = false;
-            _legacyCaptureActive = false;
             _pipeServer.PushLogLine("service", "Info", "Tunnel stopped.");
             PushCurrentStatus();
         }
@@ -373,7 +308,7 @@ public sealed class OrchestratorService : BackgroundService
                     break;
 
                 case SingBoxStatus.Crashed:
-                    _logger.LogCritical("sing-box permanently crashed — stopping capture (fail-closed)");
+                    _logger.LogCritical("sing-box permanently crashed - stopping capture (fail-closed)");
                     _ = StopCaptureAsync();
                     break;
             }
@@ -383,18 +318,6 @@ public sealed class OrchestratorService : BackgroundService
 
         _singBoxManager.LogLine += (_, line) =>
             _pipeServer.PushLogLine("singbox", "Info", line);
-
-        _captureEngine.SessionCreated += (_, entry) =>
-            _pipeServer.PushSessionCreated(entry);
-
-        _captureEngine.SessionClosed += (_, entry) =>
-            _pipeServer.PushSessionClosed(entry.FlowId);
-
-        _captureEngine.ErrorOccurred += (_, err) =>
-        {
-            _logger.LogError("Capture error [{Code}]: {Message}", err.Code, err.Message);
-            _pipeServer.PushLogLine("capture", "Error", $"[{err.Code}] {err.Message}");
-        };
     }
 
     private void WirePipeHandlers()
@@ -508,30 +431,29 @@ public sealed class OrchestratorService : BackgroundService
 
     private static string ResolveSingBoxPath()
     {
-        // In development: AppContext.BaseDirectory is bin/Debug/net8.0-windows/
-        // Walk up to repo root and into third_party/singbox/
         var candidate = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
                 "third_party", "singbox", "sing-box.exe"));
         if (File.Exists(candidate))
             return candidate;
 
-        // In deployed/installed scenarios the binary may sit next to the service exe
         return Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
     }
 
-    internal static TunnelRuntimePlan BuildRuntimePlan(TunnelMode selectedMode) =>
-        selectedMode == TunnelMode.Tun
-            ? new TunnelRuntimePlan(
-                selectedMode,
-                LegacyCaptureEnabled: false,
-                LocalRelayEnabled: false,
-                WinpkFilterEnabled: false)
-            : new TunnelRuntimePlan(
-                selectedMode,
-                LegacyCaptureEnabled: true,
-                LocalRelayEnabled: true,
-                WinpkFilterEnabled: true);
+    internal static string? GetTunOnlyStartBlockReason(TunModeSelectionResult selection)
+    {
+        if (selection.SelectedMode == TunnelMode.Tun)
+        {
+            return null;
+        }
+
+        if (!selection.UseTunModeRequested)
+        {
+            return "Cannot start: TUN-only runtime requires UseTunMode=true.";
+        }
+
+        return $"Cannot start: TUN-only runtime prerequisites not met ({selection.SelectionReason}).";
+    }
 
     internal static ServiceStatusSummary BuildStatusSummary(
         TunnelFlowConfig config,
@@ -612,12 +534,6 @@ public sealed class OrchestratorService : BackgroundService
             })
             .ToArray();
 }
-
-internal readonly record struct TunnelRuntimePlan(
-    TunnelMode SelectedMode,
-    bool LegacyCaptureEnabled,
-    bool LocalRelayEnabled,
-    bool WinpkFilterEnabled);
 
 internal readonly record struct ServiceStatusSummary(
     TunnelStatusMode SelectedMode,

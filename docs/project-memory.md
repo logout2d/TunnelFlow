@@ -6,6 +6,57 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## TUN-only cleanup Phase 3: remove legacy-capture runtime branching from service orchestration
+- Implemented in this step:
+  - removed the remaining service-side runtime branching that still planned for legacy capture startup/fallback inside orchestration
+  - kept scope narrow:
+    - no `TunnelFlow.Capture` project removal yet
+    - no `ndisapi.net` removal yet
+    - no session IPC/contract removal yet
+    - no TUN runtime behavior changes
+- Exact files changed:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact legacy service/runtime branching removed:
+  - removed the `TunnelRuntimePlan` planning layer from `OrchestratorService`
+  - removed `_legacyCaptureActive`
+  - removed service-side fallback from failed/unavailable TUN selection back to `TunnelMode.Legacy`
+  - removed legacy-capture startup from `StartCaptureAsync`
+  - removed legacy-capture shutdown from `StopCaptureAsync`
+  - removed capture event wiring from `WireEvents`
+  - removed legacy capture self-exclusion IP-resolution work that was only needed for the old capture path
+  - added an explicit TUN-only start guard:
+    - `UseTunMode=false` now blocks start with a clear service-side message
+    - unmet TUN prerequisites now block start with the selector reason instead of falling back
+- Runtime/behavior note:
+  - the service runtime path is now orchestration-first for TUN only:
+    - select TUN mode
+    - validate TUN prerequisites
+    - start `ITunOrchestrator`
+    - build TUN sing-box config
+    - start sing-box in TUN mode
+  - this keeps the current TUN-first runtime behavior unchanged while removing the remaining orchestration-time legacy branch
+- Related code intentionally kept for now:
+  - `src/TunnelFlow.Capture/`
+  - `third_party/ndisapi.net/`
+  - `src/TunnelFlow.Core/Interfaces/ICaptureEngine.cs`
+  - session IPC/contracts such as:
+    - `GetSessionsCommand`
+    - `SessionEntry`
+    - pipe-server session handlers
+- Reason those pieces were kept:
+  - they are still part of the compiled legacy capture stack and are not fully dead until the later dedicated capture-stack removal phase
+  - `OrchestratorService` still keeps a narrow `GetActiveSessions()` bridge so session IPC contracts remain intact for now, even though the TUN-first runtime no longer feeds capture sessions
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 35
+    - failed: 0
+    - skipped: 0
+
 ## TUN-only cleanup Phase 2: remove WFP experimental redirect leftovers
 - Implemented in this step:
   - removed the experimental WFP redirect path and its legacy config/plumbing surface

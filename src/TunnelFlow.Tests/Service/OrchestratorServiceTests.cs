@@ -9,25 +9,51 @@ namespace TunnelFlow.Tests.Service;
 public class OrchestratorServiceTests
 {
     [Fact]
-    public void BuildRuntimePlan_LegacyMode_EnablesLegacyCapturePath()
+    public void GetTunOnlyStartBlockReason_WhenTunNotRequested_ReturnsTunOnlyMessage()
     {
-        var plan = OrchestratorService.BuildRuntimePlan(TunnelMode.Legacy);
+        var selection = new TunModeSelectionResult(
+            UseTunModeRequested: false,
+            TunPrerequisitesSatisfied: true,
+            TunActivationSupported: true,
+            SelectedMode: TunnelMode.Legacy,
+            SelectionReason: "tun-not-requested",
+            WintunPath: @"C:\Windows\System32\wintun.dll");
 
-        Assert.Equal(TunnelMode.Legacy, plan.SelectedMode);
-        Assert.True(plan.LegacyCaptureEnabled);
-        Assert.True(plan.LocalRelayEnabled);
-        Assert.True(plan.WinpkFilterEnabled);
+        var reason = OrchestratorService.GetTunOnlyStartBlockReason(selection);
+
+        Assert.Equal("Cannot start: TUN-only runtime requires UseTunMode=true.", reason);
     }
 
     [Fact]
-    public void BuildRuntimePlan_TunMode_DisablesLegacyCapturePath()
+    public void GetTunOnlyStartBlockReason_WhenTunPrerequisitesMissing_ReturnsSelectionReason()
     {
-        var plan = OrchestratorService.BuildRuntimePlan(TunnelMode.Tun);
+        var selection = new TunModeSelectionResult(
+            UseTunModeRequested: true,
+            TunPrerequisitesSatisfied: false,
+            TunActivationSupported: true,
+            SelectedMode: TunnelMode.Legacy,
+            SelectionReason: "wintun-missing",
+            WintunPath: @"C:\missing\wintun.dll");
 
-        Assert.Equal(TunnelMode.Tun, plan.SelectedMode);
-        Assert.False(plan.LegacyCaptureEnabled);
-        Assert.False(plan.LocalRelayEnabled);
-        Assert.False(plan.WinpkFilterEnabled);
+        var reason = OrchestratorService.GetTunOnlyStartBlockReason(selection);
+
+        Assert.Equal("Cannot start: TUN-only runtime prerequisites not met (wintun-missing).", reason);
+    }
+
+    [Fact]
+    public void GetTunOnlyStartBlockReason_WhenTunIsSelected_ReturnsNull()
+    {
+        var selection = new TunModeSelectionResult(
+            UseTunModeRequested: true,
+            TunPrerequisitesSatisfied: true,
+            TunActivationSupported: true,
+            SelectedMode: TunnelMode.Tun,
+            SelectionReason: "tun-selected",
+            WintunPath: @"C:\Windows\System32\wintun.dll");
+
+        var reason = OrchestratorService.GetTunOnlyStartBlockReason(selection);
+
+        Assert.Null(reason);
     }
 
     [Fact]
