@@ -75,6 +75,47 @@ public class DirectUrlProfileImportServiceTests
         var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
             service.ImportFromUrlAsync("ftp://example.com/profile.txt", CancellationToken.None));
 
-        Assert.Equal("Enter a valid HTTP or HTTPS URL, or a direct vless:// URI.", ex.Message);
+        Assert.Equal("Enter a valid HTTP or HTTPS URL, a subscription URL, or a direct vless:// URI.", ex.Message);
+    }
+
+    [Fact]
+    public async Task ImportProfilesAsync_FetchesBase64Subscription_ImportsMultipleProfiles_AndReportsSkippedEntries()
+    {
+        var subscriptionBody = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join('\n',
+            "# subscription",
+            "vless://11111111-1111-1111-1111-111111111111@alpha.example.com:443?security=tls&sni=alpha-sni.example.com&type=tcp#Alpha",
+            "vmess://unsupported-entry",
+            "vless://22222222-2222-2222-2222-222222222222@beta.example.com:8443?security=reality&sni=beta-sni.example.com&fp=chrome&pbk=beta-key&sid=beta-short&type=grpc#Beta")));
+        var service = new DirectUrlProfileImportService(
+            fetchTextAsync: (_, _) => Task.FromResult(subscriptionBody));
+
+        var result = await service.ImportProfilesAsync("https://example.com/subscription.txt", CancellationToken.None);
+
+        Assert.Equal(2, result.ImportedProfileCount);
+        Assert.Equal(1, result.SkippedProfileCount);
+
+        Assert.Equal("Alpha", result.Profiles[0].Name);
+        Assert.Equal("alpha.example.com", result.Profiles[0].ServerAddress);
+        Assert.Equal("tcp", result.Profiles[0].Network);
+        Assert.Equal("tls", result.Profiles[0].Security);
+
+        Assert.Equal("Beta", result.Profiles[1].Name);
+        Assert.Equal("beta.example.com", result.Profiles[1].ServerAddress);
+        Assert.Equal("grpc", result.Profiles[1].Network);
+        Assert.Equal("reality", result.Profiles[1].Security);
+        Assert.Equal("beta-key", result.Profiles[1].Tls!.RealityPublicKey);
+        Assert.Equal("beta-short", result.Profiles[1].Tls!.RealityShortId);
+    }
+
+    [Fact]
+    public async Task ImportProfilesAsync_WhenFetchedContentHasNoSupportedProfiles_ThrowsFriendlyError()
+    {
+        var service = new DirectUrlProfileImportService(
+            fetchTextAsync: (_, _) => Task.FromResult("vmess://unsupported-entry"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ImportProfilesAsync("https://example.com/subscription.txt", CancellationToken.None));
+
+        Assert.Equal("The URL did not return any supported VLESS profiles.", ex.Message);
     }
 }

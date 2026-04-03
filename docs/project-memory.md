@@ -2447,6 +2447,72 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - failed: 0
     - skipped: 0
 
+## Subscription URL import Phase 1
+- Implemented in this step:
+  - expanded the existing Profile import path so HTTP/HTTPS URLs can now import multiple supported profiles from subscription-style content
+  - kept the same one-field / one-button UI surface
+  - reused the existing VLESS parsing flow rather than adding a separate subscription parser stack
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IProfileImportService.cs`
+  - `src/TunnelFlow.UI/Services/DirectUrlProfileImportService.cs`
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/ProfileImportTestService.cs`
+  - `src/TunnelFlow.Tests/UI/DirectUrlProfileImportServiceTests.cs`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact subscription import flow added:
+  - user enters an HTTP/HTTPS subscription URL in the existing import field
+  - the importer fetches the content
+  - fetched content is normalized as:
+    - plain text containing multiple profile lines
+    - or base64-encoded subscription text that decodes into multiple lines
+  - all supported `vless://...` profiles are parsed and returned as a batch
+  - `ProfileViewModel` persists each imported profile through the existing `UpsertProfile` path
+  - the first imported profile is selected in the existing profile flow
+- Supported content/profile formats in this phase:
+  - HTTP/HTTPS fetch
+  - plain or base64-decoded subscription content containing multiple URI-style entries
+  - supported imported profile format:
+    - `vless://...`
+  - unsupported entries such as other URI schemes are skipped rather than failing the whole import when at least one supported profile is found
+- Exact mapping into the existing profile model remains:
+  - `Name`
+  - `ServerAddress`
+  - `ServerPort`
+  - `UserId`
+  - `Flow`
+  - `Network`
+  - `Security`
+  - `Tls.Sni`
+  - `Tls.Fingerprint`
+  - `Tls.RealityPublicKey`
+  - `Tls.RealityShortId`
+- Exact result/summary behavior:
+  - single imported profile:
+    - `Imported "<name>".`
+  - multiple imported profiles:
+    - `Imported N profiles.`
+  - partial success:
+    - `Imported N profiles; skipped M unsupported entry/entries.`
+  - no supported profiles found:
+    - import fails with a short friendly message instead of saving anything
+- Validation notes:
+  - the initial validation failure was not a real missing dependency:
+    - `third_party\ndisapi.net\ndisapi.dll` does exist locally at the expected path
+  - the actual blockers were narrow test-code issues introduced in the new import tests:
+    - one syntax error in `DirectUrlProfileImportServiceTests.cs`
+    - one missing `using TunnelFlow.Core.Models;` in `ProfileImportTestService.cs`
+  - no subscription-import behavior was changed during the validation-repair pass beyond those test/build fixes
+- Focused validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 20
+    - failed: 0
+    - skipped: 0
+
 ## Corrected next WFP step
 - Important correction after the helper-channel milestone:
   - the helper-based native channel is useful only as temporary scaffolding for managed contract testing

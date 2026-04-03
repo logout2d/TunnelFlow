@@ -535,3 +535,30 @@ Outcome:
 - focused importer/profile validation is green
 Next recommended step:
 - Phase 1.2 of direct URL import: add one more narrow compatibility slice for fetched content that includes a single supported profile plus surrounding comments/metadata lines, while still avoiding full subscription semantics
+
+## Step 34
+Phase 1 of subscription URL import: add narrow multi-profile import over HTTP/HTTPS.
+Status: completed
+Scope:
+- keep the existing import UI surface
+- support subscription-style HTTP/HTTPS content that yields multiple supported profiles
+- reuse the current VLESS parsing/mapping path
+- keep background refresh, scheduled sync, and subscription management UI out of scope
+Outcome:
+- the existing Profile import field can now import multiple profiles from a subscription URL
+- supported fetched content in this phase:
+  - plain text with multiple URI-style lines
+  - base64-encoded subscription content that decodes into multiple lines
+- supported imported profile format remains explicit:
+  - `vless://...`
+- import now handles partial success cleanly:
+  - supported VLESS profiles are imported
+  - unsupported entries are skipped
+  - UI shows a short batch summary such as:
+    - `Imported 2 profiles.`
+    - `Imported 2 profiles; skipped 1 unsupported entry.`
+- focused importer/profile validation is green
+Note:
+- a later dedicated TUN-only cleanup phase must still remove legacy capture / WinpkFilter-era paths from the final product once the remaining TUN-first product surface is complete
+Next recommended step:
+- Phase 1.1 of subscription import: add one more narrow compatibility slice for common subscription payload variations, such as extra comments/metadata wrappers around otherwise supported multi-profile content, while still avoiding background refresh semantics

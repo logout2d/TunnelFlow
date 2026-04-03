@@ -264,15 +264,20 @@ public partial class ProfileViewModel : ObservableObject
 
         try
         {
-            var importedProfile = await _profileImportService.ImportFromUrlAsync(ImportUrl, CancellationToken.None);
-            await _sendCommandAsync("UpsertProfile", importedProfile, CancellationToken.None);
-            UpsertProfile(importedProfile);
-            RefreshProfileChoices(importedProfile.Id);
+            var importResult = await _profileImportService.ImportProfilesAsync(ImportUrl, CancellationToken.None);
+            foreach (var importedProfile in importResult.Profiles)
+            {
+                await _sendCommandAsync("UpsertProfile", importedProfile, CancellationToken.None);
+                UpsertProfile(importedProfile);
+            }
+
+            var selectedProfile = importResult.Profiles[0];
+            RefreshProfileChoices(selectedProfile.Id);
             IsCreatingNewProfile = false;
-            ApplyProfile(importedProfile);
+            ApplyProfile(selectedProfile);
             SetSavedFormState(CaptureFormState(), clearStatus: true);
             ImportUrl = string.Empty;
-            ImportStatus = $"Imported \"{ResolveProfileName(importedProfile)}\".";
+            ImportStatus = BuildImportStatus(importResult);
         }
         catch (ArgumentException ex)
         {
@@ -471,6 +476,23 @@ public partial class ProfileViewModel : ObservableObject
 
     private static string ResolveProfileName(VlessProfile profile) =>
         string.IsNullOrWhiteSpace(profile.Name) ? "Unnamed profile" : profile.Name;
+
+    private static string BuildImportStatus(ProfileImportResult result)
+    {
+        if (result.ImportedProfileCount == 1 && result.SkippedProfileCount == 0)
+        {
+            return $"Imported \"{ResolveProfileName(result.Profiles[0])}\".";
+        }
+
+        var importedLabel = result.ImportedProfileCount == 1 ? "profile" : "profiles";
+        if (result.SkippedProfileCount == 0)
+        {
+            return $"Imported {result.ImportedProfileCount} {importedLabel}.";
+        }
+
+        var skippedLabel = result.SkippedProfileCount == 1 ? "entry" : "entries";
+        return $"Imported {result.ImportedProfileCount} {importedLabel}; skipped {result.SkippedProfileCount} unsupported {skippedLabel}.";
+    }
 
     private void HandleEditableFieldChanged()
     {

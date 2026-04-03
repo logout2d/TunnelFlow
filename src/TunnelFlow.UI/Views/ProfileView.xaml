@@ -17,9 +17,9 @@
                            FontWeight="Medium"/>
             </StackPanel>
 
-            <!-- Direct URL import -->
+            <!-- URL import -->
             <StackPanel Margin="0,0,0,16">
-                <TextBlock Text="Import from direct URL"
+                <TextBlock Text="Import from URL"
                            Margin="0,0,0,4"
                            Foreground="#475569"
                            FontWeight="Medium"/>
@@ -29,7 +29,7 @@
                              Text="{Binding ImportUrl, UpdateSourceTrigger=PropertyChanged}"
                              Padding="8,5"
                              BorderBrush="#CBD5E1"
-                             ToolTip="HTTP/HTTPS URL returning a single vless:// profile, or paste a direct vless:// URI"/>
+                             ToolTip="HTTP/HTTPS URL returning one or more supported VLESS profiles, or paste a direct vless:// URI"/>
 
                     <Button Content="Import URL"
                             Command="{Binding ImportFromUrlCommand}"

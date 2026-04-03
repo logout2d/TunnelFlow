@@ -1,4 +1,6 @@
 using System.Net.Http;
+using System.Text;
+using System.Text.RegularExpressions;
 using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.UI.Services;
@@ -15,38 +17,27 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
         _fetchTextAsync = fetchTextAsync ?? ((uri, cancellationToken) => client.GetStringAsync(uri, cancellationToken));
     }
 
-    public async Task<VlessProfile> ImportFromUrlAsync(string url, CancellationToken cancellationToken)
+    public async Task<ProfileImportResult> ImportProfilesAsync(string url, CancellationToken cancellationToken)
     {
-        var trimmedInput = url?.Trim();
-        if (!Uri.TryCreate(trimmedInput, UriKind.Absolute, out var requestUri))
+        var requestUri = ValidateAndParseInput(url, out var trimmedInput);
+        if (string.Equals(requestUri.Scheme, "vless", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("Enter a valid HTTP or HTTPS URL, or a direct vless:// URI.");
+            return new ProfileImportResult([ParseSingleProfile(trimmedInput!)], 0);
         }
 
+        var content = await FetchContentAsync(requestUri, cancellationToken);
+        return ParseProfileBatch(content);
+    }
+
+    public async Task<VlessProfile> ImportFromUrlAsync(string url, CancellationToken cancellationToken)
+    {
+        var requestUri = ValidateAndParseInput(url, out var trimmedInput);
         if (string.Equals(requestUri.Scheme, "vless", StringComparison.OrdinalIgnoreCase))
         {
             return ParseSingleProfile(trimmedInput!);
         }
 
-        if (requestUri.Scheme != Uri.UriSchemeHttp && requestUri.Scheme != Uri.UriSchemeHttps)
-        {
-            throw new ArgumentException("Enter a valid HTTP or HTTPS URL, or a direct vless:// URI.");
-        }
-
-        string content;
-        try
-        {
-            content = await _fetchTextAsync(requestUri, cancellationToken);
-        }
-        catch (HttpRequestException)
-        {
-            throw new InvalidOperationException("Import failed. Check the URL and try again.");
-        }
-        catch (TaskCanceledException)
-        {
-            throw new InvalidOperationException("Import timed out. Try again.");
-        }
-
+        var content = await FetchContentAsync(requestUri, cancellationToken);
         return ParseSingleProfile(content);
     }
 
@@ -131,14 +122,50 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
         };
     }
 
+    internal static ProfileImportResult ParseProfileBatch(string content)
+    {
+        var normalizedContent = NormalizeFetchedContent(content);
+        var importedProfiles = new List<VlessProfile>();
+        var skippedEntries = 0;
+
+        foreach (var line in SplitContentLines(normalizedContent))
+        {
+            if (IsIgnorableLine(line))
+            {
+                continue;
+            }
+
+            if (!line.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+            {
+                if (LooksLikeUri(line))
+                {
+                    skippedEntries++;
+                }
+
+                continue;
+            }
+
+            try
+            {
+                importedProfiles.Add(ParseSingleProfile(line));
+            }
+            catch (InvalidOperationException)
+            {
+                skippedEntries++;
+            }
+        }
+
+        if (importedProfiles.Count > 0)
+        {
+            return new ProfileImportResult(importedProfiles, skippedEntries);
+        }
+
+        throw new InvalidOperationException("The URL did not return any supported VLESS profiles.");
+    }
+
     private static string ExtractSingleSupportedUri(string content)
     {
-        var lines = content
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(line => !string.IsNullOrWhiteSpace(line))
-            .ToList();
-
-        var candidates = lines
+        var candidates = SplitContentLines(content)
             .Where(line => line.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
@@ -160,6 +187,101 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
 
         throw new InvalidOperationException("The URL did not return a supported VLESS profile.");
     }
+
+    private static Uri ValidateAndParseInput(string url, out string? trimmedInput)
+    {
+        trimmedInput = url?.Trim();
+        if (!Uri.TryCreate(trimmedInput, UriKind.Absolute, out var requestUri))
+        {
+            throw new ArgumentException("Enter a valid HTTP or HTTPS URL, a subscription URL, or a direct vless:// URI.");
+        }
+
+        if (string.Equals(requestUri.Scheme, "vless", StringComparison.OrdinalIgnoreCase))
+        {
+            return requestUri;
+        }
+
+        if (requestUri.Scheme != Uri.UriSchemeHttp && requestUri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new ArgumentException("Enter a valid HTTP or HTTPS URL, a subscription URL, or a direct vless:// URI.");
+        }
+
+        return requestUri;
+    }
+
+    private async Task<string> FetchContentAsync(Uri requestUri, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _fetchTextAsync(requestUri, cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            throw new InvalidOperationException("Import failed. Check the URL and try again.");
+        }
+        catch (TaskCanceledException)
+        {
+            throw new InvalidOperationException("Import timed out. Try again.");
+        }
+    }
+
+    private static string NormalizeFetchedContent(string content)
+    {
+        var trimmed = content.Trim();
+        if (ContainsUriContent(trimmed))
+        {
+            return trimmed;
+        }
+
+        if (TryDecodeBase64Content(trimmed, out var decodedContent) && ContainsUriContent(decodedContent))
+        {
+            return decodedContent;
+        }
+
+        return trimmed;
+    }
+
+    private static IEnumerable<string> SplitContentLines(string content) =>
+        content
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line));
+
+    private static bool ContainsUriContent(string content) =>
+        SplitContentLines(content).Any(LooksLikeUri) ||
+        content.StartsWith("vless://", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryDecodeBase64Content(string content, out string decodedContent)
+    {
+        decodedContent = string.Empty;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        var normalized = new string(content.Where(character => !char.IsWhiteSpace(character)).ToArray());
+        if (normalized.Length == 0 || normalized.Length % 4 != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            decodedContent = Encoding.UTF8.GetString(Convert.FromBase64String(normalized)).Trim();
+            return !string.IsNullOrWhiteSpace(decodedContent);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsIgnorableLine(string line) =>
+        line.StartsWith("#", StringComparison.Ordinal) ||
+        line.StartsWith("//", StringComparison.Ordinal) ||
+        line.StartsWith(";", StringComparison.Ordinal);
+
+    private static bool LooksLikeUri(string line) =>
+        Regex.IsMatch(line, "^[A-Za-z][A-Za-z0-9+.-]*://", RegexOptions.CultureInvariant);
 
     private static Dictionary<string, string> ParseQueryString(string query)
     {

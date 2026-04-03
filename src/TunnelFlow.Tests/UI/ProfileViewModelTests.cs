@@ -480,7 +480,7 @@ public class ProfileViewModelTests
             profileImportService: new ProfileImportTestService((url, cancellationToken) =>
             {
                 Assert.Equal("https://example.com/profile.txt", url);
-                return Task.FromResult(importedProfile);
+                return Task.FromResult(new ProfileImportResult([importedProfile], 0));
             }),
             sendCommandAsync: (type, payload, cancellationToken) =>
             {
@@ -534,7 +534,7 @@ public class ProfileViewModelTests
             profileImportService: new ProfileImportTestService((url, cancellationToken) =>
             {
                 Assert.Equal(directUri, url);
-                return Task.FromResult(importedProfile);
+                return Task.FromResult(new ProfileImportResult([importedProfile], 0));
             }),
             sendCommandAsync: (type, payload, cancellationToken) =>
             {
@@ -554,6 +554,80 @@ public class ProfileViewModelTests
         Assert.Equal("Direct VLESS", viewModel.Name);
         Assert.Equal("direct.example.com", viewModel.ServerAddress);
         Assert.Equal("Imported \"Direct VLESS\".", viewModel.ImportStatus);
+        Assert.Equal(string.Empty, viewModel.ImportUrl);
+        Assert.False(viewModel.HasUnsavedChanges);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ImportFromUrlAsync_WithSubscriptionUrl_ImportsMultipleProfiles_AndShowsSummary()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var importedProfiles = new[]
+        {
+            new VlessProfile
+            {
+                Id = Guid.NewGuid(),
+                Name = "Alpha",
+                ServerAddress = "alpha.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                Tls = new TlsOptions
+                {
+                    Sni = "alpha.example.com",
+                    AllowInsecure = false,
+                    Fingerprint = "chrome"
+                }
+            },
+            new VlessProfile
+            {
+                Id = Guid.NewGuid(),
+                Name = "Beta",
+                ServerAddress = "beta.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "grpc",
+                Security = "reality",
+                Tls = new TlsOptions
+                {
+                    Sni = "beta.example.com",
+                    AllowInsecure = false,
+                    Fingerprint = "chrome",
+                    RealityPublicKey = "public-key",
+                    RealityShortId = "short-id"
+                }
+            }
+        };
+        var viewModel = new ProfileViewModel(
+            client,
+            profileImportService: new ProfileImportTestService((url, cancellationToken) =>
+            {
+                Assert.Equal("https://example.com/subscription.txt", url);
+                return Task.FromResult(new ProfileImportResult(importedProfiles, 1));
+            }),
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true,
+            ImportUrl = "https://example.com/subscription.txt"
+        };
+
+        await viewModel.ImportFromUrlAsync();
+
+        Assert.Equal(2, commands.Count(command => command == "UpsertProfile"));
+        Assert.False(viewModel.IsCreatingNewProfile);
+        Assert.Equal(importedProfiles[0].Id, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Alpha", viewModel.Name);
+        Assert.Equal("alpha.example.com", viewModel.ServerAddress);
+        Assert.Equal("Imported 2 profiles; skipped 1 unsupported entry.", viewModel.ImportStatus);
+        Assert.Contains(viewModel.AvailableProfiles, option => option.Id == importedProfiles[0].Id);
+        Assert.Contains(viewModel.AvailableProfiles, option => option.Id == importedProfiles[1].Id);
         Assert.Equal(string.Empty, viewModel.ImportUrl);
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.False(viewModel.SaveCommand.CanExecute(null));
