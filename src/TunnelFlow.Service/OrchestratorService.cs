@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TunnelFlow.Capture.Policy;
 using TunnelFlow.Core;
 using TunnelFlow.Core.IPC.Responses;
 using TunnelFlow.Core.Models;
@@ -13,8 +12,6 @@ namespace TunnelFlow.Service;
 public sealed class OrchestratorService : BackgroundService
 {
     private readonly ISingBoxManager _singBoxManager;
-    private readonly ICaptureEngine _captureEngine;
-    private readonly IPolicyEngine _policyEngine;
     private readonly ITunOrchestrator _tunOrchestrator;
     private readonly ConfigStore _configStore;
     private readonly PipeServer _pipeServer;
@@ -33,16 +30,12 @@ public sealed class OrchestratorService : BackgroundService
 
     public OrchestratorService(
         ISingBoxManager singBoxManager,
-        ICaptureEngine captureEngine,
-        IPolicyEngine policyEngine,
         ITunOrchestrator tunOrchestrator,
         ConfigStore configStore,
         PipeServer pipeServer,
         ILogger<OrchestratorService> logger)
     {
         _singBoxManager = singBoxManager;
-        _captureEngine = captureEngine;
-        _policyEngine = policyEngine;
         _tunOrchestrator = tunOrchestrator;
         _configStore = configStore;
         _pipeServer = pipeServer;
@@ -330,14 +323,12 @@ public sealed class OrchestratorService : BackgroundService
             if (existing >= 0) _config.Rules[existing] = rule;
             else _config.Rules.Add(rule);
             await _configStore.SaveAsync(_config);
-            _policyEngine.UpdateRules(_config.Rules);
         };
 
         _pipeServer.DeleteRuleHandler = async ruleId =>
         {
             _config.Rules.RemoveAll(r => r.Id == ruleId);
             await _configStore.SaveAsync(_config);
-            _policyEngine.UpdateRules(_config.Rules);
         };
 
         _pipeServer.UpsertProfileHandler = async profile =>
@@ -381,7 +372,7 @@ public sealed class OrchestratorService : BackgroundService
         _pipeServer.StopCaptureHandler = () => StopCaptureAsync();
 
         _pipeServer.GetSessionsHandler = () =>
-            Task.FromResult(_captureEngine.GetActiveSessions());
+            Task.FromResult<IReadOnlyList<SessionEntry>>(Array.Empty<SessionEntry>());
     }
 
     private StatePayload BuildStatePayload()

@@ -6,6 +6,61 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## TUN-only cleanup Phase 4: remove service-side TunnelFlow.Capture dependency
+- Implemented in this step:
+  - removed the remaining direct service/build dependency on `TunnelFlow.Capture` after the TUN-only orchestration cleanup
+  - kept scope narrow:
+    - no repository-wide capture deletion yet
+    - no `ndisapi.net` removal yet
+    - no session IPC/contract deletion yet
+    - no TUN runtime behavior changes
+- Exact files changed:
+  - `src/TunnelFlow.Service/TunnelFlow.Service.csproj`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact TunnelFlow.Capture-related service/build dependencies removed:
+  - removed `TunnelFlow.Service -> TunnelFlow.Capture` project reference from `TunnelFlow.Service.csproj`
+  - removed capture-specific DI wiring from `Program.cs`:
+    - `IPacketDriver`
+    - `WinpkFilterPacketDriver`
+    - `IProcessResolver`
+    - `WindowsProcessResolver`
+    - `ISessionRegistry`
+    - `InMemorySessionRegistry`
+    - capture-side `PolicyEngine`
+    - `ICaptureEngine`
+    - `CaptureEngine`
+  - removed `OrchestratorService` constructor/runtime dependency on:
+    - `ICaptureEngine`
+    - `IPolicyEngine`
+  - removed rule-update calls that only existed for the old live capture path:
+    - `_policyEngine.UpdateRules(...)`
+  - kept `GetSessions` IPC contract but changed the service-side handler to return an empty session list as a compatibility stub
+- Runtime/behavior note:
+  - current TUN runtime behavior is unchanged
+  - the service runtime now has no direct dependency on the capture stack
+  - `TunnelFlow.Capture` still builds elsewhere in the repo/test graph, but it is no longer part of the service’s active DI/runtime path
+- Related code intentionally kept for now:
+  - `src/TunnelFlow.Capture/`
+  - `third_party/ndisapi.net/`
+  - `TunnelFlow.Core` capture/session contracts such as:
+    - `ICaptureEngine`
+    - `IPolicyEngine`
+    - `SessionEntry`
+    - `GetSessionsCommand`
+- Reason those pieces were kept:
+  - they may still be referenced by the remaining legacy capture project and by compatibility contracts/tests outside the service project
+  - removing them belongs to the later dedicated capture-stack and contract cleanup phases
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 35
+    - failed: 0
+    - skipped: 0
+
 ## TUN-only cleanup Phase 3: remove legacy-capture runtime branching from service orchestration
 - Implemented in this step:
   - removed the remaining service-side runtime branching that still planned for legacy capture startup/fallback inside orchestration
