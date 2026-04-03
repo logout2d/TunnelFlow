@@ -6,6 +6,69 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## Bootstrapper Phase 1 scaffold
+- Implemented in this step:
+  - added a new Windows-specific elevated lifecycle scaffold project:
+    - `src/TunnelFlow.Bootstrapper/`
+  - chose `TunnelFlow.Bootstrapper` as the concrete Phase 1 naming/delivery path for system lifecycle management
+  - kept scope narrow:
+    - no installer implementation yet
+    - no updater logic yet
+    - no UI integration yet
+    - no runtime/TUN/networking changes
+- Exact files changed:
+  - `src/TunnelFlow.Bootstrapper/TunnelFlow.Bootstrapper.csproj`
+  - `src/TunnelFlow.Bootstrapper/app.manifest`
+  - `src/TunnelFlow.Bootstrapper/BootstrapperExitCode.cs`
+  - `src/TunnelFlow.Bootstrapper/BootstrapperPaths.cs`
+  - `src/TunnelFlow.Bootstrapper/BootstrapperCommandLine.cs`
+  - `src/TunnelFlow.Bootstrapper/Program.cs`
+  - `TunnelFlow.sln`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- CLI verbs added:
+  - `install`
+  - `repair`
+  - `uninstall`
+  - `start-service`
+  - `restart-service`
+- Shared constants/path decisions now encoded in the scaffold:
+  - service name:
+    - `TunnelFlow`
+  - default binary install root:
+    - `C:\Program Files\TunnelFlow`
+  - default mutable data root:
+    - `C:\ProgramData\TunnelFlow`
+  - default config path:
+    - `C:\ProgramData\TunnelFlow\config.json`
+  - default sibling service exe resolution:
+    - `TunnelFlow.Service.exe` next to the bootstrapper in `AppContext.BaseDirectory`
+- What is implemented vs intentionally stubbed:
+  - implemented:
+    - explicit CLI parsing with future-proof verbs
+    - embedded `requireAdministrator` manifest
+    - explicit exit-code enum
+    - real `start-service` handling via `ServiceController`
+    - real `restart-service` handling via `ServiceController`
+    - structured mapping for:
+      - invalid arguments
+      - service-not-installed
+      - access denied
+      - timeout
+  - intentionally stubbed in this phase:
+    - `install`
+    - `repair`
+    - `uninstall`
+    - these currently resolve/report the intended service/data layout and return `NotImplemented`
+- Direction note:
+  - this supersedes the older `TunnelFlow.Helper` naming from the earlier design note
+  - the implementation direction is now an elevated bootstrapper console app with explicit lifecycle verbs
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - pending for this step until scaffold validation completes
+  - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
+    - pending for this step until scaffold validation completes
+
 ## TUN Phase 6 status-model plumbing
 - Implemented in this step:
   - extended the shared state/status contract with a TUN-oriented runtime summary
@@ -1927,6 +1990,37 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 1
     - failed: 0
     - skipped: 0
+  - [end of WFP device-event milestone]
+
+## TunnelFlow.Helper — Elevated Bootstrapper Design (Step 20)
+- Design step only — no code written, no runtime behavior changed
+- Full spec at: `docs/tunnelflow-helper-design.md`
+- Motivation:
+  - The current `WindowsServiceControlManager` falls back to PowerShell `runas` for
+    elevated start/restart — this has no structured exit codes, cannot install/uninstall,
+    cannot be signed, and is fragile
+  - There is currently no install path at all: the UI shows "Service not installed" with
+    no recovery action
+- Key decisions recorded in the design:
+  - Component name: `TunnelFlow.Helper` — net8.0-windows console exe
+  - Embedded manifest: `requireAdministrator` — Windows enforces UAC, no `Verb="runas"` needed
+  - CLI verbs: `install`, `repair`, `uninstall`, `start`, `stop`, `restart`, `status`
+  - 9 structured exit codes: 0=Success, 1=UnknownError, 2=InvalidArguments, 3=ServiceNotFound,
+    4=AlreadyInstalled, 5=NotInstalled, 6=Timeout, 7=UserCanceled, 8=AccessDenied
+  - Install layout:
+    - `C:\Program Files\TunnelFlow\` — binaries (elevation needed to write)
+    - `C:\ProgramData\TunnelFlow\` — config and logs (writable by LocalSystem account)
+  - Service registration: `sc.exe` subprocess in Phase 1 (simpler than legacy install API)
+  - Dev fallback: if helper exe not present, continue using existing PowerShell path
+  - UI invokes helper via `Process.Start { UseShellExecute=true }` and reads exit code
+- Phased plan:
+  - Phase 1: build `TunnelFlow.Helper` project with all verbs, validate in isolation
+  - Phase 2: replace PowerShell fallback in `WindowsServiceControlManager`, add Install UI
+  - Phase 3: `update --source-dir` verb for in-place binary replacement
+- Validation:
+  - This was a docs-only design step — no build was run
+  - Phase 1 will validate with: `dotnet build src\TunnelFlow.Helper\TunnelFlow.Helper.csproj`
+  - Phase 2 will validate with: `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.WfpTcpRedirectProviderEventIngestionTests" --logger "console;verbosity=minimal"`
     - passed: 1
     - failed: 0

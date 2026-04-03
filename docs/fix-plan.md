@@ -253,3 +253,48 @@ Progress:
   - the top profile selector row has been compacted slightly without changing the overall layout
 - next recommended Phase 6.9 step:
   - perform a second-pass internal cleanup of remaining Sessions-specific UI plumbing only after the TUN-first main path remains stable
+
+## Step 20
+Design: elevated helper/bootstrapper component for system lifecycle management.
+Status: completed
+Scope:
+- design only — no code written
+- covers service install, repair, uninstall, start, restart, and future update path
+- full design spec at `docs/tunnelflow-helper-design.md`
+Key decisions:
+- new project `TunnelFlow.Helper` — net8.0-windows console exe with `requireAdministrator` manifest
+- CLI verbs: install, repair, uninstall, start, stop, restart, status
+- 9 structured exit codes (0=Success … 8=AccessDenied)
+- UI invokes via `Process.Start` with `UseShellExecute = true` (manifest handles UAC)
+- Install layout: Program Files for binaries, ProgramData for runtime data
+- Phase 1: build helper in isolation; Phase 2: replace PowerShell fallback in UI; Phase 3: updater
+- `sc.exe` child-process approach for service registration in Phase 1 (simpler than System.Configuration.Install)
+- Dev fallback: if helper exe not present, fall back to existing PowerShell path
+
+## Step 21
+Phase 1 of the Windows bootstrapper approach: add a real bootstrapper project scaffold.
+Status: completed
+Scope:
+- add a Windows-specific elevated console project:
+  - `src/TunnelFlow.Bootstrapper`
+- define explicit lifecycle verbs:
+  - `install`
+  - `repair`
+  - `uninstall`
+  - `start-service`
+  - `restart-service`
+- add:
+  - entrypoint
+  - command parsing
+  - shared service/install/data path constants
+  - explicit exit codes
+- keep installer/update logic out of scope for now
+Outcome:
+- `TunnelFlow.Bootstrapper` is now a real solution project with an embedded elevation manifest
+- `start-service` and `restart-service` are implemented narrowly through `ServiceController`
+- `install`, `repair`, and `uninstall` are intentionally scaffolded and return `NotImplemented`
+- chosen concrete direction is now `Bootstrapper` naming rather than the earlier `Helper` placeholder name
+Next recommended step:
+- Phase 2: integrate `TunnelFlow.Bootstrapper.exe` into the existing UI service-control path so:
+  - installed systems stop depending on PowerShell `runas`
+  - future `Install Service` / `Repair Service` UI actions have a real elevated backend
