@@ -10,5 +10,4 @@ public class TunnelFlowConfig
     public int SocksPort { get; set; } = 2080;
     public bool StartCaptureOnServiceStart { get; set; } = false;
     public bool UseTunMode { get; set; } = false;
-    public bool UseWfpTcpRedirect { get; set; } = false;
 }

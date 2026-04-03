@@ -43,8 +43,7 @@ public class ConfigStore
                 ActiveProfileId = persisted.ActiveProfileId,
                 SocksPort = persisted.SocksPort,
                 StartCaptureOnServiceStart = persisted.StartCaptureOnServiceStart,
-                UseTunMode = persisted.UseTunMode,
-                UseWfpTcpRedirect = persisted.UseWfpTcpRedirect
+                UseTunMode = persisted.UseTunMode
             };
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException)
@@ -65,8 +64,7 @@ public class ConfigStore
             ActiveProfileId = config.ActiveProfileId,
             SocksPort = config.SocksPort,
             StartCaptureOnServiceStart = config.StartCaptureOnServiceStart,
-            UseTunMode = config.UseTunMode,
-            UseWfpTcpRedirect = config.UseWfpTcpRedirect
+            UseTunMode = config.UseTunMode
         };
 
         var json = JsonSerializer.Serialize(persisted, JsonOptions);
@@ -140,9 +138,6 @@ public class ConfigStore
 
         [JsonPropertyName("useTunMode")]
         public bool UseTunMode { get; set; }
-
-        [JsonPropertyName("useWfpTcpRedirect")]
-        public bool UseWfpTcpRedirect { get; set; }
     }
 
     private class PersistedVlessProfile

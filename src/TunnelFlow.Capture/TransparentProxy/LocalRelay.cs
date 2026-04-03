@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
-using TunnelFlow.Capture.TcpRedirect;
 
 namespace TunnelFlow.Capture.TransparentProxy;
 
@@ -15,7 +14,6 @@ public sealed class LocalRelay : IAsyncDisposable
 {
     private readonly IPEndPoint _listenEndpoint;
     private readonly IPEndPoint _socksEndpoint;
-    private readonly Func<ConnectionLookupKey, IPEndPoint?>? _lookupOriginalDestination;
     private readonly Func<string, IPEndPoint?> _lookupNat;
     private readonly ILogger<LocalRelay> _logger;
     private readonly CancellationTokenSource _cts = new();
@@ -44,12 +42,10 @@ public sealed class LocalRelay : IAsyncDisposable
         IPEndPoint relayEndpoint,
         IPEndPoint socksEndpoint,
         Func<string, IPEndPoint?> lookupNat,
-        Func<ConnectionLookupKey, IPEndPoint?>? lookupOriginalDestination,
         ILogger<LocalRelay> logger)
     {
         _listenEndpoint = relayEndpoint;
         _socksEndpoint = socksEndpoint;
-        _lookupOriginalDestination = lookupOriginalDestination;
         _lookupNat = lookupNat;
         _logger = logger;
         _connectionThrottle = new SemaphoreSlim(MaxConcurrentConnections, MaxConcurrentConnections);
@@ -130,16 +126,10 @@ public sealed class LocalRelay : IAsyncDisposable
                 _activeConnections);
 
             string natKey = $"{clientEndpoint.Address}:{clientEndpoint.Port}";
-            var redirectKey = ConnectionLookupKey.From(clientEndpoint);
-            var originalDest = ResolveOriginalDestination(
-                clientEndpoint,
-                _lookupOriginalDestination,
-                _lookupNat,
-                out var lookupSource);
+            var originalDest = ResolveOriginalDestination(clientEndpoint, _lookupNat, out var lookupSource);
             _logger.LogInformation(
-                "Relay destination-lookup client={Client} redirectKey={RedirectKey} natKey={NatKey} source={Source} originalDst={OriginalDestination}",
+                "Relay destination-lookup client={Client} natKey={NatKey} source={Source} originalDst={OriginalDestination}",
                 clientEndpoint,
-                redirectKey,
                 natKey,
                 lookupSource,
                 originalDest?.ToString() ?? "<miss>");
@@ -190,21 +180,12 @@ public sealed class LocalRelay : IAsyncDisposable
 
     internal static IPEndPoint? ResolveOriginalDestination(
         IPEndPoint clientEndpoint,
-        Func<ConnectionLookupKey, IPEndPoint?>? lookupOriginalDestination,
         Func<string, IPEndPoint?> lookupNat,
         out string source)
     {
-        var redirectKey = ConnectionLookupKey.From(clientEndpoint);
-        var originalDestination = lookupOriginalDestination?.Invoke(redirectKey);
-        if (originalDestination is not null)
-        {
-            source = "redirect-store";
-            return originalDestination;
-        }
-
         string natKey = $"{clientEndpoint.Address}:{clientEndpoint.Port}";
-        originalDestination = lookupNat(natKey);
-        source = originalDestination is not null ? "nat-fallback" : "miss";
+        var originalDestination = lookupNat(natKey);
+        source = originalDestination is not null ? "nat" : "miss";
         return originalDestination;
     }
 

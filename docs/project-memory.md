@@ -6,6 +6,110 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## TUN-only cleanup Phase 2: remove WFP experimental redirect leftovers
+- Implemented in this step:
+  - removed the experimental WFP redirect path and its legacy config/plumbing surface
+  - kept scope narrow:
+    - no TUN behavior changes
+    - no `TunnelFlow.Capture` project removal yet
+    - no `ndisapi.net` removal yet
+    - no removal of the main legacy WinpkFilter/NAT relay path yet
+- Exact files changed:
+  - `src/TunnelFlow.Capture/CaptureEngine.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/LocalRelay.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/Configuration/TunnelFlowConfig.cs`
+  - `src/TunnelFlow.Service/Configuration/ConfigStore.cs`
+  - `src/TunnelFlow.Tests/Capture/LocalRelayTests.cs`
+  - `src/TunnelFlow.Tests/Service/ConfigStoreTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact files/directories removed:
+  - `src/TunnelFlow.Capture/TcpRedirect/`
+  - `src/TunnelFlow.Tests/Capture/FeatureFlagTcpRedirectProviderTests.cs`
+  - `src/TunnelFlow.Tests/Capture/InMemoryOriginalDestinationStoreTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpNativeContractTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpNativeInteropTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpNativeSessionTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpRedirectEventTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpTcpRedirectProviderEventIngestionTests.cs`
+  - `src/TunnelFlow.Tests/Capture/WfpTcpRedirectProviderIntegrationTests.cs`
+  - `native/TunnelFlow.WfpRedirectChannel/`
+  - `native/TunnelFlow.WfpRedirectDriver/`
+- Exact WFP/redirect leftovers removed:
+  - removed `ITcpRedirectProvider` and all capture-side WFP redirect implementations
+  - removed WFP native interop/session/event contract code
+  - removed the `UseWfpTcpRedirect` config field and persisted JSON property
+  - removed service DI/startup/stop plumbing for the redirect provider
+  - removed the optional redirect-store lookup from `CaptureEngine` / `LocalRelay`
+  - `LocalRelay` now uses the existing NAT lookup path only
+- Runtime/behavior note:
+  - current TUN behavior is unchanged
+  - current legacy capture runtime remains on the existing WinpkFilter + NAT-table relay path
+  - only the experimental WFP metadata/redirect branch was removed
+- Related code intentionally kept for now:
+  - `src/TunnelFlow.Capture/`
+    - main capture engine
+    - WinpkFilter packet driver
+    - NAT-based local relay path
+  - `third_party/ndisapi.net/`
+  - `src/TunnelFlow.Service` legacy capture branch
+- Reason those pieces were kept:
+  - they are still part of the currently compiled legacy capture stack and belong to the later higher-risk runtime cleanup phase
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~CaptureEngineTests|FullyQualifiedName~LocalRelayTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+    - passed: 18
+    - failed: 0
+    - skipped: 0
+
+## TUN-only cleanup Phase 1: remove hidden Sessions leftovers
+- Implemented in this step:
+  - removed the remaining user-invisible Sessions UI/state slice
+  - kept scope narrow:
+    - no runtime/TUN changes
+    - no capture-project changes
+    - no session IPC/contract removal yet
+- Exact files changed:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/App.xaml`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact files removed:
+  - `src/TunnelFlow.UI/ViewModels/SessionsViewModel.cs`
+  - `src/TunnelFlow.UI/Views/SessionsView.xaml`
+  - `src/TunnelFlow.UI/Views/SessionsView.xaml.cs`
+- Exact UI/state leftovers removed:
+  - removed the `SessionsViewModel` property and construction from `MainViewModel`
+  - removed `MainViewModel` handling for:
+    - `SessionCreated`
+    - `SessionClosed`
+  - removed the `SessionsViewModel -> SessionsView` data template from `App.xaml`
+  - removed the hidden `Sessions` sidebar button from `MainWindow.xaml`
+  - removed the remaining `MainViewModelTests` assertions that referenced the deleted Sessions VM
+- Sessions-related code intentionally kept for now:
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Core/Interfaces/ICaptureEngine.cs`
+  - `src/TunnelFlow.Core/IPC/Messages/GetSessionsCommand.cs`
+  - capture/session models and registries
+- Reason those pieces were kept:
+  - they are still tied to the legacy capture runtime branch and were not proven unused in this narrow UI-only cleanup step
+  - removing them belongs to the later dedicated runtime/capture cleanup phases
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - returned no matching tests with that exact filter in this environment
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 25
+    - failed: 0
+    - skipped: 0
+
 ## Bootstrapper Phase 1 scaffold
 - Implemented in this step:
   - added a new Windows-specific elevated lifecycle scaffold project:
@@ -2512,6 +2616,136 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 20
     - failed: 0
     - skipped: 0
+
+## TUN-only cleanup Phase 0 audit
+- Implemented in this step:
+  - docs-only audit/inventory of remaining legacy capture / WinpkFilter-era surface
+  - no code removal yet
+  - no runtime behavior change
+- Exact files changed:
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Audit scope:
+  - service runtime wiring
+  - capture project contents
+  - third-party `ndisapi.net` / `ndisapi.dll` dependency
+  - legacy transparent-proxy / local-relay path
+  - remaining UI / IPC session and capture references
+- Category: currently required now for build/runtime
+  - `src/TunnelFlow.Service/TunnelFlow.Service.csproj`
+    - still references `src/TunnelFlow.Capture/TunnelFlow.Capture.csproj`
+  - `src/TunnelFlow.Capture/TunnelFlow.Capture.csproj`
+    - still references `..\..\third_party\ndisapi.net\NdisApiDotNet\NdisApiDotNet.csproj`
+    - still copies `..\..\third_party\ndisapi.net\ndisapi.dll`
+  - `third_party/ndisapi.net/`
+    - still required for current service/test builds because the capture project compiles and copies it
+  - `src/TunnelFlow.Service/Program.cs`
+    - still registers the legacy capture stack in DI:
+      - `IPacketDriver -> WinpkFilterPacketDriver`
+      - `ICaptureEngine -> CaptureEngine`
+      - `ITcpRedirectProvider -> FeatureFlagTcpRedirectProvider`
+      - `IProcessResolver -> WindowsProcessResolver`
+      - `ISessionRegistry -> InMemorySessionRegistry`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+    - still owns both runtime branches
+    - legacy branch remains active whenever selected mode is `Legacy`
+    - starts/stops:
+      - `ITcpRedirectProvider`
+      - `ICaptureEngine`
+    - still publishes capture/session events to IPC
+  - `src/TunnelFlow.Service/Configuration/TunnelFlowConfig.cs`
+    - still persists legacy-oriented knobs:
+      - `StartCaptureOnServiceStart`
+      - `UseWfpTcpRedirect`
+  - `src/TunnelFlow.Capture/CaptureEngine.cs`
+    - still central legacy runtime entry point
+    - starts `LocalRelay`
+    - drives `IPacketDriver`
+    - emits session events
+  - `src/TunnelFlow.Capture/Interop/IPacketDriver.cs`
+  - `src/TunnelFlow.Capture/Interop/WinpkFilterPacketDriver.cs`
+    - still real WinpkFilter/ndisapi driver path
+  - `src/TunnelFlow.Capture/TransparentProxy/LocalRelay.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/ProtocolSniffer.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/TlsSniSniffer.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/HttpHostSniffer.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/Socks5Connector.cs`
+  - `src/TunnelFlow.Capture/TransparentProxy/SniffResult.cs`
+    - still required together for the legacy transparent relay path
+  - `src/TunnelFlow.Core/Interfaces/ICaptureEngine.cs`
+  - `src/TunnelFlow.Core/Interfaces/ISessionRegistry.cs`
+  - `src/TunnelFlow.Core/IPC/Messages/GetSessionsCommand.cs`
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+    - still compile/runtime glue for legacy session IPC:
+      - `GetSessions`
+      - `SessionCreated`
+      - `SessionClosed`
+- Category: already user-invisible or legacy-only, likely removable in a later dedicated cleanup phase
+  - `src/TunnelFlow.UI/ViewModels/SessionsViewModel.cs`
+  - `src/TunnelFlow.UI/Views/SessionsView.xaml`
+  - `src/TunnelFlow.UI/Views/SessionsView.xaml.cs`
+  - `src/TunnelFlow.UI/App.xaml`
+    - still includes the `SessionsViewModel -> SessionsView` data template
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+    - still constructs `Sessions`
+    - still handles:
+      - `SessionCreated`
+      - `SessionClosed`
+    - Sessions is no longer part of normal navigation, so this is internal leftover plumbing
+  - `src/TunnelFlow.Capture/Interop/StubPacketDriver.cs`
+    - fallback placeholder only
+    - not currently used in DI
+  - `src/TunnelFlow.Capture/TcpRedirect/FeatureFlagTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/NoOpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/WfpTcpRedirectProvider.cs`
+  - `src/TunnelFlow.Capture/TcpRedirect/Interop/*`
+  - `native/TunnelFlow.WfpRedirectChannel/*`
+    - experimental/diagnostic WFP-era path, no longer aligned with the product direction
+  - `UseWfpTcpRedirect`
+    - persisted legacy/experimental flag with no place in the final TUN-only product
+- Category: uncertain / needs deeper verification before removal
+  - session IPC/contracts and `SessionEntry` model
+    - probably removable if final product does not reintroduce session diagnostics
+    - but should be verified against any remaining hidden diagnostics/test usage first
+  - capture/WFP tests under `src/TunnelFlow.Tests/Capture/`
+    - likely removable or archival after product cleanup
+    - but some may still be useful as historical verification/reference while the code still exists
+  - `StartCaptureOnServiceStart`
+    - legacy name/semantics should likely become TUN-oriented later
+    - but removal/rename should wait until the runtime/service surface is cleaned up deliberately
+- Practical cleanup plan recommendation
+  - Phase 1:
+    - remove user-invisible Sessions leftovers from UI/state flow:
+      - `SessionsViewModel`
+      - `SessionsView`
+      - `MainViewModel` session event handling
+      - `GetSessions` UI usage assumptions
+  - Phase 2:
+    - remove WFP experimental redirect path and legacy flags:
+      - `UseWfpTcpRedirect`
+      - `ITcpRedirectProvider` and implementations
+      - WFP interop/native helper scaffolding
+  - Phase 3:
+    - cut legacy transparent relay runtime branch from the service:
+      - remove legacy branch in `OrchestratorService`
+      - remove `CaptureEngine` start/stop/session event wiring
+      - make service runtime TUN-only
+  - Phase 4:
+    - remove capture project and third-party WinpkFilter dependency entirely:
+      - `src/TunnelFlow.Capture`
+      - `third_party/ndisapi.net`
+      - `ndisapi.dll` copy path
+      - service project reference to capture
+  - Phase 5:
+    - rename remaining legacy-facing config/status language to final TUN-only semantics
+    - prune/archive capture-era tests and docs that are no longer part of the shipped product
+- Key risk note:
+  - the highest-risk removal is not the UI leftovers, but the point where `TunnelFlow.Service` stops referencing `TunnelFlow.Capture`
+  - until that phase, `ndisapi.net` and `ndisapi.dll` remain build dependencies even when TUN mode is the primary runtime path
+- Validation:
+  - docs-only audit
+  - no code changes
+  - no build run in this step
 
 ## Corrected next WFP step
 - Important correction after the helper-channel milestone:

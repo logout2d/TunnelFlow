@@ -562,3 +562,89 @@ Note:
 - a later dedicated TUN-only cleanup phase must still remove legacy capture / WinpkFilter-era paths from the final product once the remaining TUN-first product surface is complete
 Next recommended step:
 - Phase 1.1 of subscription import: add one more narrow compatibility slice for common subscription payload variations, such as extra comments/metadata wrappers around otherwise supported multi-profile content, while still avoiding background refresh semantics
+
+## Step 35
+Phase 0 of TUN-only cleanup: audit and inventory remaining legacy capture / WinpkFilter-era surface.
+Status: completed
+Scope:
+- audit only
+- no code removal yet
+- no runtime/TUN behavior changes
+- identify what is still:
+  - required now
+  - user-invisible / likely removable later
+  - uncertain and needs deeper verification
+Outcome:
+- current build/runtime still depends on legacy capture code because:
+  - `TunnelFlow.Service` still references `TunnelFlow.Capture`
+  - `TunnelFlow.Capture` still references `third_party/ndisapi.net`
+  - `ndisapi.dll` is still copied as part of the capture project
+  - the service still retains a real legacy runtime branch through:
+    - `ICaptureEngine`
+    - `IPacketDriver`
+    - `LocalRelay`
+    - `ITcpRedirectProvider`
+- already user-invisible / likely removable later:
+  - Sessions UI/view-model leftovers
+  - WFP experimental redirect scaffolding
+  - `UseWfpTcpRedirect` legacy flag
+  - stub/fallback capture placeholders
+- uncertain / verify later:
+  - session IPC/contracts
+  - capture-era tests that may be archived rather than simply deleted
+  - legacy-named config/settings that should eventually be renamed rather than only removed
+Phased cleanup recommendation:
+1. Remove remaining hidden Sessions plumbing from UI/state flow.
+2. Remove WFP experimental redirect path and its config flag.
+3. Remove the legacy transparent-relay runtime branch from the service and make runtime fully TUN-only.
+4. Remove `TunnelFlow.Capture`, `ndisapi.net`, and `ndisapi.dll` from build/runtime.
+5. Rename/prune final legacy-facing config, status, tests, and docs.
+Important release-direction note:
+- a later dedicated TUN-only cleanup phase must remove legacy capture / WinpkFilter-era paths from the final product before final release
+Next recommended step:
+- Phase 1 of TUN-only cleanup: remove the already user-invisible Sessions leftovers and other low-risk UI/state plumbing first, before touching service/runtime dependencies
+
+## Step 36
+Phase 1 of TUN-only cleanup: remove hidden Sessions leftovers.
+Status: completed
+Scope:
+- remove only the remaining dead Sessions UI/state plumbing
+- keep service/runtime capture/session contracts intact for now
+- avoid touching `TunnelFlow.Capture` / `ndisapi.net` in this step
+Outcome:
+- removed:
+  - `SessionsViewModel`
+  - `SessionsView.xaml`
+  - `SessionsView.xaml.cs`
+  - the `SessionsViewModel -> SessionsView` app data template
+  - hidden Sessions sidebar/button residue
+  - `MainViewModel` session event handling and Sessions property/construction
+- kept intentionally:
+  - service-side session IPC/contracts and capture-session runtime plumbing
+  - these were not proven unused in this same narrow step and still belong to the later legacy-runtime cleanup phases
+- focused validation is green:
+  - test-project build passed
+  - focused `MainViewModelTests` passed with class-name filter after the exact fully-qualified filter returned no matches in this environment
+Next recommended step:
+- Phase 2 of TUN-only cleanup: remove the WFP experimental redirect path and the `UseWfpTcpRedirect` legacy flag before moving on to the higher-risk service/runtime branch cleanup
+
+## Step 37
+Phase 2 of TUN-only cleanup: remove WFP experimental redirect leftovers and legacy flag surface.
+Status: completed
+Scope:
+- remove only the dead WFP experimental redirect branch and its config/plumbing surface
+- keep the main legacy capture stack in place for now
+- avoid touching `TunnelFlow.Capture` project existence and `ndisapi.net` in this step
+Outcome:
+- removed:
+  - `src/TunnelFlow.Capture/TcpRedirect/`
+  - `native/TunnelFlow.WfpRedirectChannel/`
+  - `native/TunnelFlow.WfpRedirectDriver/`
+  - WFP-specific capture tests
+  - `UseWfpTcpRedirect` from service config persistence
+  - service DI/start/stop plumbing for the redirect provider
+- simplified the remaining legacy relay path back to its existing NAT-table lookup only
+- current TUN behavior remains unchanged
+- current legacy capture stack still exists, but without the experimental WFP redirect branch
+Next recommended step:
+- Phase 3 of TUN-only cleanup: remove the remaining legacy transparent-relay runtime branch from the service and make the runtime path TUN-only before the later final capture-project/`ndisapi.net` removal phase
