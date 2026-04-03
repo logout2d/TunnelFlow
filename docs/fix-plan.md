@@ -368,3 +368,22 @@ Outcome:
   - the affected `MainViewModel` test now sets up those preconditions explicitly
 Next recommended step:
 - Phase 2.1: add a narrow explicit `Repair Service` / `Install Service` failure mapping layer so more bootstrapper exit codes can be surfaced as friendlier UI statuses without broadening into a full service-management surface
+
+## Step 25
+Phase 2.2 of the Windows bootstrapper approach: implement uninstall.
+Status: completed
+Scope:
+- keep the lifecycle step narrow and Windows-specific
+- implement only:
+  - stop service if present
+  - delete Windows service registration
+- preserve ProgramData/config/logs
+Outcome:
+- `uninstall` now:
+  - returns `NotInstalled` cleanly when the service is missing
+  - stops the service if needed
+  - deletes the `TunnelFlow` service via `sc.exe delete`
+  - waits for the registration to disappear
+  - preserves `C:\ProgramData\TunnelFlow`
+Next recommended step:
+- Phase 2.3: improve UI-facing bootstrapper exit-code mapping for install/repair/uninstall so more lifecycle failures become short friendly statuses without expanding into a full management UI

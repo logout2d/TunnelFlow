@@ -118,11 +118,39 @@ internal static class Program
 
     private static BootstrapperExitCode ExecuteUninstall()
     {
-        Console.WriteLine("Uninstall is scaffolded in this phase.");
-        Console.WriteLine($"Service name: {BootstrapperPaths.ServiceName}");
-        Console.WriteLine($"Recommended install root: {BootstrapperPaths.DefaultInstallRoot}");
-        Console.WriteLine($"Recommended data root: {BootstrapperPaths.DefaultDataRoot}");
-        return BootstrapperExitCode.NotImplemented;
+        if (!IsServiceInstalled())
+        {
+            WriteError($"{BootstrapperPaths.ServiceName} service is not installed.");
+            return BootstrapperExitCode.NotInstalled;
+        }
+
+        Console.WriteLine($"Uninstalling {BootstrapperPaths.ServiceName} service.");
+        Console.WriteLine($"Program data will be preserved at: {BootstrapperPaths.DefaultDataRoot}");
+
+        var stopResult = StopInstalledService();
+        if (stopResult != BootstrapperExitCode.Success)
+        {
+            return stopResult;
+        }
+
+        var deleteResult = RunScCommand($"delete {BootstrapperPaths.ServiceName}");
+        if (!deleteResult.IsSuccess)
+        {
+            return MapScFailure(
+                deleteResult.ExitCode,
+                $"Failed to delete {BootstrapperPaths.ServiceName} service.",
+                deleteResult.Output);
+        }
+
+        if (!WaitForServiceRemoval())
+        {
+            WriteError($"{BootstrapperPaths.ServiceName} service was marked for deletion but did not disappear in time.");
+            return BootstrapperExitCode.Timeout;
+        }
+
+        Console.WriteLine($"{BootstrapperPaths.ServiceName} service unregistered.");
+        Console.WriteLine("ProgramData and user configuration were left untouched.");
+        return BootstrapperExitCode.Success;
     }
 
     private static BootstrapperExitCode ExecuteStartService()
@@ -237,6 +265,65 @@ internal static class Program
 
         controller.Refresh();
         return controller.Status == targetStatus;
+    }
+
+    private static bool WaitForServiceRemoval()
+    {
+        var deadline = DateTime.UtcNow + OperationTimeout;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!IsServiceInstalled())
+            {
+                return true;
+            }
+
+            Thread.Sleep(PollInterval);
+        }
+
+        return !IsServiceInstalled();
+    }
+
+    private static BootstrapperExitCode StopInstalledService()
+    {
+        using var controller = CreateController();
+
+        try
+        {
+            controller.Refresh();
+            if (controller.Status is ServiceControllerStatus.Stopped or ServiceControllerStatus.StopPending)
+            {
+                if (controller.Status == ServiceControllerStatus.StopPending &&
+                    !WaitForStatus(controller, ServiceControllerStatus.Stopped))
+                {
+                    WriteError($"{BootstrapperPaths.ServiceName} service did not stop in time.");
+                    return BootstrapperExitCode.Timeout;
+                }
+
+                Console.WriteLine($"{BootstrapperPaths.ServiceName} service is already stopped.");
+                return BootstrapperExitCode.Success;
+            }
+
+            controller.Stop();
+            if (!WaitForStatus(controller, ServiceControllerStatus.Stopped))
+            {
+                WriteError($"{BootstrapperPaths.ServiceName} service did not stop in time.");
+                return BootstrapperExitCode.Timeout;
+            }
+
+            Console.WriteLine($"{BootstrapperPaths.ServiceName} service stopped.");
+            return BootstrapperExitCode.Success;
+        }
+        catch (Exception ex) when (IsServiceMissing(ex))
+        {
+            WriteError($"{BootstrapperPaths.ServiceName} service is not installed.");
+            return BootstrapperExitCode.NotInstalled;
+        }
+        catch (Exception ex) when (IsAccessDenied(ex))
+        {
+            WriteError($"Access denied while stopping {BootstrapperPaths.ServiceName} service.");
+            return BootstrapperExitCode.AccessDenied;
+        }
     }
 
     private static bool TryResolveServiceExecutablePath(

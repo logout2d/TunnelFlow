@@ -237,6 +237,48 @@
     - updated the test setup to mark the view-model connected and load/select a real inactive existing profile before asserting enabled command state
   - no production behavior change was required for that repair
 
+## Bootstrapper uninstall implementation
+- Implemented in this step:
+  - turned `uninstall` into a real Windows service removal flow
+  - kept scope narrow and operationally safe:
+    - stop service if present
+    - delete service registration
+    - preserve ProgramData/config/logs
+    - no updater logic
+    - no UI integration changes
+- Exact files changed:
+  - `src/TunnelFlow.Bootstrapper/Program.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact uninstall behavior now implemented:
+  - checks whether `TunnelFlow` is installed
+  - if installed:
+    - stops the service when needed
+    - waits for `Stopped`
+    - deletes the service via `sc.exe delete`
+    - waits for the service registration to disappear
+  - if already stopped:
+    - continues cleanly to deletion
+  - if not installed:
+    - returns the explicit not-installed result without touching anything
+- Safety note:
+  - `C:\ProgramData\TunnelFlow` is preserved intentionally
+  - config/logs are not deleted in this phase
+- Exit-code/behavior notes:
+  - `NotInstalled`
+    - when the service does not exist
+  - `AccessDenied`
+    - if stopping/deleting requires rights the bootstrapper does not have
+  - `Timeout`
+    - if stop or deletion does not complete within the existing timeout window
+  - `UnknownError`
+    - generic `sc.exe`/unexpected uninstall failure
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - pending for this step until validation completes
+  - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
+    - pending for this step until validation completes
+
 ## TUN Phase 6 status-model plumbing
 - Implemented in this step:
   - extended the shared state/status contract with a TUN-oriented runtime summary
