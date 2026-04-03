@@ -453,4 +453,109 @@ public class ProfileViewModelTests
         Assert.Equal(string.Empty, viewModel.UserId);
         Assert.False(viewModel.DeleteCommand.CanExecute(null));
     }
+
+    [Fact]
+    public async Task ImportFromUrlAsync_ImportsProfile_SavesIt_AndSelectsIt()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var importedProfile = new VlessProfile
+        {
+            Id = Guid.NewGuid(),
+            Name = "Imported",
+            ServerAddress = "imported.example.com",
+            ServerPort = 443,
+            UserId = "33333333-3333-3333-3333-333333333333",
+            Network = "tcp",
+            Security = "tls",
+            Tls = new TlsOptions
+            {
+                Sni = "imported.example.com",
+                AllowInsecure = false,
+                Fingerprint = "chrome"
+            }
+        };
+        var viewModel = new ProfileViewModel(
+            client,
+            profileImportService: new ProfileImportTestService((url, cancellationToken) =>
+            {
+                Assert.Equal("https://example.com/profile.txt", url);
+                return Task.FromResult(importedProfile);
+            }),
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true,
+            ImportUrl = "https://example.com/profile.txt"
+        };
+
+        await viewModel.ImportFromUrlAsync();
+
+        Assert.Contains("UpsertProfile", commands);
+        Assert.False(viewModel.IsCreatingNewProfile);
+        Assert.Equal(importedProfile.Id, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Imported", viewModel.Name);
+        Assert.Equal("imported.example.com", viewModel.ServerAddress);
+        Assert.Equal("Imported \"Imported\".", viewModel.ImportStatus);
+        Assert.Equal(string.Empty, viewModel.ImportUrl);
+        Assert.False(viewModel.HasUnsavedChanges);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ImportFromUrlAsync_WithDirectVlessUri_ImportsProfile_SavesIt_AndSelectsIt()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var directUri = "vless://33333333-3333-3333-3333-333333333333@direct.example.com:8443?security=reality&sni=cdn.example.com&fp=chrome&pbk=public-key&sid=short-id&type=grpc#Direct%20VLESS";
+        var importedProfile = new VlessProfile
+        {
+            Id = Guid.NewGuid(),
+            Name = "Direct VLESS",
+            ServerAddress = "direct.example.com",
+            ServerPort = 8443,
+            UserId = "33333333-3333-3333-3333-333333333333",
+            Network = "grpc",
+            Security = "reality",
+            Tls = new TlsOptions
+            {
+                Sni = "cdn.example.com",
+                AllowInsecure = false,
+                Fingerprint = "chrome",
+                RealityPublicKey = "public-key",
+                RealityShortId = "short-id"
+            }
+        };
+        var viewModel = new ProfileViewModel(
+            client,
+            profileImportService: new ProfileImportTestService((url, cancellationToken) =>
+            {
+                Assert.Equal(directUri, url);
+                return Task.FromResult(importedProfile);
+            }),
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true,
+            ImportUrl = directUri
+        };
+
+        await viewModel.ImportFromUrlAsync();
+
+        Assert.Contains("UpsertProfile", commands);
+        Assert.False(viewModel.IsCreatingNewProfile);
+        Assert.Equal(importedProfile.Id, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Direct VLESS", viewModel.Name);
+        Assert.Equal("direct.example.com", viewModel.ServerAddress);
+        Assert.Equal("Imported \"Direct VLESS\".", viewModel.ImportStatus);
+        Assert.Equal(string.Empty, viewModel.ImportUrl);
+        Assert.False(viewModel.HasUnsavedChanges);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+    }
 }

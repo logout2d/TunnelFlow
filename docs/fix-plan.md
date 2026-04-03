@@ -498,3 +498,40 @@ Outcome:
 - focused `MainViewModel` validation is green
 Next recommended step:
 - Phase 2.6: add one narrow UI hint or tooltip for disabled service actions during active tunnel runtime so the user understands why service actions are unavailable without expanding into a larger management surface
+
+## Step 32
+Phase 1 of direct URL config import: add a narrow single-profile import path in the Profile UI.
+Status: completed
+Scope:
+- add a small direct URL import surface in the existing Profile view
+- support HTTP/HTTPS fetch only
+- support one practical direct format:
+  - fetched `vless://...` single-profile content
+- reuse the existing profile persistence/selection flow
+- keep subscription refresh and background sync out of scope
+Outcome:
+- Profile UI now accepts an HTTP/HTTPS direct URL and imports one `vless://` profile
+- imported data is mapped into the existing `VlessProfile` model and persisted via the existing `UpsertProfile` path
+- imported profile is selected in the existing profile flow with a short success/failure result
+- focused importer/profile validation is green
+Next recommended step:
+- Phase 1.1 of direct URL import: add one more small compatibility slice for realistic direct imports, such as better handling for fetched content that contains a single profile plus surrounding whitespace/comments, while still avoiding subscription semantics
+
+## Step 33
+Phase 1.1 of direct URL config import: support direct pasted `vless://` input in the same import field.
+Status: completed
+Scope:
+- keep the existing HTTP/HTTPS fetch path working
+- expand the same import field/button to also accept direct pasted `vless://...` URIs
+- keep parsing logic centralized in the existing import service
+- update friendly validation messaging to match the broader supported input
+Outcome:
+- the Profile import field now supports:
+  - `http://` / `https://` URLs that fetch remote content
+  - direct pasted `vless://...` URIs
+- direct `vless://` input is now parsed locally without a remote fetch
+- the importer still reuses the existing single-profile VLESS mapping into the current `VlessProfile` model
+- validation/help text now says the field accepts either an HTTP/HTTPS URL or a direct `vless://` URI
+- focused importer/profile validation is green
+Next recommended step:
+- Phase 1.2 of direct URL import: add one more narrow compatibility slice for fetched content that includes a single supported profile plus surrounding comments/metadata lines, while still avoiding full subscription semantics

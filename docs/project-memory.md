@@ -531,6 +531,67 @@
     - failed: 0
     - skipped: 0
 
+## Direct URL config import Phase 1
+- Implemented in this step:
+  - added a narrow direct-URL import path in the Profile UI
+  - kept scope intentionally small:
+    - HTTP/HTTPS fetch only
+    - single-profile import only
+    - no subscription refresh
+    - no background sync
+    - no runtime/TUN changes
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/IProfileImportService.cs`
+  - `src/TunnelFlow.UI/Services/DirectUrlProfileImportService.cs`
+  - `src/TunnelFlow.UI/ViewModels/ProfileViewModel.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/DirectUrlProfileImportServiceTests.cs`
+  - `src/TunnelFlow.Tests/UI/ProfileImportTestService.cs`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact import UI flow added:
+  - Profile view now includes a compact `Import from direct URL` row
+  - user enters an HTTP/HTTPS URL
+  - UI fetches the remote text
+  - importer parses one supported `vless://` profile
+  - imported profile is persisted through the existing `UpsertProfile` path
+  - imported profile is selected in the existing profile picker/form
+  - UI shows a short success/failure result under the import row
+- Exact direct format currently supported:
+  - one fetched `vless://...` profile
+  - imported fields currently mapped:
+    - `Name` from URI fragment, falling back to host
+    - `ServerAddress`
+    - `ServerPort`
+    - `UserId`
+    - `Flow`
+    - `Network` from `type`
+    - `Security`
+    - `Tls.Sni`
+    - `Tls.Fingerprint` from `fp` / `fingerprint`
+    - `Tls.RealityPublicKey` from `pbk`
+    - `Tls.RealityShortId` from `sid`
+  - supported security values:
+    - `none`
+    - `tls`
+    - `reality`
+  - supported transport values:
+    - `tcp`
+    - `ws`
+    - `grpc`
+- Current limitations:
+  - direct URL import currently supports only one fetched profile
+  - it does not yet support subscription lists or refresh
+  - it does not add transport-specific extras beyond the fields already represented by `VlessProfile`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 14
+    - failed: 0
+    - skipped: 0
+
 ## TUN Phase 6 status-model plumbing
 - Implemented in this step:
   - extended the shared state/status contract with a TUN-oriented runtime summary
@@ -2347,8 +2408,44 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 3
     - failed: 0
     - skipped: 0
-  - Remaining blocker before the first true runtime redirected accept:
+- Remaining blocker before the first true runtime redirected accept:
   - replace the native helper process with the first real native driver/device control channel from the future WFP `ALE_CONNECT_REDIRECT_V4` implementation so a real outbound app `connect()` generates the event rather than a synthetic test command
+
+## Direct URL import Phase 1.1 direct-VLESS input support
+- Implemented in this step:
+  - expanded the existing Profile import field so it now accepts either:
+    - `http://` / `https://` URLs that fetch remote content
+    - direct pasted `vless://...` URIs
+  - kept the same one-field / one-button UI surface
+  - reused the existing VLESS parsing path rather than adding a second parser
+- Exact files changed:
+  - `src/TunnelFlow.UI/Services/DirectUrlProfileImportService.cs`
+  - `src/TunnelFlow.UI/Views/ProfileView.xaml`
+  - `src/TunnelFlow.Tests/UI/DirectUrlProfileImportServiceTests.cs`
+  - `src/TunnelFlow.Tests/UI/ProfileViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact cause of the previous rejection:
+  - `DirectUrlProfileImportService.ImportFromUrlAsync(...)` rejected any input that was not an absolute `http` or `https` URI before parsing
+  - that meant pasting a raw `vless://...` URI failed at validation even though the downstream parser already understood VLESS content
+- Exact support added:
+  - if the input is a direct `vless://...` URI:
+    - parse it immediately without remote fetch
+  - if the input is `http://` or `https://`:
+    - keep the existing remote fetch behavior unchanged
+- Exact validation/message changes:
+  - broader validation message:
+    - `Enter a valid HTTP or HTTPS URL, or a direct vless:// URI.`
+  - Profile import tooltip now explicitly says the field supports:
+    - an HTTP/HTTPS URL returning one profile
+    - or a pasted direct `vless://` URI
+- Focused validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 17
+    - failed: 0
+    - skipped: 0
 
 ## Corrected next WFP step
 - Important correction after the helper-channel milestone:

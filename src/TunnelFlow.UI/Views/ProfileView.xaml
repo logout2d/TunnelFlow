@@ -17,6 +17,48 @@
                            FontWeight="Medium"/>
             </StackPanel>
 
+            <!-- Direct URL import -->
+            <StackPanel Margin="0,0,0,16">
+                <TextBlock Text="Import from direct URL"
+                           Margin="0,0,0,4"
+                           Foreground="#475569"
+                           FontWeight="Medium"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <TextBox Width="340"
+                             Text="{Binding ImportUrl, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="8,5"
+                             BorderBrush="#CBD5E1"
+                             ToolTip="HTTP/HTTPS URL returning a single vless:// profile, or paste a direct vless:// URI"/>
+
+                    <Button Content="Import URL"
+                            Command="{Binding ImportFromUrlCommand}"
+                            Margin="8,0,0,0"
+                            Padding="11,5"
+                            Background="#E0F2FE"
+                            Foreground="#0F172A"
+                            BorderBrush="#7DD3FC"
+                            Cursor="Hand"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding ImportStatus}"
+                           Margin="0,6,0,0"
+                           Foreground="#475569"
+                           FontSize="11"
+                           TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowImportStatus}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+
             <!-- Profile selection -->
             <StackPanel Margin="0,0,0,16">
                 <StackPanel.Style>

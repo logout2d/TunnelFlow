@@ -11,6 +11,7 @@ namespace TunnelFlow.UI.ViewModels;
 public partial class ProfileViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
+    private readonly IProfileImportService _profileImportService;
     private readonly Func<string, string, bool> _confirmDelete;
     private readonly Func<string, object?, CancellationToken, Task<JsonElement?>> _sendCommandAsync;
     private readonly ObservableCollection<ProfileChoiceItem> _availableProfiles = [];
@@ -38,6 +39,8 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private string _realityShortId = "";
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private string _saveStatus = "";
+    [ObservableProperty] private string _importUrl = "";
+    [ObservableProperty] private string _importStatus = "";
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -45,6 +48,7 @@ public partial class ProfileViewModel : ObservableObject
     public IRelayCommand ActivateCommand { get; }
     public IRelayCommand AddNewCommand { get; }
     public IRelayCommand DeleteCommand { get; }
+    public IRelayCommand ImportFromUrlCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled || !IsServiceConnected;
     public string EditHintText => !IsEditingEnabled
         ? "Stop the tunnel to edit profile settings."
@@ -56,6 +60,7 @@ public partial class ProfileViewModel : ObservableObject
         get => _hasUnsavedChanges;
         private set => SetProperty(ref _hasUnsavedChanges, value);
     }
+    public bool ShowImportStatus => !string.IsNullOrWhiteSpace(ImportStatus);
     public ReadOnlyObservableCollection<ProfileChoiceItem> AvailableProfiles { get; }
     public bool ShowProfileSelector => AvailableProfiles.Count > 0;
     public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
@@ -71,13 +76,16 @@ public partial class ProfileViewModel : ObservableObject
     private readonly RelayCommand _activateCmd;
     private readonly RelayCommand _addNewCmd;
     private readonly RelayCommand _deleteCmd;
+    private readonly RelayCommand _importFromUrlCmd;
 
     public ProfileViewModel(
         ServiceClient client,
+        IProfileImportService? profileImportService = null,
         Func<string, string, bool>? confirmDelete = null,
         Func<string, object?, CancellationToken, Task<JsonElement?>>? sendCommandAsync = null)
     {
         _client = client;
+        _profileImportService = profileImportService ?? new DirectUrlProfileImportService();
         _confirmDelete = confirmDelete ?? ((message, title) =>
             MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes);
         _sendCommandAsync = sendCommandAsync ?? client.SendCommandAsync;
@@ -106,6 +114,10 @@ public partial class ProfileViewModel : ObservableObject
             async () => await DeleteSelectedProfileAsync(),
             CanDeleteSelectedProfile);
         DeleteCommand = _deleteCmd;
+        _importFromUrlCmd = new RelayCommand(
+            async () => await ImportFromUrlAsync(),
+            CanImportFromUrl);
+        ImportFromUrlCommand = _importFromUrlCmd;
     }
 
     partial void OnNameChanged(string value) => HandleEditableFieldChanged();
@@ -119,6 +131,14 @@ public partial class ProfileViewModel : ObservableObject
     partial void OnFingerprintChanged(string value) => HandleEditableFieldChanged();
     partial void OnRealityPublicKeyChanged(string value) => HandleEditableFieldChanged();
     partial void OnRealityShortIdChanged(string value) => HandleEditableFieldChanged();
+    partial void OnImportUrlChanged(string value)
+    {
+        _importFromUrlCmd.NotifyCanExecuteChanged();
+        if (!string.IsNullOrWhiteSpace(ImportStatus))
+        {
+            ImportStatus = string.Empty;
+        }
+    }
     partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
     partial void OnIsServiceConnectedChanged(bool value)
     {
@@ -138,6 +158,7 @@ public partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(EditHintText));
         RefreshCommandStates();
     }
+    partial void OnImportStatusChanged(string value) => OnPropertyChanged(nameof(ShowImportStatus));
     partial void OnSelectedProfileChanged(ProfileChoiceItem? value)
     {
         _activateCmd.NotifyCanExecuteChanged();
@@ -231,6 +252,39 @@ public partial class ProfileViewModel : ObservableObject
         catch (Exception ex)
         {
             SaveStatus = $"Error: {ex.Message}";
+        }
+    }
+
+    internal async Task ImportFromUrlAsync()
+    {
+        if (!CanImportFromUrl())
+        {
+            return;
+        }
+
+        try
+        {
+            var importedProfile = await _profileImportService.ImportFromUrlAsync(ImportUrl, CancellationToken.None);
+            await _sendCommandAsync("UpsertProfile", importedProfile, CancellationToken.None);
+            UpsertProfile(importedProfile);
+            RefreshProfileChoices(importedProfile.Id);
+            IsCreatingNewProfile = false;
+            ApplyProfile(importedProfile);
+            SetSavedFormState(CaptureFormState(), clearStatus: true);
+            ImportUrl = string.Empty;
+            ImportStatus = $"Imported \"{ResolveProfileName(importedProfile)}\".";
+        }
+        catch (ArgumentException ex)
+        {
+            ImportStatus = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ImportStatus = ex.Message;
+        }
+        catch (Exception)
+        {
+            ImportStatus = "Import failed. Check the URL and try again.";
         }
     }
 
@@ -434,6 +488,7 @@ public partial class ProfileViewModel : ObservableObject
         _activateCmd.NotifyCanExecuteChanged();
         _addNewCmd.NotifyCanExecuteChanged();
         _deleteCmd.NotifyCanExecuteChanged();
+        _importFromUrlCmd.NotifyCanExecuteChanged();
     }
 
     private void SetSavedFormState(ProfileFormState savedFormState, bool clearStatus)
@@ -505,6 +560,11 @@ public partial class ProfileViewModel : ObservableObject
         !IsCreatingNewProfile &&
         SelectedProfile is not null &&
         _profiles.Any(profile => profile.Id == SelectedProfile.Id);
+
+    private bool CanImportFromUrl() =>
+        IsEditingEnabled &&
+        IsServiceConnected &&
+        !string.IsNullOrWhiteSpace(ImportUrl);
 
     private void RemoveProfile(Guid profileId)
     {
