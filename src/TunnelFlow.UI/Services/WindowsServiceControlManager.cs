@@ -13,11 +13,17 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         Environment.GetFolderPath(Environment.SpecialFolder.System),
         @"WindowsPowerShell\v1.0\powershell.exe");
 
+    public Task<bool> IsInstalledAsync(CancellationToken cancellationToken) =>
+        Task.Run(IsServiceInstalledCore, cancellationToken);
+
     public Task InstallAsync(CancellationToken cancellationToken) =>
         InvokeBootstrapperAsync("install", cancellationToken);
 
     public Task RepairAsync(CancellationToken cancellationToken) =>
         InvokeBootstrapperAsync("repair", cancellationToken);
+
+    public Task UninstallAsync(CancellationToken cancellationToken) =>
+        InvokeBootstrapperAsync("uninstall", cancellationToken);
 
     public Task StartAsync(CancellationToken cancellationToken) =>
         InvokeBootstrapperOrFallbackAsync("start-service", StartCore, cancellationToken);
@@ -92,7 +98,7 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         var bootstrapperPath = ResolveBootstrapperExecutablePath();
         if (bootstrapperPath is null)
         {
-            throw new InvalidOperationException(
+            throw new ServiceBootstrapperMissingException(
                 "TunnelFlow.Bootstrapper.exe was not found. Build or deploy the bootstrapper, or use the existing service recovery path.");
         }
 
@@ -120,7 +126,7 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            throw new InvalidOperationException("Service action was canceled by the user.", ex);
+            throw new ServiceControlAccessDeniedException("Service action was canceled by the user.", ex);
         }
     }
 
@@ -137,9 +143,11 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
             case 3:
                 throw new InvalidOperationException("TunnelFlow.Service.exe could not be resolved for the bootstrapper command.");
             case 7:
-                throw new InvalidOperationException("Service action was canceled by the user.");
+                throw new ServiceControlAccessDeniedException("Service action was canceled by the user.");
+            case 6:
+                throw new ServiceControlTimeoutException($"Bootstrapper command '{verb}' timed out.");
             case 8:
-                throw new InvalidOperationException("Service action requires administrator approval.");
+                throw new ServiceControlAccessDeniedException("Service action requires administrator approval.");
             case 9:
                 throw new InvalidOperationException($"Bootstrapper verb '{verb}' is not implemented.");
             default:
@@ -157,6 +165,20 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         catch (InvalidOperationException ex)
         {
             throw new ServiceNotInstalledException("TunnelFlow service is not installed.", ex);
+        }
+    }
+
+    private static bool IsServiceInstalledCore()
+    {
+        try
+        {
+            using var controller = new ServiceController(ServiceName);
+            _ = controller.Status;
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
     }
 
@@ -259,13 +281,13 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
 
             if (process.ExitCode != 0)
             {
-                throw new InvalidOperationException(
+                throw new ServiceControlTimeoutException(
                     $"Service control command failed with exit code {process.ExitCode}.");
             }
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
-            throw new InvalidOperationException("Service action was canceled by the user.", ex);
+            throw new ServiceControlAccessDeniedException("Service action was canceled by the user.", ex);
         }
     }
 }
