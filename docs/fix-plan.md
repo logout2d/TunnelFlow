@@ -298,3 +298,46 @@ Next recommended step:
 - Phase 2: integrate `TunnelFlow.Bootstrapper.exe` into the existing UI service-control path so:
   - installed systems stop depending on PowerShell `runas`
   - future `Install Service` / `Repair Service` UI actions have a real elevated backend
+
+## Step 22
+Phase 1.1 of the Windows bootstrapper approach: make install and repair real.
+Status: completed
+Scope:
+- keep the bootstrapper Windows-specific and narrow
+- implement:
+  - `install`
+  - `repair`
+- keep:
+  - `uninstall` stubbed for now
+  - no UI integration yet
+  - no updater logic yet
+Outcome:
+- `install` now:
+  - resolves and verifies the intended `TunnelFlow.Service.exe`
+  - creates the `TunnelFlow` Windows service via `sc.exe`
+  - sets startup mode to `auto`
+  - starts the service
+- `repair` now:
+  - creates the service if missing
+  - otherwise refreshes service config via `sc.exe config`
+  - ensures expected `binPath` and startup mode
+  - restarts the service
+- exit-code handling remains explicit and aligned with the existing bootstrapper model
+Next recommended step:
+- Phase 2: replace the current UI PowerShell fallback with bootstrapper invocation and add a minimal `Install Service` / `Repair Service` path in the existing service-recovery UX
+
+## Step 23
+Phase 1.2 of the Windows bootstrapper approach: improve default dev-path service resolution.
+Status: completed
+Scope:
+- keep explicit `--service-exe` behavior unchanged
+- improve default service exe lookup for current repository/dev layout
+- improve operator-facing resolution failure messaging
+Outcome:
+- bootstrapper default lookup now tries:
+  - sibling `TunnelFlow.Service.exe`
+  - repo-relative `src\TunnelFlow.Service\bin\Debug\net8.0-windows\TunnelFlow.Service.exe`
+  - repo-relative `src\TunnelFlow.Service\bin\Release\net8.0-windows\TunnelFlow.Service.exe`
+- missing-resolution errors now list checked candidate paths and suggest `--service-exe <path>`
+Next recommended step:
+- Phase 2: integrate `TunnelFlow.Bootstrapper` into the UI service-control path while keeping the current explicit Windows lifecycle surface narrow

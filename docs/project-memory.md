@@ -69,6 +69,94 @@
   - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
     - pending for this step until scaffold validation completes
 
+## Bootstrapper Phase 1 install/repair implementation
+- Implemented in this step:
+  - turned `install` into a real Windows service registration flow
+  - turned `repair` into a real Windows service config refresh flow
+  - kept scope narrow:
+    - no updater logic
+    - no UI integration
+    - no runtime/TUN changes
+    - `uninstall` remains intentionally stubbed
+- Exact files changed:
+  - `src/TunnelFlow.Bootstrapper/Program.cs`
+  - `src/TunnelFlow.Bootstrapper/BootstrapperPaths.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact install behavior now implemented:
+  - resolves the intended service exe path from:
+    - `--service-exe <path>` when provided
+    - otherwise `TunnelFlow.Service.exe` next to the bootstrapper
+  - verifies the service exe exists
+  - checks whether `TunnelFlow` is already installed
+  - registers the service via `sc.exe create`
+  - configures:
+    - service name: `TunnelFlow`
+    - display name: `TunnelFlow`
+    - startup mode: `auto`
+    - binPath: resolved service exe path
+  - starts the service after registration
+- Exact repair behavior now implemented:
+  - verifies the intended service exe exists
+  - if the service is missing:
+    - falls back to the install path and creates it
+  - if the service already exists:
+    - refreshes config via `sc.exe config`
+    - ensures expected:
+      - `binPath`
+      - startup mode `auto`
+      - display name
+    - restarts the service afterward
+- Exit-code/behavior notes:
+  - uses the existing explicit bootstrapper exit-code model
+  - meaningful mappings now cover:
+    - service exe missing
+    - already installed
+    - service not installed
+    - access denied
+    - timeout
+    - generic `sc.exe` failure
+- Remaining stub behavior:
+  - `uninstall` still reports the intended service/data layout and returns `NotImplemented`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - pending for this step until validation completes
+  - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
+    - pending for this step until validation completes
+
+## Bootstrapper Phase 1 path-resolution improvement
+- Implemented in this step:
+  - improved default `TunnelFlow.Service.exe` resolution for development layout use
+  - kept explicit `--service-exe <path>` behavior unchanged
+  - improved failure messaging when default resolution cannot find the service binary
+- Exact files changed:
+  - `src/TunnelFlow.Bootstrapper/BootstrapperPaths.cs`
+  - `src/TunnelFlow.Bootstrapper/Program.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Resolution behavior before:
+  - explicit `--service-exe` was supported
+  - default lookup only tried:
+    - `TunnelFlow.Service.exe` next to `TunnelFlow.Bootstrapper.exe`
+- Resolution behavior after:
+  - explicit `--service-exe` still takes precedence unchanged
+  - default lookup now tries, in order:
+    - sibling service exe next to the bootstrapper
+    - repo-relative debug service build:
+      - `src\TunnelFlow.Service\bin\Debug\net8.0-windows\TunnelFlow.Service.exe`
+    - repo-relative release service build:
+      - `src\TunnelFlow.Service\bin\Release\net8.0-windows\TunnelFlow.Service.exe`
+  - repo-relative candidates are discovered by walking upward from `AppContext.BaseDirectory` until `TunnelFlow.sln` is found
+- Improved failure message behavior:
+  - when explicit `--service-exe` is provided and missing:
+    - error now says that exact path was not found and suggests `--service-exe <path>`
+  - when default resolution fails:
+    - error now prints all checked candidate paths
+    - error now explicitly suggests using `--service-exe <path>`
+- Validation:
+  - `dotnet build src\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj`
+    - pending for this step until validation completes
+
 ## TUN Phase 6 status-model plumbing
 - Implemented in this step:
   - extended the shared state/status contract with a TUN-oriented runtime summary
