@@ -839,7 +839,7 @@ public class ProfileViewModelTests
         Assert.True(viewModel.SubscriptionMissingFromSource);
         Assert.Equal("No longer present in the latest subscription update. Kept locally until you remove it.", viewModel.SubscriptionUpdateSummary);
         Assert.Equal("Subscription updated: 1 updated, 1 missing from source.", viewModel.ImportStatus);
-        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Subscription, Missing from source)");
+        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Active, Subscription, Missing from source)");
         Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Alpha Updated (Subscription)");
     }
 
@@ -870,5 +870,171 @@ public class ProfileViewModelTests
 
         Assert.False(viewModel.HasSubscriptionSource);
         Assert.False(viewModel.UpdateSubscriptionCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CleanupMissingSubscriptionProfileCommand_IsAvailableOnlyForMissingFromSourceProfiles()
+    {
+        using var client = new ServiceClient();
+        var sourceUrl = "https://example.com/subscription.txt";
+        var staleId = Guid.NewGuid();
+        var healthyId = Guid.NewGuid();
+        var viewModel = new ProfileViewModel(client)
+        {
+            IsServiceConnected = true
+        };
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = healthyId,
+                Name = "Healthy",
+                ServerAddress = "healthy.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = "healthy-key",
+                IsActive = true
+            },
+            new VlessProfile
+            {
+                Id = staleId,
+                Name = "Stale",
+                ServerAddress = "stale.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "grpc",
+                Security = "reality",
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = "stale-key",
+                SubscriptionMissingFromSource = true
+            }
+        ], healthyId);
+
+        Assert.False(viewModel.ShowMissingSubscriptionCleanupAction);
+        Assert.False(viewModel.CleanupMissingSubscriptionProfileCommand.CanExecute(null));
+
+        viewModel.SelectedProfile = viewModel.AvailableProfiles.Single(option => option.Id == staleId);
+
+        Assert.True(viewModel.SubscriptionMissingFromSource);
+        Assert.True(viewModel.ShowMissingSubscriptionCleanupAction);
+        Assert.Equal("Remove this stale subscription profile locally if you no longer need it.", viewModel.MissingSubscriptionCleanupSummary);
+        Assert.True(viewModel.CleanupMissingSubscriptionProfileCommand.CanExecute(null));
+
+        viewModel.AddNewCommand.Execute(null);
+
+        Assert.False(viewModel.ShowMissingSubscriptionCleanupAction);
+        Assert.False(viewModel.CleanupMissingSubscriptionProfileCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task CleanupMissingSubscriptionProfileAsync_WhenConfirmed_RemovesProfile()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var sourceUrl = "https://example.com/subscription.txt";
+        var staleId = Guid.NewGuid();
+        var activeId = Guid.NewGuid();
+        var viewModel = new ProfileViewModel(
+            client,
+            confirmDelete: (message, title) =>
+            {
+                Assert.Equal("Remove Stale Subscription Profile", title);
+                Assert.Equal("Profile \"Stale\" is no longer present in its source subscription. Remove it locally?", message);
+                return true;
+            },
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true
+        };
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = activeId,
+                Name = "Active",
+                ServerAddress = "active.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = "active-key",
+                IsActive = true
+            },
+            new VlessProfile
+            {
+                Id = staleId,
+                Name = "Stale",
+                ServerAddress = "stale.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "grpc",
+                Security = "reality",
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = "stale-key",
+                SubscriptionMissingFromSource = true
+            }
+        ], staleId);
+
+        await viewModel.CleanupMissingSubscriptionProfileAsync();
+
+        Assert.Contains("DeleteProfile", commands);
+        Assert.Single(viewModel.AvailableProfiles);
+        Assert.Equal(activeId, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Removed stale profile \u2713", viewModel.SaveStatus);
+    }
+
+    [Fact]
+    public async Task CleanupMissingSubscriptionProfileAsync_WhenCanceled_DoesNothing()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var sourceUrl = "https://example.com/subscription.txt";
+        var staleId = Guid.NewGuid();
+        var viewModel = new ProfileViewModel(
+            client,
+            confirmDelete: (message, title) => false,
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true
+        };
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = staleId,
+                Name = "Stale",
+                ServerAddress = "stale.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "grpc",
+                Security = "reality",
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = "stale-key",
+                SubscriptionMissingFromSource = true,
+                IsActive = true
+            }
+        ], staleId);
+
+        await viewModel.CleanupMissingSubscriptionProfileAsync();
+
+        Assert.Empty(commands);
+        Assert.Single(viewModel.AvailableProfiles);
+        Assert.Equal(staleId, viewModel.SelectedProfile?.Id);
+        Assert.Equal(string.Empty, viewModel.SaveStatus);
     }
 }

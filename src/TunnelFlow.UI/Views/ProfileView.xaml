@@ -160,14 +160,56 @@
                         </TextBlock>
                     </StackPanel>
 
-                    <Button Grid.Column="1"
-                            Content="{Binding UpdateSubscriptionButtonText}"
-                            Command="{Binding UpdateSubscriptionCommand}"
-                            Padding="11,5"
-                            Background="#E2E8F0"
-                            Foreground="#334155"
-                            BorderBrush="#CBD5E1"
-                            Cursor="Hand"/>
+                    <StackPanel Grid.Column="1">
+                        <Button Content="{Binding UpdateSubscriptionButtonText}"
+                                Command="{Binding UpdateSubscriptionCommand}"
+                                Padding="11,5"
+                                Background="#E2E8F0"
+                                Foreground="#334155"
+                                BorderBrush="#CBD5E1"
+                                Cursor="Hand"/>
+
+                        <TextBlock Text="{Binding MissingSubscriptionCleanupSummary}"
+                                   Margin="0,6,0,0"
+                                   Foreground="#B45309"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowMissingSubscriptionCleanupAction}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <Button Content="{Binding CleanupMissingSubscriptionButtonText}"
+                                Command="{Binding CleanupMissingSubscriptionProfileCommand}"
+                                Margin="0,6,0,0"
+                                Padding="11,5"
+                                Background="#FFF7ED"
+                                Foreground="#9A3412"
+                                BorderBrush="#FDBA74"
+                                Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Setter Property="Background" Value="#FFF7ED"/>
+                                    <Setter Property="Foreground" Value="#9A3412"/>
+                                    <Setter Property="BorderBrush" Value="#FDBA74"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowMissingSubscriptionCleanupAction}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </StackPanel>
 

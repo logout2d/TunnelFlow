@@ -53,6 +53,7 @@ public partial class ProfileViewModel : ObservableObject
     public IRelayCommand DeleteCommand { get; }
     public IRelayCommand ImportFromUrlCommand { get; }
     public IRelayCommand UpdateSubscriptionCommand { get; }
+    public IRelayCommand CleanupMissingSubscriptionProfileCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled || !IsServiceConnected;
     public string EditHintText => !IsEditingEnabled
         ? "Stop the tunnel to edit profile settings."
@@ -78,6 +79,14 @@ public partial class ProfileViewModel : ObservableObject
             ? "No longer present in the latest subscription update. Kept locally until you remove it."
             : "Use Update subscription to refresh profiles from this saved source.";
     public string UpdateSubscriptionButtonText => "Update subscription";
+    public bool ShowMissingSubscriptionCleanupAction =>
+        HasSubscriptionSource &&
+        SubscriptionMissingFromSource &&
+        !IsCreatingNewProfile;
+    public string MissingSubscriptionCleanupSummary => ShowMissingSubscriptionCleanupAction
+        ? "Remove this stale subscription profile locally if you no longer need it."
+        : string.Empty;
+    public string CleanupMissingSubscriptionButtonText => "Remove stale profile";
     public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
         ? "None selected"
         : GetActiveProfile()!.Name;
@@ -93,6 +102,7 @@ public partial class ProfileViewModel : ObservableObject
     private readonly RelayCommand _deleteCmd;
     private readonly RelayCommand _importFromUrlCmd;
     private readonly RelayCommand _updateSubscriptionCmd;
+    private readonly RelayCommand _cleanupMissingSubscriptionProfileCmd;
 
     public ProfileViewModel(
         ServiceClient client,
@@ -138,6 +148,10 @@ public partial class ProfileViewModel : ObservableObject
             async () => await UpdateSubscriptionAsync(),
             CanUpdateSubscription);
         UpdateSubscriptionCommand = _updateSubscriptionCmd;
+        _cleanupMissingSubscriptionProfileCmd = new RelayCommand(
+            async () => await CleanupMissingSubscriptionProfileAsync(),
+            CanCleanupMissingSubscriptionProfile);
+        CleanupMissingSubscriptionProfileCommand = _cleanupMissingSubscriptionProfileCmd;
     }
 
     partial void OnNameChanged(string value) => HandleEditableFieldChanged();
@@ -165,11 +179,17 @@ public partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(SubscriptionSourceSummary));
         OnPropertyChanged(nameof(SubscriptionSourceUrlDisplay));
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
+        OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
+        OnPropertyChanged(nameof(MissingSubscriptionCleanupSummary));
         _updateSubscriptionCmd.NotifyCanExecuteChanged();
+        _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
     }
     partial void OnSubscriptionMissingFromSourceChanged(bool value)
     {
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
+        OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
+        OnPropertyChanged(nameof(MissingSubscriptionCleanupSummary));
+        _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
     }
     partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
     partial void OnIsServiceConnectedChanged(bool value)
@@ -181,8 +201,11 @@ public partial class ProfileViewModel : ObservableObject
     partial void OnIsCreatingNewProfileChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowProfileSelector));
+        OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
+        OnPropertyChanged(nameof(MissingSubscriptionCleanupSummary));
         _activateCmd.NotifyCanExecuteChanged();
         _deleteCmd.NotifyCanExecuteChanged();
+        _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
     }
     partial void OnIsEditingEnabledChanged(bool value)
     {
@@ -196,6 +219,7 @@ public partial class ProfileViewModel : ObservableObject
         _activateCmd.NotifyCanExecuteChanged();
         _deleteCmd.NotifyCanExecuteChanged();
         _updateSubscriptionCmd.NotifyCanExecuteChanged();
+        _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
 
         if (_suppressSelectionChange || value is null)
         {
@@ -457,8 +481,14 @@ public partial class ProfileViewModel : ObservableObject
     }
 
     internal async Task DeleteSelectedProfileAsync()
+        => await DeleteSelectedProfileAsync(useMissingSubscriptionPrompt: false);
+
+    internal async Task CleanupMissingSubscriptionProfileAsync()
+        => await DeleteSelectedProfileAsync(useMissingSubscriptionPrompt: true);
+
+    private async Task DeleteSelectedProfileAsync(bool useMissingSubscriptionPrompt)
     {
-        if (!CanDeleteSelectedProfile())
+        if (useMissingSubscriptionPrompt ? !CanCleanupMissingSubscriptionProfile() : !CanDeleteSelectedProfile())
         {
             return;
         }
@@ -476,7 +506,15 @@ public partial class ProfileViewModel : ObservableObject
         }
 
         var displayName = ResolveProfileName(profile);
-        if (!_confirmDelete($"Delete profile \"{displayName}\"?", "Delete Profile"))
+        var isMissingSubscriptionProfile = !string.IsNullOrWhiteSpace(profile.SubscriptionSourceUrl) &&
+                                           profile.SubscriptionMissingFromSource;
+        var confirmationTitle = useMissingSubscriptionPrompt && isMissingSubscriptionProfile
+            ? "Remove Stale Subscription Profile"
+            : "Delete Profile";
+        var confirmationMessage = useMissingSubscriptionPrompt && isMissingSubscriptionProfile
+            ? $"Profile \"{displayName}\" is no longer present in its source subscription. Remove it locally?"
+            : $"Delete profile \"{displayName}\"?";
+        if (!_confirmDelete(confirmationMessage, confirmationTitle))
         {
             return;
         }
@@ -485,7 +523,9 @@ public partial class ProfileViewModel : ObservableObject
         {
             await _sendCommandAsync("DeleteProfile", new { profileId = profile.Id }, CancellationToken.None);
             RemoveProfile(profile.Id);
-            SaveStatus = "Deleted \u2713";
+            SaveStatus = useMissingSubscriptionPrompt && isMissingSubscriptionProfile
+                ? "Removed stale profile \u2713"
+                : "Deleted \u2713";
         }
         catch (Exception ex)
         {
@@ -664,6 +704,7 @@ public partial class ProfileViewModel : ObservableObject
         _deleteCmd.NotifyCanExecuteChanged();
         _importFromUrlCmd.NotifyCanExecuteChanged();
         _updateSubscriptionCmd.NotifyCanExecuteChanged();
+        _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
     }
 
     private void SetSavedFormState(ProfileFormState savedFormState, bool clearStatus)
@@ -746,6 +787,11 @@ public partial class ProfileViewModel : ObservableObject
         IsServiceConnected &&
         !IsCreatingNewProfile &&
         !string.IsNullOrWhiteSpace(SubscriptionSourceUrl);
+
+    private bool CanCleanupMissingSubscriptionProfile() =>
+        CanDeleteSelectedProfile() &&
+        !string.IsNullOrWhiteSpace(SubscriptionSourceUrl) &&
+        SubscriptionMissingFromSource;
 
     private void RemoveProfile(Guid profileId)
     {
