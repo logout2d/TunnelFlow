@@ -114,6 +114,39 @@
                             BorderBrush="#FDA4AF"
                             Cursor="Hand"/>
                 </StackPanel>
+
+                <Grid Margin="0,8,0,0">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasSubscriptionSource}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{Binding SubscriptionSourceSummary}"
+                               Foreground="#64748B"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,12,0"/>
+
+                    <Button Grid.Column="1"
+                            Content="Update subscription"
+                            Command="{Binding UpdateSubscriptionCommand}"
+                            Padding="11,5"
+                            Background="#E2E8F0"
+                            Foreground="#334155"
+                            BorderBrush="#CBD5E1"
+                            Cursor="Hand"/>
+                </Grid>
             </StackPanel>
 
             <TextBlock Text="{Binding EditHintText}"

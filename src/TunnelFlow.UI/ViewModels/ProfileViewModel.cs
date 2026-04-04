@@ -41,6 +41,8 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private string _saveStatus = "";
     [ObservableProperty] private string _importUrl = "";
     [ObservableProperty] private string _importStatus = "";
+    [ObservableProperty] private string _subscriptionSourceUrl = "";
+    [ObservableProperty] private string _subscriptionProfileKey = "";
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -49,6 +51,7 @@ public partial class ProfileViewModel : ObservableObject
     public IRelayCommand AddNewCommand { get; }
     public IRelayCommand DeleteCommand { get; }
     public IRelayCommand ImportFromUrlCommand { get; }
+    public IRelayCommand UpdateSubscriptionCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled || !IsServiceConnected;
     public string EditHintText => !IsEditingEnabled
         ? "Stop the tunnel to edit profile settings."
@@ -63,6 +66,10 @@ public partial class ProfileViewModel : ObservableObject
     public bool ShowImportStatus => !string.IsNullOrWhiteSpace(ImportStatus);
     public ReadOnlyObservableCollection<ProfileChoiceItem> AvailableProfiles { get; }
     public bool ShowProfileSelector => AvailableProfiles.Count > 0;
+    public bool HasSubscriptionSource => !string.IsNullOrWhiteSpace(SubscriptionSourceUrl);
+    public string SubscriptionSourceSummary => string.IsNullOrWhiteSpace(SubscriptionSourceUrl)
+        ? string.Empty
+        : $"Subscription: {SubscriptionSourceUrl}";
     public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
         ? "None selected"
         : GetActiveProfile()!.Name;
@@ -77,6 +84,7 @@ public partial class ProfileViewModel : ObservableObject
     private readonly RelayCommand _addNewCmd;
     private readonly RelayCommand _deleteCmd;
     private readonly RelayCommand _importFromUrlCmd;
+    private readonly RelayCommand _updateSubscriptionCmd;
 
     public ProfileViewModel(
         ServiceClient client,
@@ -118,6 +126,10 @@ public partial class ProfileViewModel : ObservableObject
             async () => await ImportFromUrlAsync(),
             CanImportFromUrl);
         ImportFromUrlCommand = _importFromUrlCmd;
+        _updateSubscriptionCmd = new RelayCommand(
+            async () => await UpdateSubscriptionAsync(),
+            CanUpdateSubscription);
+        UpdateSubscriptionCommand = _updateSubscriptionCmd;
     }
 
     partial void OnNameChanged(string value) => HandleEditableFieldChanged();
@@ -138,6 +150,12 @@ public partial class ProfileViewModel : ObservableObject
         {
             ImportStatus = string.Empty;
         }
+    }
+    partial void OnSubscriptionSourceUrlChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasSubscriptionSource));
+        OnPropertyChanged(nameof(SubscriptionSourceSummary));
+        _updateSubscriptionCmd.NotifyCanExecuteChanged();
     }
     partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
     partial void OnIsServiceConnectedChanged(bool value)
@@ -163,6 +181,7 @@ public partial class ProfileViewModel : ObservableObject
     {
         _activateCmd.NotifyCanExecuteChanged();
         _deleteCmd.NotifyCanExecuteChanged();
+        _updateSubscriptionCmd.NotifyCanExecuteChanged();
 
         if (_suppressSelectionChange || value is null)
         {
@@ -219,6 +238,8 @@ public partial class ProfileViewModel : ObservableObject
         RealityShortId = string.Empty;
         IsActive = false;
         SaveStatus = string.Empty;
+        SubscriptionSourceUrl = string.Empty;
+        SubscriptionProfileKey = string.Empty;
         _activeProfileId = null;
         _availableProfiles.Clear();
         _suppressSelectionChange = true;
@@ -290,6 +311,91 @@ public partial class ProfileViewModel : ObservableObject
         catch (Exception)
         {
             ImportStatus = "Import failed. Check the URL and try again.";
+        }
+    }
+
+    internal async Task UpdateSubscriptionAsync()
+    {
+        if (!CanUpdateSubscription())
+        {
+            return;
+        }
+
+        var sourceUrl = SubscriptionSourceUrl;
+        if (string.IsNullOrWhiteSpace(sourceUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var importResult = await _profileImportService.ImportProfilesAsync(sourceUrl, CancellationToken.None);
+            var existingProfilesFromSource = _profiles
+                .Where(profile => string.Equals(profile.SubscriptionSourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(GetSubscriptionProfileKey, profile => profile, StringComparer.Ordinal);
+            var selectedProfileIdBeforeUpdate = SelectedProfile?.Id;
+            Guid? selectedProfileIdAfterUpdate = null;
+            var updatedCount = 0;
+            var addedCount = 0;
+
+            foreach (var importedProfile in importResult.Profiles)
+            {
+                var normalizedImportedProfile = EnsureSubscriptionMetadata(importedProfile, sourceUrl);
+                var importedKey = GetSubscriptionProfileKey(normalizedImportedProfile);
+
+                if (existingProfilesFromSource.TryGetValue(importedKey, out var existingProfile))
+                {
+                    var updatedProfile = normalizedImportedProfile with
+                    {
+                        Id = existingProfile.Id,
+                        IsActive = existingProfile.Id == _activeProfileId
+                    };
+                    await _sendCommandAsync("UpsertProfile", updatedProfile, CancellationToken.None);
+                    UpsertProfile(updatedProfile);
+                    updatedCount++;
+
+                    if (selectedProfileIdBeforeUpdate == existingProfile.Id)
+                    {
+                        selectedProfileIdAfterUpdate = existingProfile.Id;
+                    }
+
+                    continue;
+                }
+
+                await _sendCommandAsync("UpsertProfile", normalizedImportedProfile, CancellationToken.None);
+                UpsertProfile(normalizedImportedProfile);
+                addedCount++;
+
+                selectedProfileIdAfterUpdate ??= normalizedImportedProfile.Id;
+            }
+
+            var nextSelectedProfileId = selectedProfileIdAfterUpdate
+                                        ?? selectedProfileIdBeforeUpdate
+                                        ?? importResult.Profiles.FirstOrDefault()?.Id;
+            RefreshProfileChoices(nextSelectedProfileId);
+
+            var selectedProfile = _profiles.FirstOrDefault(profile => profile.Id == nextSelectedProfileId)
+                                  ?? _profiles.FirstOrDefault(profile => string.Equals(profile.SubscriptionSourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase));
+            if (selectedProfile is not null)
+            {
+                IsCreatingNewProfile = false;
+                ApplyProfile(selectedProfile);
+                SetSavedFormState(CaptureFormState(), clearStatus: true);
+            }
+
+            ImportStatus = BuildSubscriptionUpdateStatus(updatedCount, addedCount, importResult.SkippedProfileCount);
+        }
+        catch (ArgumentException ex)
+        {
+            ImportStatus = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ImportStatus = ex.Message;
+        }
+        catch (Exception)
+        {
+            ImportStatus = "Subscription update failed. Check the URL and try again.";
         }
     }
 
@@ -367,6 +473,8 @@ public partial class ProfileViewModel : ObservableObject
             Flow = flowTrim,
             Network = Network,
             Security = Security,
+            SubscriptionSourceUrl = string.IsNullOrWhiteSpace(SubscriptionSourceUrl) ? null : SubscriptionSourceUrl,
+            SubscriptionProfileKey = string.IsNullOrWhiteSpace(SubscriptionProfileKey) ? null : SubscriptionProfileKey,
             IsActive = IsActive,
             Tls = string.Equals(Security, "none", StringComparison.OrdinalIgnoreCase)
                 ? null
@@ -407,6 +515,8 @@ public partial class ProfileViewModel : ObservableObject
         Fingerprint = profile.Tls?.Fingerprint ?? "chrome";
         RealityPublicKey = profile.Tls?.RealityPublicKey ?? "";
         RealityShortId = profile.Tls?.RealityShortId ?? "";
+        SubscriptionSourceUrl = profile.SubscriptionSourceUrl ?? string.Empty;
+        SubscriptionProfileKey = profile.SubscriptionProfileKey ?? string.Empty;
         IsActive = profile.Id == _activeProfileId;
         _suppressFormStateTracking = false;
         SetSavedFormState(CaptureFormState(), clearStatus: true);
@@ -431,6 +541,8 @@ public partial class ProfileViewModel : ObservableObject
         Fingerprint = "chrome";
         RealityPublicKey = string.Empty;
         RealityShortId = string.Empty;
+        SubscriptionSourceUrl = string.Empty;
+        SubscriptionProfileKey = string.Empty;
         IsActive = false;
         IsCreatingNewProfile = true;
         _suppressFormStateTracking = false;
@@ -511,6 +623,7 @@ public partial class ProfileViewModel : ObservableObject
         _addNewCmd.NotifyCanExecuteChanged();
         _deleteCmd.NotifyCanExecuteChanged();
         _importFromUrlCmd.NotifyCanExecuteChanged();
+        _updateSubscriptionCmd.NotifyCanExecuteChanged();
     }
 
     private void SetSavedFormState(ProfileFormState savedFormState, bool clearStatus)
@@ -588,6 +701,12 @@ public partial class ProfileViewModel : ObservableObject
         IsServiceConnected &&
         !string.IsNullOrWhiteSpace(ImportUrl);
 
+    private bool CanUpdateSubscription() =>
+        IsEditingEnabled &&
+        IsServiceConnected &&
+        !IsCreatingNewProfile &&
+        !string.IsNullOrWhiteSpace(SubscriptionSourceUrl);
+
     private void RemoveProfile(Guid profileId)
     {
         _profiles.RemoveAll(profile => profile.Id == profileId);
@@ -609,6 +728,46 @@ public partial class ProfileViewModel : ObservableObject
         RefreshProfileChoices(nextProfile.Id);
         IsCreatingNewProfile = false;
         ApplyProfile(nextProfile);
+    }
+
+    private static string GetSubscriptionProfileKey(VlessProfile profile) =>
+        string.IsNullOrWhiteSpace(profile.SubscriptionProfileKey)
+            ? DirectUrlProfileImportService.BuildSubscriptionProfileKey(profile)
+            : profile.SubscriptionProfileKey!;
+
+    private static VlessProfile EnsureSubscriptionMetadata(VlessProfile profile, string subscriptionSourceUrl) =>
+        profile with
+        {
+            SubscriptionSourceUrl = subscriptionSourceUrl,
+            SubscriptionProfileKey = string.IsNullOrWhiteSpace(profile.SubscriptionProfileKey)
+                ? DirectUrlProfileImportService.BuildSubscriptionProfileKey(profile)
+                : profile.SubscriptionProfileKey
+        };
+
+    private static string BuildSubscriptionUpdateStatus(int updatedCount, int addedCount, int skippedCount)
+    {
+        var parts = new List<string>();
+        if (updatedCount > 0)
+        {
+            parts.Add(updatedCount == 1 ? "Updated 1 profile" : $"Updated {updatedCount} profiles");
+        }
+
+        if (addedCount > 0)
+        {
+            parts.Add(addedCount == 1 ? "added 1 new profile" : $"added {addedCount} new profiles");
+        }
+
+        if (skippedCount > 0)
+        {
+            parts.Add(skippedCount == 1 ? "skipped 1 unsupported entry" : $"skipped {skippedCount} unsupported entries");
+        }
+
+        if (parts.Count == 0)
+        {
+            return "Subscription already up to date.";
+        }
+
+        return string.Join("; ", parts) + ".";
     }
 }
 

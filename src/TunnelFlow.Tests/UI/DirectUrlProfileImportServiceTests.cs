@@ -98,6 +98,8 @@ public class DirectUrlProfileImportServiceTests
         Assert.Equal("alpha.example.com", result.Profiles[0].ServerAddress);
         Assert.Equal("tcp", result.Profiles[0].Network);
         Assert.Equal("tls", result.Profiles[0].Security);
+        Assert.Equal("https://example.com/subscription.txt", result.Profiles[0].SubscriptionSourceUrl);
+        Assert.False(string.IsNullOrWhiteSpace(result.Profiles[0].SubscriptionProfileKey));
 
         Assert.Equal("Beta", result.Profiles[1].Name);
         Assert.Equal("beta.example.com", result.Profiles[1].ServerAddress);
@@ -105,6 +107,8 @@ public class DirectUrlProfileImportServiceTests
         Assert.Equal("reality", result.Profiles[1].Security);
         Assert.Equal("beta-key", result.Profiles[1].Tls!.RealityPublicKey);
         Assert.Equal("beta-short", result.Profiles[1].Tls!.RealityShortId);
+        Assert.Equal("https://example.com/subscription.txt", result.Profiles[1].SubscriptionSourceUrl);
+        Assert.False(string.IsNullOrWhiteSpace(result.Profiles[1].SubscriptionProfileKey));
     }
 
     [Fact]

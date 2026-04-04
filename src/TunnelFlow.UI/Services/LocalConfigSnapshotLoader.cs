@@ -69,6 +69,8 @@ public sealed class LocalConfigSnapshotLoader
         Network = profile.Network,
         Security = profile.Security,
         Tls = profile.Tls,
+        SubscriptionSourceUrl = profile.SubscriptionSourceUrl,
+        SubscriptionProfileKey = profile.SubscriptionProfileKey,
         IsActive = profile.IsActive
     };
 
@@ -125,6 +127,12 @@ public sealed class LocalConfigSnapshotLoader
 
         [JsonPropertyName("tls")]
         public TlsOptions? Tls { get; set; }
+
+        [JsonPropertyName("subscriptionSourceUrl")]
+        public string? SubscriptionSourceUrl { get; set; }
+
+        [JsonPropertyName("subscriptionProfileKey")]
+        public string? SubscriptionProfileKey { get; set; }
 
         [JsonPropertyName("isActive")]
         public bool IsActive { get; set; }

@@ -21,5 +21,9 @@ public record VlessProfile
 
     public TlsOptions? Tls { get; init; }
 
+    public string? SubscriptionSourceUrl { get; init; }
+
+    public string? SubscriptionProfileKey { get; init; }
+
     public bool IsActive { get; init; }
 }

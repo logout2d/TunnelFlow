@@ -26,7 +26,7 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
         }
 
         var content = await FetchContentAsync(requestUri, cancellationToken);
-        return ParseProfileBatch(content);
+        return ParseProfileBatch(content, requestUri.ToString());
     }
 
     public async Task<VlessProfile> ImportFromUrlAsync(string url, CancellationToken cancellationToken)
@@ -122,7 +122,7 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
         };
     }
 
-    internal static ProfileImportResult ParseProfileBatch(string content)
+    internal static ProfileImportResult ParseProfileBatch(string content, string? subscriptionSourceUrl = null)
     {
         var normalizedContent = NormalizeFetchedContent(content);
         var importedProfiles = new List<VlessProfile>();
@@ -147,7 +147,7 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
 
             try
             {
-                importedProfiles.Add(ParseSingleProfile(line));
+                importedProfiles.Add(ApplySubscriptionMetadata(ParseSingleProfile(line), subscriptionSourceUrl));
             }
             catch (InvalidOperationException)
             {
@@ -301,5 +301,27 @@ public sealed class DirectUrlProfileImportService : IProfileImportService
         }
 
         return result;
+    }
+
+    internal static string BuildSubscriptionProfileKey(VlessProfile profile) =>
+        string.Join(
+            "|",
+            profile.UserId.Trim(),
+            profile.ServerAddress.Trim().ToLowerInvariant(),
+            profile.ServerPort.ToString(),
+            profile.Network.Trim().ToLowerInvariant());
+
+    private static VlessProfile ApplySubscriptionMetadata(VlessProfile profile, string? subscriptionSourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(subscriptionSourceUrl))
+        {
+            return profile;
+        }
+
+        return profile with
+        {
+            SubscriptionSourceUrl = subscriptionSourceUrl,
+            SubscriptionProfileKey = BuildSubscriptionProfileKey(profile)
+        };
     }
 }

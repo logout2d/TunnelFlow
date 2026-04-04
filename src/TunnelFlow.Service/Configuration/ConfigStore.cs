@@ -100,6 +100,8 @@ public class ConfigStore
         Security = p.Security,
         Flow = p.Flow,
         Tls = p.Tls,
+        SubscriptionSourceUrl = p.SubscriptionSourceUrl,
+        SubscriptionProfileKey = p.SubscriptionProfileKey,
         IsActive = p.IsActive
     };
 
@@ -114,6 +116,8 @@ public class ConfigStore
         Security = p.Security,
         Flow = p.Flow,
         Tls = p.Tls,
+        SubscriptionSourceUrl = p.SubscriptionSourceUrl,
+        SubscriptionProfileKey = p.SubscriptionProfileKey,
         IsActive = p.IsActive
     };
 
@@ -171,6 +175,12 @@ public class ConfigStore
 
         [JsonPropertyName("tls")]
         public TlsOptions? Tls { get; set; }
+
+        [JsonPropertyName("subscriptionSourceUrl")]
+        public string? SubscriptionSourceUrl { get; set; }
+
+        [JsonPropertyName("subscriptionProfileKey")]
+        public string? SubscriptionProfileKey { get; set; }
 
         [JsonPropertyName("isActive")]
         public bool IsActive { get; set; }

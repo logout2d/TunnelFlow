@@ -580,7 +580,9 @@ public class ProfileViewModelTests
                     Sni = "alpha.example.com",
                     AllowInsecure = false,
                     Fingerprint = "chrome"
-                }
+                },
+                SubscriptionSourceUrl = "https://example.com/subscription.txt",
+                SubscriptionProfileKey = "11111111-1111-1111-1111-111111111111|alpha.example.com|443|tcp"
             },
             new VlessProfile
             {
@@ -598,7 +600,9 @@ public class ProfileViewModelTests
                     Fingerprint = "chrome",
                     RealityPublicKey = "public-key",
                     RealityShortId = "short-id"
-                }
+                },
+                SubscriptionSourceUrl = "https://example.com/subscription.txt",
+                SubscriptionProfileKey = "22222222-2222-2222-2222-222222222222|beta.example.com|8443|grpc"
             }
         };
         var viewModel = new ProfileViewModel(
@@ -629,7 +633,137 @@ public class ProfileViewModelTests
         Assert.Contains(viewModel.AvailableProfiles, option => option.Id == importedProfiles[0].Id);
         Assert.Contains(viewModel.AvailableProfiles, option => option.Id == importedProfiles[1].Id);
         Assert.Equal(string.Empty, viewModel.ImportUrl);
+        Assert.True(viewModel.HasSubscriptionSource);
+        Assert.Equal("https://example.com/subscription.txt", viewModel.SubscriptionSourceUrl);
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.False(viewModel.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task UpdateSubscriptionAsync_UpdatesMatchingProfiles_AndAddsNewProfiles()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var sourceUrl = "https://example.com/subscription.txt";
+        var alphaId = Guid.NewGuid();
+        var alphaKey = "11111111-1111-1111-1111-111111111111|alpha.example.com|443|tcp";
+
+        var viewModel = new ProfileViewModel(
+            client,
+            profileImportService: new ProfileImportTestService((url, cancellationToken) =>
+            {
+                Assert.Equal(sourceUrl, url);
+                return Task.FromResult(new ProfileImportResult(
+                [
+                    new VlessProfile
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Alpha Updated",
+                        ServerAddress = "alpha.example.com",
+                        ServerPort = 443,
+                        UserId = "11111111-1111-1111-1111-111111111111",
+                        Network = "tcp",
+                        Security = "tls",
+                        Tls = new TlsOptions
+                        {
+                            Sni = "alpha-new.example.com",
+                            AllowInsecure = false,
+                            Fingerprint = "firefox"
+                        },
+                        SubscriptionSourceUrl = sourceUrl,
+                        SubscriptionProfileKey = alphaKey
+                    },
+                    new VlessProfile
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Beta",
+                        ServerAddress = "beta.example.com",
+                        ServerPort = 8443,
+                        UserId = "22222222-2222-2222-2222-222222222222",
+                        Network = "grpc",
+                        Security = "reality",
+                        Tls = new TlsOptions
+                        {
+                            Sni = "beta.example.com",
+                            AllowInsecure = false,
+                            Fingerprint = "chrome",
+                            RealityPublicKey = "public-key",
+                            RealityShortId = "short-id"
+                        },
+                        SubscriptionSourceUrl = sourceUrl,
+                        SubscriptionProfileKey = "22222222-2222-2222-2222-222222222222|beta.example.com|8443|grpc"
+                    }
+                ], 1));
+            }),
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true
+        };
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = alphaId,
+                Name = "Alpha",
+                ServerAddress = "alpha.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                Tls = new TlsOptions
+                {
+                    Sni = "alpha.example.com",
+                    AllowInsecure = false,
+                    Fingerprint = "chrome"
+                },
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = alphaKey,
+                IsActive = true
+            }
+        ], alphaId);
+
+        await viewModel.UpdateSubscriptionAsync();
+
+        Assert.Equal(2, commands.Count(command => command == "UpsertProfile"));
+        Assert.Equal(alphaId, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Alpha Updated", viewModel.Name);
+        Assert.Equal("alpha-new.example.com", viewModel.Sni);
+        Assert.Equal("Updated 1 profile; added 1 new profile; skipped 1 unsupported entry.", viewModel.ImportStatus);
+        Assert.Contains(viewModel.AvailableProfiles, option => option.Id == alphaId);
+        Assert.Equal(2, viewModel.AvailableProfiles.Count);
+    }
+
+    [Fact]
+    public void UpdateSubscriptionAsync_IsUnavailableWithoutSavedSubscriptionSource()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new ProfileViewModel(client)
+        {
+            IsServiceConnected = true
+        };
+        var primaryId = Guid.NewGuid();
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = primaryId,
+                Name = "Primary",
+                ServerAddress = "primary.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                IsActive = true
+            }
+        ], primaryId);
+
+        Assert.False(viewModel.HasSubscriptionSource);
+        Assert.False(viewModel.UpdateSubscriptionCommand.CanExecute(null));
     }
 }

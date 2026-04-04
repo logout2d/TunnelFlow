@@ -115,6 +115,40 @@
 - Validation:
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 
+## Subscription import Phase 2: saved source metadata and manual update
+- Scope:
+  - narrow extension of the existing profile import flow
+  - no background refresh or scheduler
+  - no runtime/service/TUN behavior changes
+- Changes made:
+  - added minimal subscription metadata to `VlessProfile`:
+    - `SubscriptionSourceUrl`
+    - `SubscriptionProfileKey`
+  - persisted that metadata through:
+    - service config save/load
+    - UI offline config snapshot loading
+  - extended `DirectUrlProfileImportService` so fetched multi-profile imports retain source metadata on each imported profile
+  - added a manual `Update subscription` path in `ProfileViewModel`/`ProfileView` for selected profiles that have a saved subscription source
+- Manual update behavior:
+  - fetches the same saved subscription URL again via the existing batch importer
+  - matches previously imported profiles from that source by `SubscriptionProfileKey`
+  - updates matching profiles in place while preserving their existing `Id`
+  - adds new profiles from the subscription when no existing match is found
+  - does not add background sync or scheduled refresh
+  - current narrow behavior does not remove profiles that disappeared from the remote subscription
+- User-facing result summaries:
+  - examples:
+    - `Updated 1 profile.`
+    - `Updated 1 profile; added 1 new profile.`
+    - `Updated 1 profile; added 1 new profile; skipped 1 unsupported entry.`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 22
+    - failed: 0
+    - skipped: 0
+
 ## Final UI correction pass: window default size, App Rules mode width, and Profile import alignment
 - Scope:
   - very small XAML-only correction

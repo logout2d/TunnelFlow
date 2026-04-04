@@ -763,3 +763,30 @@ Outcome:
 - Profile import URL text box width changed from `388` to `360` to bring the `Import URL` button into clean right-edge alignment with the `Delete` button below
 Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Step 46
+Subscription import Phase 2: retain saved subscription source and add manual update.
+Status: completed
+Scope:
+- narrow extension of the existing direct/subscription import flow
+- manual update only
+- no background refresh or scheduler
+- no runtime/TUN changes
+Outcome:
+- added saved subscription metadata on imported profiles:
+  - `SubscriptionSourceUrl`
+  - `SubscriptionProfileKey`
+- preserved that metadata through service config persistence and offline UI config loading
+- added a small `Update subscription` UI path for selected imported subscription profiles
+- update behavior now:
+  - fetches the same source URL again
+  - updates matching imported profiles in place
+  - adds new profiles from the source
+  - reports concise mixed-result summaries
+- intentionally not implemented in this phase:
+  - automatic refresh
+  - scheduled sync
+  - removal of profiles that disappeared from the remote subscription
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
