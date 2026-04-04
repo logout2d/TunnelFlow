@@ -102,6 +102,7 @@ public class ConfigStore
         Tls = p.Tls,
         SubscriptionSourceUrl = p.SubscriptionSourceUrl,
         SubscriptionProfileKey = p.SubscriptionProfileKey,
+        SubscriptionMissingFromSource = p.SubscriptionMissingFromSource,
         IsActive = p.IsActive
     };
 
@@ -118,6 +119,7 @@ public class ConfigStore
         Tls = p.Tls,
         SubscriptionSourceUrl = p.SubscriptionSourceUrl,
         SubscriptionProfileKey = p.SubscriptionProfileKey,
+        SubscriptionMissingFromSource = p.SubscriptionMissingFromSource,
         IsActive = p.IsActive
     };
 
@@ -181,6 +183,9 @@ public class ConfigStore
 
         [JsonPropertyName("subscriptionProfileKey")]
         public string? SubscriptionProfileKey { get; set; }
+
+        [JsonPropertyName("subscriptionMissingFromSource")]
+        public bool SubscriptionMissingFromSource { get; set; }
 
         [JsonPropertyName("isActive")]
         public bool IsActive { get; set; }

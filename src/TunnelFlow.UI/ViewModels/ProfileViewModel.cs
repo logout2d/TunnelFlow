@@ -43,6 +43,7 @@ public partial class ProfileViewModel : ObservableObject
     [ObservableProperty] private string _importStatus = "";
     [ObservableProperty] private string _subscriptionSourceUrl = "";
     [ObservableProperty] private string _subscriptionProfileKey = "";
+    [ObservableProperty] private bool _subscriptionMissingFromSource;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -71,9 +72,11 @@ public partial class ProfileViewModel : ObservableObject
         ? string.Empty
         : "Imported from subscription URL";
     public string SubscriptionSourceUrlDisplay => SubscriptionSourceUrl;
-    public string SubscriptionUpdateSummary => HasSubscriptionSource
-        ? "Use Update subscription to refresh profiles from this saved source."
-        : string.Empty;
+    public string SubscriptionUpdateSummary => !HasSubscriptionSource
+        ? string.Empty
+        : SubscriptionMissingFromSource
+            ? "No longer present in the latest subscription update. Kept locally until you remove it."
+            : "Use Update subscription to refresh profiles from this saved source.";
     public string UpdateSubscriptionButtonText => "Update subscription";
     public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
         ? "None selected"
@@ -164,6 +167,10 @@ public partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
         _updateSubscriptionCmd.NotifyCanExecuteChanged();
     }
+    partial void OnSubscriptionMissingFromSourceChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SubscriptionUpdateSummary));
+    }
     partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
     partial void OnIsServiceConnectedChanged(bool value)
     {
@@ -247,6 +254,7 @@ public partial class ProfileViewModel : ObservableObject
         SaveStatus = string.Empty;
         SubscriptionSourceUrl = string.Empty;
         SubscriptionProfileKey = string.Empty;
+        SubscriptionMissingFromSource = false;
         _activeProfileId = null;
         _availableProfiles.Clear();
         _suppressSelectionChange = true;
@@ -344,17 +352,21 @@ public partial class ProfileViewModel : ObservableObject
             Guid? selectedProfileIdAfterUpdate = null;
             var updatedCount = 0;
             var addedCount = 0;
+            var missingCount = 0;
+            var seenKeys = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var importedProfile in importResult.Profiles)
             {
                 var normalizedImportedProfile = EnsureSubscriptionMetadata(importedProfile, sourceUrl);
                 var importedKey = GetSubscriptionProfileKey(normalizedImportedProfile);
+                seenKeys.Add(importedKey);
 
                 if (existingProfilesFromSource.TryGetValue(importedKey, out var existingProfile))
                 {
                     var updatedProfile = normalizedImportedProfile with
                     {
                         Id = existingProfile.Id,
+                        SubscriptionMissingFromSource = false,
                         IsActive = existingProfile.Id == _activeProfileId
                     };
                     await _sendCommandAsync("UpsertProfile", updatedProfile, CancellationToken.None);
@@ -376,6 +388,20 @@ public partial class ProfileViewModel : ObservableObject
                 selectedProfileIdAfterUpdate ??= normalizedImportedProfile.Id;
             }
 
+            foreach (var existingProfile in existingProfilesFromSource.Values)
+            {
+                var existingKey = GetSubscriptionProfileKey(existingProfile);
+                if (seenKeys.Contains(existingKey))
+                {
+                    continue;
+                }
+
+                var staleProfile = existingProfile with { SubscriptionMissingFromSource = true };
+                await _sendCommandAsync("UpsertProfile", staleProfile, CancellationToken.None);
+                UpsertProfile(staleProfile);
+                missingCount++;
+            }
+
             var nextSelectedProfileId = selectedProfileIdAfterUpdate
                                         ?? selectedProfileIdBeforeUpdate
                                         ?? importResult.Profiles.FirstOrDefault()?.Id;
@@ -390,7 +416,7 @@ public partial class ProfileViewModel : ObservableObject
                 SetSavedFormState(CaptureFormState(), clearStatus: true);
             }
 
-            ImportStatus = BuildSubscriptionUpdateStatus(updatedCount, addedCount, importResult.SkippedProfileCount);
+            ImportStatus = BuildSubscriptionUpdateStatus(updatedCount, addedCount, importResult.SkippedProfileCount, missingCount);
         }
         catch (ArgumentException ex)
         {
@@ -482,6 +508,7 @@ public partial class ProfileViewModel : ObservableObject
             Security = Security,
             SubscriptionSourceUrl = string.IsNullOrWhiteSpace(SubscriptionSourceUrl) ? null : SubscriptionSourceUrl,
             SubscriptionProfileKey = string.IsNullOrWhiteSpace(SubscriptionProfileKey) ? null : SubscriptionProfileKey,
+            SubscriptionMissingFromSource = SubscriptionMissingFromSource,
             IsActive = IsActive,
             Tls = string.Equals(Security, "none", StringComparison.OrdinalIgnoreCase)
                 ? null
@@ -524,6 +551,7 @@ public partial class ProfileViewModel : ObservableObject
         RealityShortId = profile.Tls?.RealityShortId ?? "";
         SubscriptionSourceUrl = profile.SubscriptionSourceUrl ?? string.Empty;
         SubscriptionProfileKey = profile.SubscriptionProfileKey ?? string.Empty;
+        SubscriptionMissingFromSource = profile.SubscriptionMissingFromSource;
         IsActive = profile.Id == _activeProfileId;
         _suppressFormStateTracking = false;
         SetSavedFormState(CaptureFormState(), clearStatus: true);
@@ -550,6 +578,7 @@ public partial class ProfileViewModel : ObservableObject
         RealityShortId = string.Empty;
         SubscriptionSourceUrl = string.Empty;
         SubscriptionProfileKey = string.Empty;
+        SubscriptionMissingFromSource = false;
         IsActive = false;
         IsCreatingNewProfile = true;
         _suppressFormStateTracking = false;
@@ -752,10 +781,11 @@ public partial class ProfileViewModel : ObservableObject
             SubscriptionSourceUrl = subscriptionSourceUrl,
             SubscriptionProfileKey = string.IsNullOrWhiteSpace(profile.SubscriptionProfileKey)
                 ? DirectUrlProfileImportService.BuildSubscriptionProfileKey(profile)
-                : profile.SubscriptionProfileKey
+                : profile.SubscriptionProfileKey,
+            SubscriptionMissingFromSource = false
         };
 
-    private static string BuildSubscriptionUpdateStatus(int updatedCount, int addedCount, int skippedCount)
+    private static string BuildSubscriptionUpdateStatus(int updatedCount, int addedCount, int skippedCount, int missingCount)
     {
         var parts = new List<string>();
         if (updatedCount > 0)
@@ -771,6 +801,11 @@ public partial class ProfileViewModel : ObservableObject
         if (skippedCount > 0)
         {
             parts.Add(skippedCount == 1 ? "1 skipped" : $"{skippedCount} skipped");
+        }
+
+        if (missingCount > 0)
+        {
+            parts.Add(missingCount == 1 ? "1 missing from source" : $"{missingCount} missing from source");
         }
 
         if (parts.Count == 0)
@@ -792,6 +827,11 @@ public partial class ProfileViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(profile.SubscriptionSourceUrl))
         {
             suffixes.Add("Subscription");
+        }
+
+        if (profile.SubscriptionMissingFromSource)
+        {
+            suffixes.Add("Missing from source");
         }
 
         var baseName = ResolveProfileName(profile);

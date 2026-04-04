@@ -810,3 +810,22 @@ Outcome:
 Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 48
+Subscription import Phase 3: safely retain profiles that disappear from the remote source.
+Status: completed
+Scope:
+- manual update safety only
+- no silent deletion
+- no background sync or scheduler
+- no runtime/TUN changes
+Outcome:
+- added `SubscriptionMissingFromSource` metadata on subscription-backed profiles
+- preserved that metadata through config persistence and offline UI loading
+- manual update now detects profiles from the same source that no longer appear remotely
+- those profiles are kept locally and marked instead of being deleted
+- selector/UI wording now makes the missing-from-source state explicit
+- update summaries now include missing-from-source counts
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`

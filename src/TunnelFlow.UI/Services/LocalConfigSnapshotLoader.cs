@@ -71,6 +71,7 @@ public sealed class LocalConfigSnapshotLoader
         Tls = profile.Tls,
         SubscriptionSourceUrl = profile.SubscriptionSourceUrl,
         SubscriptionProfileKey = profile.SubscriptionProfileKey,
+        SubscriptionMissingFromSource = profile.SubscriptionMissingFromSource,
         IsActive = profile.IsActive
     };
 
@@ -133,6 +134,9 @@ public sealed class LocalConfigSnapshotLoader
 
         [JsonPropertyName("subscriptionProfileKey")]
         public string? SubscriptionProfileKey { get; set; }
+
+        [JsonPropertyName("subscriptionMissingFromSource")]
+        public bool SubscriptionMissingFromSource { get; set; }
 
         [JsonPropertyName("isActive")]
         public bool IsActive { get; set; }

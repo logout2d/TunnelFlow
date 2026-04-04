@@ -738,6 +738,109 @@ public class ProfileViewModelTests
         Assert.Equal("Subscription updated: 1 updated, 1 added, 1 skipped.", viewModel.ImportStatus);
         Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Alpha Updated (Active, Subscription)");
         Assert.Equal(2, viewModel.AvailableProfiles.Count);
+        Assert.False(viewModel.SubscriptionMissingFromSource);
+    }
+
+    [Fact]
+    public async Task UpdateSubscriptionAsync_MarksMissingProfilesAsMissingFromSource_AndKeepsThem()
+    {
+        using var client = new ServiceClient();
+        var commands = new List<string>();
+        var sourceUrl = "https://example.com/subscription.txt";
+        var alphaId = Guid.NewGuid();
+        var betaId = Guid.NewGuid();
+        var alphaKey = "11111111-1111-1111-1111-111111111111|alpha.example.com|443|tcp";
+        var betaKey = "22222222-2222-2222-2222-222222222222|beta.example.com|8443|grpc";
+
+        var viewModel = new ProfileViewModel(
+            client,
+            profileImportService: new ProfileImportTestService((url, cancellationToken) =>
+            {
+                Assert.Equal(sourceUrl, url);
+                return Task.FromResult(new ProfileImportResult(
+                [
+                    new VlessProfile
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Alpha Updated",
+                        ServerAddress = "alpha.example.com",
+                        ServerPort = 443,
+                        UserId = "11111111-1111-1111-1111-111111111111",
+                        Network = "tcp",
+                        Security = "tls",
+                        Tls = new TlsOptions
+                        {
+                            Sni = "alpha-updated.example.com",
+                            AllowInsecure = false,
+                            Fingerprint = "firefox"
+                        },
+                        SubscriptionSourceUrl = sourceUrl,
+                        SubscriptionProfileKey = alphaKey
+                    }
+                ], 0));
+            }),
+            sendCommandAsync: (type, payload, cancellationToken) =>
+            {
+                commands.Add(type);
+                return SuccessfulCommandAsync(type, payload, cancellationToken);
+            })
+        {
+            IsServiceConnected = true
+        };
+
+        viewModel.LoadProfile(
+        [
+            new VlessProfile
+            {
+                Id = alphaId,
+                Name = "Alpha",
+                ServerAddress = "alpha.example.com",
+                ServerPort = 443,
+                UserId = "11111111-1111-1111-1111-111111111111",
+                Network = "tcp",
+                Security = "tls",
+                Tls = new TlsOptions
+                {
+                    Sni = "alpha.example.com",
+                    AllowInsecure = false,
+                    Fingerprint = "chrome"
+                },
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = alphaKey,
+                IsActive = true
+            },
+            new VlessProfile
+            {
+                Id = betaId,
+                Name = "Beta",
+                ServerAddress = "beta.example.com",
+                ServerPort = 8443,
+                UserId = "22222222-2222-2222-2222-222222222222",
+                Network = "grpc",
+                Security = "reality",
+                Tls = new TlsOptions
+                {
+                    Sni = "beta.example.com",
+                    AllowInsecure = false,
+                    Fingerprint = "chrome",
+                    RealityPublicKey = "public-key",
+                    RealityShortId = "short-id"
+                },
+                SubscriptionSourceUrl = sourceUrl,
+                SubscriptionProfileKey = betaKey
+            }
+        ], betaId);
+
+        await viewModel.UpdateSubscriptionAsync();
+
+        Assert.Equal(2, commands.Count(command => command == "UpsertProfile"));
+        Assert.Equal(betaId, viewModel.SelectedProfile?.Id);
+        Assert.Equal("Beta", viewModel.Name);
+        Assert.True(viewModel.SubscriptionMissingFromSource);
+        Assert.Equal("No longer present in the latest subscription update. Kept locally until you remove it.", viewModel.SubscriptionUpdateSummary);
+        Assert.Equal("Subscription updated: 1 updated, 1 missing from source.", viewModel.ImportStatus);
+        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Subscription, Missing from source)");
+        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Alpha Updated (Subscription)");
     }
 
     [Fact]

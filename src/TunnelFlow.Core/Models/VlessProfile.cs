@@ -25,5 +25,7 @@ public record VlessProfile
 
     public string? SubscriptionProfileKey { get; init; }
 
+    public bool SubscriptionMissingFromSource { get; init; }
+
     public bool IsActive { get; init; }
 }

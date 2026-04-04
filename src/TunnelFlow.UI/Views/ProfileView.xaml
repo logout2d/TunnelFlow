@@ -145,7 +145,19 @@
                                    Margin="0,2,0,0"
                                    Foreground="#94A3B8"
                                    FontSize="10"
-                                   TextWrapping="Wrap"/>
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#94A3B8"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SubscriptionMissingFromSource}" Value="True">
+                                            <Setter Property="Foreground" Value="#B45309"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
 
                     <Button Grid.Column="1"

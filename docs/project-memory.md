@@ -173,6 +173,39 @@
     - failed: 0
     - skipped: 0
 
+## Subscription import Phase 3: safe handling for profiles missing from updated source
+- Scope:
+  - narrow extension of the existing manual subscription update flow
+  - safety first: no silent deletion
+  - no background sync or scheduler
+  - no runtime/TUN behavior changes
+- Changes made:
+  - added minimal profile metadata:
+    - `SubscriptionMissingFromSource`
+  - persisted that metadata through:
+    - service config save/load
+    - offline UI config snapshot loading
+  - manual subscription update now detects saved profiles from the same `SubscriptionSourceUrl` whose `SubscriptionProfileKey` no longer appears in the refreshed remote source
+- Safe handling behavior:
+  - profiles missing from the refreshed source are not deleted
+  - instead they are kept locally and marked with `SubscriptionMissingFromSource=true`
+  - if a previously missing profile reappears in a later update, the missing flag is cleared again
+  - the Profile selector now surfaces this state via:
+    - `(Subscription, Missing from source)`
+  - the subscription info block in Profile now warns:
+    - `No longer present in the latest subscription update. Kept locally until you remove it.`
+- Updated result summary wording:
+  - example:
+    - `Subscription updated: 1 updated, 1 missing from source.`
+  - mixed results continue to include updated / added / skipped / missing from source counts
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 22
+    - failed: 0
+    - skipped: 0
+
 ## Final UI correction pass: window default size, App Rules mode width, and Profile import alignment
 - Scope:
   - very small XAML-only correction
