@@ -370,9 +370,6 @@ public sealed class OrchestratorService : BackgroundService
 
         _pipeServer.StartCaptureHandler = () => StartCaptureAsync();
         _pipeServer.StopCaptureHandler = () => StopCaptureAsync();
-
-        _pipeServer.GetSessionsHandler = () =>
-            Task.FromResult<IReadOnlyList<SessionEntry>>(Array.Empty<SessionEntry>());
     }
 
     private StatePayload BuildStatePayload()

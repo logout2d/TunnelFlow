@@ -6,6 +6,64 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## TUN-only cleanup Phase 5: remove remaining capture / ndisapi build-graph edges
+- Implemented in this step:
+  - removed the remaining active build-graph references that still pulled the legacy capture stack into the solution after the service host cleanup
+  - kept scope narrow:
+    - no TUN behavior changes
+    - no unrelated UI/bootstrapper/profile changes
+    - no risky deletion of generated `bin/obj` folders
+- Exact files changed:
+  - `TunnelFlow.sln`
+  - `src/TunnelFlow.Core/TunnelFlow.Core.csproj`
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/TunnelFlow.Tests.csproj`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact capture / ndisapi dependencies removed from the active build graph:
+  - removed `TunnelFlow.Capture` from `TunnelFlow.sln`
+  - removed `TunnelFlow.Tests -> TunnelFlow.Capture` project reference
+  - removed `src/TunnelFlow.Tests/Capture/**` from test compilation
+  - removed the remaining dead session IPC/service plumbing:
+    - `PipeServer.GetSessionsHandler`
+    - `PipeServer` `GetSessions` dispatch case
+    - `PipeServer.PushSessionCreated(...)`
+    - `PipeServer.PushSessionClosed(...)`
+    - `OrchestratorService` `GetSessionsHandler` assignment
+  - removed the old capture/session contract files from the active `TunnelFlow.Core` compilation set:
+    - `ICaptureEngine.cs`
+    - `IPolicyEngine.cs`
+    - `ISessionRegistry.cs`
+    - `GetSessionsCommand.cs`
+    - `CaptureConfig.cs`
+    - `CaptureError.cs`
+    - `PolicyDecision.cs`
+    - `SessionEntry.cs`
+  - as a result, `third_party/ndisapi.net` is no longer part of the active build graph
+- Runtime/behavior note:
+  - current TUN runtime behavior is unchanged
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj` now restores/builds only:
+    - `TunnelFlow.Core`
+    - `TunnelFlow.Service`
+    - `TunnelFlow.UI`
+    - `TunnelFlow.Tests`
+- Related code intentionally kept for now:
+  - physical source files still present on disk under:
+    - `src/TunnelFlow.Capture/`
+    - `src/TunnelFlow.Tests/Capture/`
+    - `third_party/ndisapi.net/`
+- Reason those pieces were kept:
+  - this step focused on safe removal from the active solution/build graph first
+  - physical deletion can happen in a later repo-pruning pass without affecting runtime behavior or build stability
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 35
+    - failed: 0
+    - skipped: 0
+
 ## TUN-only cleanup Phase 4: remove service-side TunnelFlow.Capture dependency
 - Implemented in this step:
   - removed the remaining direct service/build dependency on `TunnelFlow.Capture` after the TUN-only orchestration cleanup

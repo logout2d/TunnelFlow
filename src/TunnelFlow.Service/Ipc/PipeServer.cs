@@ -52,8 +52,6 @@ public sealed class PipeServer
     public Func<Guid, Task>? DeleteProfileHandler { get; set; }
     public Func<Task>? StartCaptureHandler { get; set; }
     public Func<Task>? StopCaptureHandler { get; set; }
-    public Func<Task<IReadOnlyList<SessionEntry>>>? GetSessionsHandler { get; set; }
-
     public PipeServer(ILogger<PipeServer> logger) => _logger = logger;
 
     public async Task StartAsync(CancellationToken ct)
@@ -121,18 +119,6 @@ public sealed class PipeServer
             ["message"] = message
         };
         BroadcastEvent("LogLine", payload);
-    }
-
-    public void PushSessionCreated(SessionEntry entry)
-    {
-        var payload = JsonSerializer.SerializeToNode(entry, _compactOptions);
-        BroadcastEvent("SessionCreated", payload);
-    }
-
-    public void PushSessionClosed(ulong flowId)
-    {
-        var payload = new JsonObject { ["flowId"] = flowId };
-        BroadcastEvent("SessionClosed", payload);
     }
 
     public void PushSingBoxCrashed(int attempt, int retryingInSeconds)
@@ -332,13 +318,6 @@ public sealed class PipeServer
                 if (StopCaptureHandler is null) return MakeError(cmd.Id, "NOT_READY", "Service not ready");
                 await StopCaptureHandler();
                 return MakeOk(cmd.Id, null);
-            }
-
-            case "GetSessions":
-            {
-                if (GetSessionsHandler is null) return MakeError(cmd.Id, "NOT_READY", "Service not ready");
-                var sessions = await GetSessionsHandler();
-                return MakeOk(cmd.Id, JsonSerializer.SerializeToNode(sessions, _serializerOptions));
             }
 
             default:

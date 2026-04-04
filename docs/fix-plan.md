@@ -268,6 +268,13 @@ Progress:
   - removed `OrchestratorService` dependencies on `ICaptureEngine` and `IPolicyEngine`
   - kept `GetSessions` IPC as an empty compatibility stub for now
   - the remaining capture project, `ndisapi.net`, and capture/session contracts remain intentionally in place for later cleanup phases
+- next TUN-only cleanup Phase 5 step is now completed:
+  - removed `TunnelFlow.Capture` from the active solution/build graph
+  - removed the remaining dead session IPC/service plumbing from the active service path
+  - removed the old capture/session contract files from active `TunnelFlow.Core` compilation
+  - removed the capture test slice from active test compilation
+  - `third_party/ndisapi.net` is no longer part of the active build graph
+  - physical capture/vendor files are still present on disk for a later deletion-only pruning pass
 
 ## Step 20
 Design: elevated helper/bootstrapper component for system lifecycle management.
