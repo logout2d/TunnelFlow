@@ -69,7 +69,12 @@ public partial class ProfileViewModel : ObservableObject
     public bool HasSubscriptionSource => !string.IsNullOrWhiteSpace(SubscriptionSourceUrl);
     public string SubscriptionSourceSummary => string.IsNullOrWhiteSpace(SubscriptionSourceUrl)
         ? string.Empty
-        : $"Subscription: {SubscriptionSourceUrl}";
+        : "Imported from subscription URL";
+    public string SubscriptionSourceUrlDisplay => SubscriptionSourceUrl;
+    public string SubscriptionUpdateSummary => HasSubscriptionSource
+        ? "Use Update subscription to refresh profiles from this saved source."
+        : string.Empty;
+    public string UpdateSubscriptionButtonText => "Update subscription";
     public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
         ? "None selected"
         : GetActiveProfile()!.Name;
@@ -155,6 +160,8 @@ public partial class ProfileViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasSubscriptionSource));
         OnPropertyChanged(nameof(SubscriptionSourceSummary));
+        OnPropertyChanged(nameof(SubscriptionSourceUrlDisplay));
+        OnPropertyChanged(nameof(SubscriptionUpdateSummary));
         _updateSubscriptionCmd.NotifyCanExecuteChanged();
     }
     partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
@@ -554,11 +561,7 @@ public partial class ProfileViewModel : ObservableObject
         _availableProfiles.Clear();
         foreach (var profile in _profiles)
         {
-            _availableProfiles.Add(new ProfileChoiceItem(
-                profile.Id,
-                profile.Id == _activeProfileId
-                    ? $"{ResolveProfileName(profile)} (Active)"
-                    : ResolveProfileName(profile)));
+        _availableProfiles.Add(new ProfileChoiceItem(profile.Id, BuildProfileChoiceDisplayName(profile)));
         }
 
         _suppressSelectionChange = true;
@@ -591,19 +594,27 @@ public partial class ProfileViewModel : ObservableObject
 
     private static string BuildImportStatus(ProfileImportResult result)
     {
+        var isSubscriptionImport = result.Profiles.Any(profile => !string.IsNullOrWhiteSpace(profile.SubscriptionSourceUrl));
+
         if (result.ImportedProfileCount == 1 && result.SkippedProfileCount == 0)
         {
-            return $"Imported \"{ResolveProfileName(result.Profiles[0])}\".";
+            return isSubscriptionImport
+                ? $"Imported 1 profile from subscription."
+                : $"Imported \"{ResolveProfileName(result.Profiles[0])}\".";
         }
 
         var importedLabel = result.ImportedProfileCount == 1 ? "profile" : "profiles";
         if (result.SkippedProfileCount == 0)
         {
-            return $"Imported {result.ImportedProfileCount} {importedLabel}.";
+            return isSubscriptionImport
+                ? $"Imported {result.ImportedProfileCount} {importedLabel} from subscription."
+                : $"Imported {result.ImportedProfileCount} {importedLabel}.";
         }
 
         var skippedLabel = result.SkippedProfileCount == 1 ? "entry" : "entries";
-        return $"Imported {result.ImportedProfileCount} {importedLabel}; skipped {result.SkippedProfileCount} unsupported {skippedLabel}.";
+        return isSubscriptionImport
+            ? $"Imported {result.ImportedProfileCount} {importedLabel} from subscription; skipped {result.SkippedProfileCount} unsupported {skippedLabel}."
+            : $"Imported {result.ImportedProfileCount} {importedLabel}; skipped {result.SkippedProfileCount} unsupported {skippedLabel}.";
     }
 
     private void HandleEditableFieldChanged()
@@ -749,25 +760,44 @@ public partial class ProfileViewModel : ObservableObject
         var parts = new List<string>();
         if (updatedCount > 0)
         {
-            parts.Add(updatedCount == 1 ? "Updated 1 profile" : $"Updated {updatedCount} profiles");
+            parts.Add(updatedCount == 1 ? "1 updated" : $"{updatedCount} updated");
         }
 
         if (addedCount > 0)
         {
-            parts.Add(addedCount == 1 ? "added 1 new profile" : $"added {addedCount} new profiles");
+            parts.Add(addedCount == 1 ? "1 added" : $"{addedCount} added");
         }
 
         if (skippedCount > 0)
         {
-            parts.Add(skippedCount == 1 ? "skipped 1 unsupported entry" : $"skipped {skippedCount} unsupported entries");
+            parts.Add(skippedCount == 1 ? "1 skipped" : $"{skippedCount} skipped");
         }
 
         if (parts.Count == 0)
         {
-            return "Subscription already up to date.";
+            return "Subscription is already up to date.";
         }
 
-        return string.Join("; ", parts) + ".";
+        return $"Subscription updated: {string.Join(", ", parts)}.";
+    }
+
+    private string BuildProfileChoiceDisplayName(VlessProfile profile)
+    {
+        var suffixes = new List<string>();
+        if (profile.Id == _activeProfileId)
+        {
+            suffixes.Add("Active");
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.SubscriptionSourceUrl))
+        {
+            suffixes.Add("Subscription");
+        }
+
+        var baseName = ResolveProfileName(profile);
+        return suffixes.Count == 0
+            ? baseName
+            : $"{baseName} ({string.Join(", ", suffixes)})";
     }
 }
 

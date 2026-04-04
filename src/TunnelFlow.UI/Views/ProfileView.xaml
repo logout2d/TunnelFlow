@@ -131,15 +131,25 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Text="{Binding SubscriptionSourceSummary}"
-                               Foreground="#64748B"
-                               FontSize="11"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"
-                               Margin="0,0,12,0"/>
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="{Binding SubscriptionSourceSummary}"
+                                   Foreground="#475569"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SubscriptionSourceUrlDisplay}"
+                                   Margin="0,2,0,0"
+                                   Foreground="#64748B"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding SubscriptionUpdateSummary}"
+                                   Margin="0,2,0,0"
+                                   Foreground="#94A3B8"
+                                   FontSize="10"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
 
                     <Button Grid.Column="1"
-                            Content="Update subscription"
+                            Content="{Binding UpdateSubscriptionButtonText}"
                             Command="{Binding UpdateSubscriptionCommand}"
                             Padding="11,5"
                             Background="#E2E8F0"

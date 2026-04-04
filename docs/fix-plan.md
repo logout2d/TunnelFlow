@@ -790,3 +790,23 @@ Outcome:
 Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 47
+Subscription UX polish: make subscription-backed profiles and manual update state easier to understand.
+Status: completed
+Scope:
+- small Profile UX polish only
+- no import/update semantic changes
+- no background sync or scheduling
+Outcome:
+- subscription-backed profiles now show a clear selector suffix:
+  - `(Subscription)`
+  - `(Active, Subscription)` when applicable
+- the Profile subscription source area now shows:
+  - explicit source wording
+  - the saved source URL
+  - a short helper line explaining manual update
+- import/update result messages are more explicit about subscription actions
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`

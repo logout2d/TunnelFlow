@@ -149,6 +149,30 @@
     - failed: 0
     - skipped: 0
 
+## Subscription UX polish pass
+- Scope:
+  - UX wording/visibility polish only
+  - no import/update semantic changes
+  - no runtime/TUN changes
+- Changes made:
+  - subscription-backed profiles are now marked in the profile selector display text:
+    - e.g. `Alpha (Subscription)`
+    - active subscription-backed profiles read like `Alpha (Active, Subscription)`
+  - the saved source area in Profile now reads more explicitly:
+    - `Imported from subscription URL`
+    - full saved source URL shown below
+    - helper text clarifies that `Update subscription` refreshes profiles from the saved source
+  - result wording is now clearer about whether the action was an import or an update:
+    - import example: `Imported 2 profiles from subscription; skipped 1 unsupported entry.`
+    - update example: `Subscription updated: 1 updated, 1 added, 1 skipped.`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 16
+    - failed: 0
+    - skipped: 0
+
 ## Final UI correction pass: window default size, App Rules mode width, and Profile import alignment
 - Scope:
   - very small XAML-only correction

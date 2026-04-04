@@ -629,12 +629,14 @@ public class ProfileViewModelTests
         Assert.Equal(importedProfiles[0].Id, viewModel.SelectedProfile?.Id);
         Assert.Equal("Alpha", viewModel.Name);
         Assert.Equal("alpha.example.com", viewModel.ServerAddress);
-        Assert.Equal("Imported 2 profiles; skipped 1 unsupported entry.", viewModel.ImportStatus);
-        Assert.Contains(viewModel.AvailableProfiles, option => option.Id == importedProfiles[0].Id);
-        Assert.Contains(viewModel.AvailableProfiles, option => option.Id == importedProfiles[1].Id);
+        Assert.Equal("Imported 2 profiles from subscription; skipped 1 unsupported entry.", viewModel.ImportStatus);
+        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Alpha (Subscription)");
+        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Subscription)");
         Assert.Equal(string.Empty, viewModel.ImportUrl);
         Assert.True(viewModel.HasSubscriptionSource);
+        Assert.Equal("Imported from subscription URL", viewModel.SubscriptionSourceSummary);
         Assert.Equal("https://example.com/subscription.txt", viewModel.SubscriptionSourceUrl);
+        Assert.Equal("Use Update subscription to refresh profiles from this saved source.", viewModel.SubscriptionUpdateSummary);
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.False(viewModel.SaveCommand.CanExecute(null));
     }
@@ -733,8 +735,8 @@ public class ProfileViewModelTests
         Assert.Equal(alphaId, viewModel.SelectedProfile?.Id);
         Assert.Equal("Alpha Updated", viewModel.Name);
         Assert.Equal("alpha-new.example.com", viewModel.Sni);
-        Assert.Equal("Updated 1 profile; added 1 new profile; skipped 1 unsupported entry.", viewModel.ImportStatus);
-        Assert.Contains(viewModel.AvailableProfiles, option => option.Id == alphaId);
+        Assert.Equal("Subscription updated: 1 updated, 1 added, 1 skipped.", viewModel.ImportStatus);
+        Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Alpha Updated (Active, Subscription)");
         Assert.Equal(2, viewModel.AvailableProfiles.Count);
     }
 
