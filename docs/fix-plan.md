@@ -791,6 +791,38 @@ Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
 
+## Step 49
+Subscription status display cleanup: remove persistent import/update text from under the Import URL row.
+Status: in progress
+Scope:
+- very small Profile UI cleanup only
+- keep persistent subscription state in the selected-profile subscription/source block
+- keep import/update logic unchanged
+Outcome so far:
+- removed the rendered `ImportStatus` line from directly under the `Import from URL` field
+- persistent subscription state remains in the selected-profile subscription/source block
+- underlying import/update result state remains intact for possible reuse elsewhere
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Step 50
+Subscription wording clarification: rename subscription presence state to avoid fake health semantics.
+Status: in progress
+Scope:
+- wording/UI clarification only
+- keep subscription logic unchanged
+- no runtime/TUN changes
+Outcome so far:
+- renamed the selected-profile subscription state wording from:
+  - `Subscription active`
+  - `Subscription not active`
+- to:
+  - `Present in subscription`
+  - `Missing from subscription`
+- this now clearly describes presence in the latest known subscription source, not service health or upstream reachability
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
 ## Step 47
 Subscription UX polish: make subscription-backed profiles and manual update state easier to understand.
 Status: completed

@@ -635,8 +635,9 @@ public class ProfileViewModelTests
         Assert.Equal(string.Empty, viewModel.ImportUrl);
         Assert.True(viewModel.HasSubscriptionSource);
         Assert.Equal("Imported from subscription URL", viewModel.SubscriptionSourceSummary);
+        Assert.Equal("Present in subscription", viewModel.SubscriptionStateText);
         Assert.Equal("https://example.com/subscription.txt", viewModel.SubscriptionSourceUrl);
-        Assert.Equal("Use Update subscription to refresh profiles from this saved source.", viewModel.SubscriptionUpdateSummary);
+        Assert.Equal(string.Empty, viewModel.SubscriptionUpdateSummary);
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.False(viewModel.SaveCommand.CanExecute(null));
     }
@@ -837,6 +838,7 @@ public class ProfileViewModelTests
         Assert.Equal(betaId, viewModel.SelectedProfile?.Id);
         Assert.Equal("Beta", viewModel.Name);
         Assert.True(viewModel.SubscriptionMissingFromSource);
+        Assert.Equal("Missing from subscription", viewModel.SubscriptionStateText);
         Assert.Equal("No longer present in the latest subscription update. Kept locally until you remove it.", viewModel.SubscriptionUpdateSummary);
         Assert.Equal("Subscription updated: 1 updated, 1 missing from source.", viewModel.ImportStatus);
         Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Active, Subscription, Missing from source)");

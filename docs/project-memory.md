@@ -2830,6 +2830,36 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 1
     - failed: 0
     - skipped: 0
+
+## Subscription status display cleanup
+- Scope:
+  - very small Profile UI cleanup only
+  - no subscription behavior changes
+  - no runtime/TUN changes
+- Changes made:
+  - removed the rendered import/update status line from directly under the `Import from URL` row
+  - kept the selected-profile subscription/source block as the only persistent subscription state location
+  - left the underlying import/update result state untouched so it can still be reused elsewhere later if needed
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - pending in this step until the local file lock is cleared
+
+## Subscription wording clarification
+- Scope:
+  - wording/UI clarification only
+  - no subscription behavior changes
+  - no runtime/TUN changes
+- Changes made:
+  - renamed the selected-profile subscription presence label from:
+    - `Subscription active`
+    - `Subscription not active`
+  - to:
+    - `Present in subscription`
+    - `Missing from subscription`
+  - this wording now explicitly describes source-subscription presence only and avoids implying health, connectivity, or account validity
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - pending in this step until the local file lock is cleared
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.FeatureFlagTcpRedirectProviderTests" --logger "console;verbosity=minimal"`
     - passed: 3
     - failed: 0

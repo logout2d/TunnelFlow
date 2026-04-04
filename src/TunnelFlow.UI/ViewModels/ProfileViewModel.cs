@@ -72,12 +72,17 @@ public partial class ProfileViewModel : ObservableObject
     public string SubscriptionSourceSummary => string.IsNullOrWhiteSpace(SubscriptionSourceUrl)
         ? string.Empty
         : "Imported from subscription URL";
+    public string SubscriptionStateText => !HasSubscriptionSource
+        ? string.Empty
+        : SubscriptionMissingFromSource
+            ? "Missing from subscription"
+            : "Present in subscription";
     public string SubscriptionSourceUrlDisplay => SubscriptionSourceUrl;
     public string SubscriptionUpdateSummary => !HasSubscriptionSource
         ? string.Empty
         : SubscriptionMissingFromSource
             ? "No longer present in the latest subscription update. Kept locally until you remove it."
-            : "Use Update subscription to refresh profiles from this saved source.";
+            : string.Empty;
     public string UpdateSubscriptionButtonText => "Update subscription";
     public bool ShowMissingSubscriptionCleanupAction =>
         HasSubscriptionSource &&
@@ -177,6 +182,7 @@ public partial class ProfileViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasSubscriptionSource));
         OnPropertyChanged(nameof(SubscriptionSourceSummary));
+        OnPropertyChanged(nameof(SubscriptionStateText));
         OnPropertyChanged(nameof(SubscriptionSourceUrlDisplay));
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
         OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
@@ -186,6 +192,7 @@ public partial class ProfileViewModel : ObservableObject
     }
     partial void OnSubscriptionMissingFromSourceChanged(bool value)
     {
+        OnPropertyChanged(nameof(SubscriptionStateText));
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
         OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
         OnPropertyChanged(nameof(MissingSubscriptionCleanupSummary));
