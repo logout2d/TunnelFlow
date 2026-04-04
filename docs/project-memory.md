@@ -73,6 +73,61 @@
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
 
+## UI polish: default window size and alignment consistency
+- Scope:
+  - small XAML-only polish pass after the TUN-only cleanup and repository hygiene work
+  - no runtime/service/TUN behavior changes
+- Changes made:
+  - updated the main window default size from `960x620` to `1180x760`
+  - updated minimum size from `720x480` to `960x640`
+  - normalized obvious vertical alignment in the current visible UI:
+    - `AppRulesView` header action button and row controls now use consistent minimum heights
+    - `ProfileView` import row, selector row, and form inputs now use consistent minimum heights and centered text/content
+    - `LogView` header row now uses a matching minimum height so the content area starts more consistently
+- Rationale:
+  - the current sidebar-plus-content layout is more comfortable at a larger initial size
+  - the top rows in Profile/App Rules had mixed effective control heights that made the UI look slightly uneven
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## UI correction: main window size and profile row widths
+- Scope:
+  - very small corrective XAML pass after the previous UI polish overshot the intended layout
+  - no runtime/service/TUN behavior changes
+- Changes made:
+  - updated the main window default size from `1180x760` to `1090x990`
+  - reduced the `Selected profile` selector width from `220` to `214`
+  - increased the import URL text box width from `340` to `386` so the `Import URL` button lines up more cleanly with the action edge established by the profile row below
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## UI rollback-and-correct pass: main window and profile row sizing
+- Scope:
+  - surgical correction only
+  - edited only `MainWindow.xaml` and `ProfileView.xaml`
+  - no runtime/service/TUN behavior changes
+- Changes made:
+  - main window default size reduced from `1090x990` to `972x640`
+  - main window minimum size reduced from `960x640` to `720x480`
+  - `Selected profile` selector width reduced from `214` to `208`
+  - import URL text box width increased from `386` to `388`
+  - removed the previously added `MinHeight="32"` and `VerticalContentAlignment="Center"` tweaks from the profile import row, selector/action row, and profile form inputs so the view returns to its prior compact control height
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Final UI correction pass: window default size, App Rules mode width, and Profile import alignment
+- Scope:
+  - very small XAML-only correction
+  - no runtime/service/TUN behavior changes
+  - adjusted only `MainWindow.xaml`, `ProfileView.xaml`, and `AppRulesView.xaml`
+- Changes made:
+  - updated the main window default size from `972x640` to `1088x990`
+  - kept the minimum size modest at `720x480`
+  - reduced the App Rules mode selector column width from `120` to `108`
+  - adjusted the Profile import URL text box width from `388` to `360` so the `Import URL` button aligns visually on the right with the `Delete` button row below
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
 ## TUN-only cleanup Phase 5: remove remaining capture / ndisapi build-graph edges
 - Implemented in this step:
   - removed the remaining active build-graph references that still pulled the legacy capture stack into the solution after the service host cleanup

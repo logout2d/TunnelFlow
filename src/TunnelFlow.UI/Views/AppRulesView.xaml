@@ -22,6 +22,7 @@
                     IsEnabled="{Binding IsEditingEnabled}"
                     Margin="16,0,0,0"
                     Padding="12,6"
+                    MinHeight="32"
                     Background="#3B82F6"
                     Foreground="White"
                     BorderThickness="0"
@@ -51,13 +52,13 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="32"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="108"/>
                 <ColumnDefinition Width="80"/>
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="1" Text="Application" FontWeight="SemiBold"
                        Foreground="#64748B" FontSize="11"/>
             <TextBlock Grid.Column="2" Text="Mode" FontWeight="SemiBold"
-                       Foreground="#64748B" FontSize="11"/>
+                       Foreground="#64748B" FontSize="11" HorizontalAlignment="Center"/>
         </Grid>
 
         <Separator DockPanel.Dock="Top" Margin="0,0,0,4"/>
@@ -88,7 +89,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="32"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="80"/>
                             <ColumnDefinition Width="80"/>
                         </Grid.ColumnDefinitions>
 
@@ -105,7 +106,7 @@
 
                         <ComboBox Grid.Column="2" SelectedItem="{Binding Mode, Mode=TwoWay}"
                                   IsEnabled="{Binding DataContext.IsEditingEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                  VerticalAlignment="Center" Margin="0,0,8,0">
+                                  VerticalAlignment="Center" MinHeight="26" Margin="0,0,8,0">
                             <sys:String>Proxy</sys:String>
                             <sys:String>Direct</sys:String>
                             <sys:String>Block</sys:String>
@@ -117,6 +118,7 @@
                                 CommandParameter="{Binding}"
                                 IsEnabled="{Binding DataContext.IsEditingEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 Padding="6,4" FontSize="11"
+                                MinHeight="26"
                                 Background="#FEE2E2" Foreground="#DC2626"
                                 BorderThickness="0" Cursor="Hand"
                                 VerticalAlignment="Center"/>

@@ -700,3 +700,66 @@ Outcome:
 Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 42
+UI polish: improve default main window size and obvious vertical alignment inconsistencies.
+Status: completed
+Scope:
+- XAML-only polish
+- no runtime/service/TUN changes
+- no layout redesign
+Outcome:
+- main window default size increased from `960x620` to `1180x760`
+- main window minimum size increased from `720x480` to `960x640`
+- normalized visible control heights/alignment in:
+  - `AppRulesView`
+  - `ProfileView`
+  - `LogView`
+- kept the current TUN-first layout and visual structure intact
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Step 43
+UI correction: tighten main window size and profile row widths to the preferred screenshot-driven layout.
+Status: completed
+Scope:
+- very small XAML-only correction
+- no behavior changes
+- no layout redesign
+Outcome:
+- main window default size changed from `1180x760` to `1090x990`
+- `Selected profile` selector width reduced from `220` to `214`
+- import URL text box width increased from `340` to `386` so the import action aligns more cleanly with the profile action row below
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Step 44
+UI rollback-and-correct pass: restore sane window sizing and compact Profile row heights.
+Status: completed
+Scope:
+- surgical XAML correction only
+- no behavior changes
+- no layout redesign
+Outcome:
+- main window default size changed from `1090x990` to `972x640`
+- main window minimum size changed from `960x640` to `720x480`
+- `Selected profile` selector width changed from `214` to `208`
+- import URL text box width changed from `386` to `388`
+- removed the Profile `MinHeight` / `VerticalContentAlignment` tweaks that had made controls feel globally taller
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Step 45
+Final UI correction pass: adjust default window size, App Rules mode width, and Profile import alignment.
+Status: completed
+Scope:
+- very small XAML-only correction
+- no behavior changes
+- no layout redesign
+Outcome:
+- main window default size changed from `972x640` to `1088x990`
+- minimum size remained `720x480`
+- App Rules mode selector column width changed from `120` to `108`
+- Profile import URL text box width changed from `388` to `360` to bring the `Import URL` button into clean right-edge alignment with the `Delete` button below
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
