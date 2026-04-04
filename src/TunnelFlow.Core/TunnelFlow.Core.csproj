@@ -1,16 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <Compile Remove="Interfaces\ICaptureEngine.cs" />
-    <Compile Remove="Interfaces\IPolicyEngine.cs" />
-    <Compile Remove="Interfaces\ISessionRegistry.cs" />
-    <Compile Remove="IPC\Messages\GetSessionsCommand.cs" />
-    <Compile Remove="Models\CaptureConfig.cs" />
-    <Compile Remove="Models\CaptureError.cs" />
-    <Compile Remove="Models\PolicyDecision.cs" />
-    <Compile Remove="Models\SessionEntry.cs" />
-  </ItemGroup>
-
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

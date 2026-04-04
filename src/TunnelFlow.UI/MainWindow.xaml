@@ -213,9 +213,6 @@
                     <Button Content="⚙  Profile"
                             Command="{Binding NavigateToProfileCommand}"
                             Style="{StaticResource NavButton}"/>
-                    <Button Content="🔗  Sessions"
-                            Visibility="Collapsed"
-                            Style="{StaticResource NavButton}"/>
                     <Button Content="📄  Log"
                             Command="{Binding NavigateToLogCommand}"
                             Style="{StaticResource NavButton}"/>

@@ -487,8 +487,3 @@ $RECYCLE.BIN/
 third_party/singbox/sing-box.exe
 third_party/singbox/*.exe
 
-# ndisapi native DLL — not committed, obtained from WinpkFilter driver installation
-third_party/ndisapi.net/ndisapi.dll
-# Un-ignore the bin/x64 directory itself so .gitkeep is tracked
-!third_party/ndisapi.net/bin/
-!third_party/ndisapi.net/bin/x64/

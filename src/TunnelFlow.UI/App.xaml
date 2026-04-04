@@ -20,10 +20,6 @@
                 <v:ProfileView/>
             </DataTemplate>
 
-            <DataTemplate DataType="{x:Type vm:SessionsViewModel}">
-                <v:SessionsView/>
-            </DataTemplate>
-
             <DataTemplate DataType="{x:Type vm:LogViewModel}">
                 <v:LogView/>
             </DataTemplate>

@@ -78,7 +78,6 @@ public partial class MainViewModel : ObservableObject
 
     public AppRulesViewModel AppRules { get; }
     public ProfileViewModel Profile { get; }
-    public SessionsViewModel Sessions { get; }
     public LogViewModel Log { get; }
 
     public IRelayCommand StartCommand { get; }
@@ -108,7 +107,6 @@ public partial class MainViewModel : ObservableObject
 
         AppRules = new AppRulesViewModel(client);
         Profile = new ProfileViewModel(client);
-        Sessions = new SessionsViewModel();
         Log = new LogViewModel();
         _currentView = AppRules;
         UpdateConfigEditingState();
@@ -158,7 +156,6 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedModeChanged(TunnelStatusMode value)
     {
-        Sessions.SetMode(value);
         OnPropertyChanged(nameof(ModeSummary));
         OnPropertyChanged(nameof(TunnelStatusSummary));
     }
@@ -249,15 +246,6 @@ public partial class MainViewModel : ObservableObject
                     {
                         ApplyStatusPayload(status);
                     }
-                    break;
-
-                case "SessionCreated":
-                    Sessions.AddSessionFromJson(payload);
-                    break;
-
-                case "SessionClosed":
-                    ulong flowId = payload.TryGetProperty("flowId", out var fi) ? fi.GetUInt64() : 0;
-                    Sessions.RemoveSession(flowId);
                     break;
 
                 case "LogLine":

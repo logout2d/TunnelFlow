@@ -122,6 +122,10 @@
             "CommunityToolkit.Mvvm": {
               "target": "Package",
               "version": "[8.4.2, )"
+            },
+            "System.ServiceProcess.ServiceController": {
+              "target": "Package",
+              "version": "[8.0.0, )"
             }
           },
           "imports": [

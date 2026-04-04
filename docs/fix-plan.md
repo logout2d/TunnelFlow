@@ -275,6 +275,17 @@ Progress:
   - removed the capture test slice from active test compilation
   - `third_party/ndisapi.net` is no longer part of the active build graph
   - physical capture/vendor files are still present on disk for a later deletion-only pruning pass
+- next TUN-only cleanup Phase 6 step is now completed:
+  - physically removed:
+    - `src/TunnelFlow.Capture/`
+    - `src/TunnelFlow.Tests/Capture/`
+    - `third_party/ndisapi.net/`
+  - physically removed the now-dead core capture/session contract source files
+  - removed stale repo metadata tied to the deleted legacy stack:
+    - `.gitmodules`
+    - obsolete `.gitignore` entries
+    - old capture build logs
+  - historical legacy docs remain intentionally in place as reference material, but they are no longer part of the active build/runtime path
 
 ## Step 20
 Design: elevated helper/bootstrapper component for system lifecycle management.

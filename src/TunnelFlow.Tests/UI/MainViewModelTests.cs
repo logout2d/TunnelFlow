@@ -102,7 +102,6 @@ public class MainViewModelTests
         Assert.Equal("Proxy 2  Direct 1  Block 3", viewModel.RuleCountsSummary);
         Assert.False(viewModel.AppRules.IsEditingEnabled);
         Assert.False(viewModel.Profile.IsEditingEnabled);
-        Assert.False(viewModel.Sessions.IsAvailable);
     }
 
     [Fact]
@@ -137,7 +136,6 @@ public class MainViewModelTests
         Assert.Equal("Proxy 0  Direct 0  Block 0", viewModel.RuleCountsSummary);
         Assert.True(viewModel.AppRules.IsEditingEnabled);
         Assert.True(viewModel.Profile.IsEditingEnabled);
-        Assert.True(viewModel.Sessions.IsAvailable);
     }
 
     [Fact]
@@ -202,7 +200,6 @@ public class MainViewModelTests
         Assert.Equal("Proxy 1  Direct 1  Block 1", viewModel.RuleCountsSummary);
         Assert.Equal("Offline Tun", viewModel.Profile.Name);
         Assert.Equal(3, viewModel.AppRules.Rules.Count);
-        Assert.False(viewModel.Sessions.IsAvailable);
     }
 
     [Fact]

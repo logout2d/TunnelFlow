@@ -6,6 +6,49 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## TUN-only cleanup Phase 6: physical pruning of dead legacy capture files/assets
+- Implemented in this step:
+  - physically removed the now-dead legacy capture/vendor directories after they had already been cut out of the active build graph
+  - cleaned the small remaining repo metadata references that became invalid after that prune
+  - kept scope narrow:
+    - no TUN runtime changes
+    - no broad redesign/refactor
+    - no removal of historical narrative docs
+- Exact files/directories removed:
+  - `src/TunnelFlow.Capture/`
+  - `src/TunnelFlow.Tests/Capture/`
+  - `third_party/ndisapi.net/`
+  - `src/TunnelFlow.Core/Interfaces/ICaptureEngine.cs`
+  - `src/TunnelFlow.Core/Interfaces/IPolicyEngine.cs`
+  - `src/TunnelFlow.Core/Interfaces/ISessionRegistry.cs`
+  - `src/TunnelFlow.Core/IPC/Messages/GetSessionsCommand.cs`
+  - `src/TunnelFlow.Core/Models/CaptureConfig.cs`
+  - `src/TunnelFlow.Core/Models/CaptureError.cs`
+  - `src/TunnelFlow.Core/Models/PolicyDecision.cs`
+  - `src/TunnelFlow.Core/Models/SessionEntry.cs`
+  - `.gitmodules`
+  - `build-capture.log`
+  - `build-diag.log`
+- Exact dead references/docs cleaned up:
+  - removed stale `ndisapi.net` ignore entries from `.gitignore`
+  - removed the now-unneeded `<Compile Remove=...>` exclusions from `src/TunnelFlow.Core/TunnelFlow.Core.csproj`
+  - updated `docs/project-memory.md`
+  - updated `docs/fix-plan.md`
+- Historical references intentionally kept:
+  - `ARCHITECTURE.md`
+  - `docs/wfp-tcp-redirect-poc-plan.md`
+  - older historical sections inside `docs/project-memory.md` / `docs/fix-plan.md`
+- Reason those references were kept:
+  - they are historical documentation of the abandoned WinpkFilter/capture era, not part of the active build/runtime path
+  - cleaning all historical narrative references would be a broader docs rewrite, not a narrow pruning step
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 35
+    - failed: 0
+    - skipped: 0
+
 ## TUN-only cleanup Phase 5: remove remaining capture / ndisapi build-graph edges
 - Implemented in this step:
   - removed the remaining active build-graph references that still pulled the legacy capture stack into the solution after the service host cleanup
