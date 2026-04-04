@@ -49,6 +49,30 @@
     - failed: 0
     - skipped: 0
 
+## Repository hygiene cleanup (tracked build output pruning)
+- Scope:
+  - remove tracked generated/build artifacts from the repository state without changing runtime behavior
+  - keep local developer build outputs on disk by removing them from Git tracking only
+  - verify whether `.gitignore` already covers the intended junk before adding new rules
+- Findings:
+  - the branch still had tracked generated output under:
+    - `src/TunnelFlow.Core/bin/` and `src/TunnelFlow.Core/obj/`
+    - `src/TunnelFlow.Service/bin/` and `src/TunnelFlow.Service/obj/`
+    - `src/TunnelFlow.Tests/bin/` and `src/TunnelFlow.Tests/obj/`
+    - `src/TunnelFlow.UI/bin/` and `src/TunnelFlow.UI/obj/`
+  - these tracked files included compiled assemblies, generated `*.g.cs`, `*.baml`, `project.assets.json`, NuGet cache metadata, runtimeconfig/deps files, and other standard MSBuild output
+  - `.gitignore` already correctly covered the main generated junk categories for this cleanup:
+    - `[Bb]in/`
+    - `[Oo]bj/`
+    - `*.log`
+- Action taken:
+  - removed the tracked build outputs from Git tracking with `git rm --cached`
+  - did not delete local source files or required runtime assets
+  - did not add new `.gitignore` rules because the existing ignore patterns were already sufficient for the targeted junk
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
+
 ## TUN-only cleanup Phase 5: remove remaining capture / ndisapi build-graph edges
 - Implemented in this step:
   - removed the remaining active build-graph references that still pulled the legacy capture stack into the solution after the service host cleanup

@@ -681,3 +681,22 @@ Outcome:
 - current legacy capture stack still exists, but without the experimental WFP redirect branch
 Next recommended step:
 - Phase 3 of TUN-only cleanup: remove the remaining legacy transparent-relay runtime branch from the service and make the runtime path TUN-only before the later final capture-project/`ndisapi.net` removal phase
+
+## Step 41
+Repository hygiene cleanup: remove tracked generated/build artifacts from the repository state.
+Status: completed
+Scope:
+- identify tracked build/generated junk still living in Git after the TUN-only cleanup work
+- remove only safe generated artifacts such as tracked `bin/` and `obj/` outputs
+- keep source files and real runtime assets intact
+Outcome:
+- removed tracked build output from:
+  - `src/TunnelFlow.Core/bin/` and `src/TunnelFlow.Core/obj/`
+  - `src/TunnelFlow.Service/bin/` and `src/TunnelFlow.Service/obj/`
+  - `src/TunnelFlow.Tests/bin/` and `src/TunnelFlow.Tests/obj/`
+  - `src/TunnelFlow.UI/bin/` and `src/TunnelFlow.UI/obj/`
+- used `git rm --cached` so local build output remains available to the developer while leaving the repository clean
+- `.gitignore` did not need changes in this step because it already covered the intended build/generated junk via the existing `bin/`, `obj/`, and `*.log` patterns
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~OrchestratorServiceTests|FullyQualifiedName~ConfigStoreTests|FullyQualifiedName~MainViewModelTests" --logger "console;verbosity=minimal"`
