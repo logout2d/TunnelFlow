@@ -41,22 +41,6 @@
                             Cursor="Hand"/>
                 </StackPanel>
 
-                <TextBlock Text="{Binding ImportStatus}"
-                           Margin="0,6,0,0"
-                           Foreground="#475569"
-                           FontSize="11"
-                           TextWrapping="Wrap">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowImportStatus}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
             </StackPanel>
 
             <!-- Profile selection -->
@@ -136,6 +120,21 @@
                                    Foreground="#475569"
                                    FontSize="11"
                                    FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SubscriptionStateText}"
+                                   Margin="0,2,0,0"
+                                   FontSize="11"
+                                   FontWeight="SemiBold">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#16A34A"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SubscriptionMissingFromSource}" Value="True">
+                                            <Setter Property="Foreground" Value="#DC2626"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock Text="{Binding SubscriptionSourceUrlDisplay}"
                                    Margin="0,2,0,0"
                                    Foreground="#64748B"
@@ -148,9 +147,11 @@
                                    TextWrapping="Wrap">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
                                     <Setter Property="Foreground" Value="#94A3B8"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SubscriptionMissingFromSource}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
                                             <Setter Property="Foreground" Value="#B45309"/>
                                             <Setter Property="FontWeight" Value="SemiBold"/>
                                         </DataTrigger>
