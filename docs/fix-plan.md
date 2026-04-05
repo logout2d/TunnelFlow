@@ -823,6 +823,35 @@ Outcome so far:
 Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 
+## Step 51
+Runtime connectivity state Phase 1: audit current observability before adding any UI health semantics.
+Status: completed
+Scope:
+- audit/inventory only
+- no runtime/TUN changes
+- no speculative health checks
+Outcome:
+- current reliable structured state is limited to local runtime/service facts:
+  - service connected/disconnected
+  - selected mode
+  - sing-box process status
+  - tunnel interface up/down
+  - active profile and rule counts
+- current upstream/connectivity evidence exists only in raw log text:
+  - sing-box stdout/stderr forwarded over IPC
+  - sing-box file log output
+  - service log lines
+- there is currently no honest structured signal for:
+  - upstream reachable
+  - auth/account valid
+  - transport healthy
+  - traffic proven working
+- agreed minimal next step:
+  - add a small service-side classifier for existing sing-box log text and surface only detected failure evidence, without inventing a "healthy" state
+Validation:
+- docs-only audit
+- no build was needed
+
 ## Step 47
 Subscription UX polish: make subscription-backed profiles and manual update state easier to understand.
 Status: completed

@@ -2860,6 +2860,126 @@ Google may still work in some fallback scenarios, while many other sites fail.
 - Validation:
   - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
     - pending in this step until the local file lock is cleared
+
+## Runtime connectivity state Phase 1 audit
+- Scope:
+  - audit/inventory only
+  - no runtime behavior changes
+  - no speculative health checks
+- Files inspected:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxManager.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Core/Interfaces/ISingBoxManager.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatePayload.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatusPayload.cs`
+  - `src/TunnelFlow.Core/Models/SingBoxConfig.cs`
+  - `src/TunnelFlow.UI/Services/ServiceClient.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/LogViewModel.cs`
+- Exact runtime/connectivity-relevant signals currently present:
+  - Structured service/UI state:
+    - `CaptureRunning`
+    - `SingBoxStatus`
+    - `SingBoxRunning`
+    - `TunnelInterfaceUp`
+    - `SelectedMode`
+    - active profile id/name
+    - proxy/direct/block rule counts
+  - Structured lifecycle transitions:
+    - `ISingBoxManager.StatusChanged` -> `Starting`, `Running`, `Restarting`, `Crashed`, `Stopped`
+    - `PipeServer.PushStatusChanged(...)` -> UI `StatusChanged` event
+    - service start/stop success/failure log lines from `OrchestratorService`
+  - Raw log surfaces:
+    - sing-box stdout/stderr lines are forwarded by `SingBoxManager.LogLine`
+    - those lines are pushed over IPC as `LogLine` events with source `singbox`
+    - the same sing-box config also writes `log.output` to `ProgramData\TunnelFlow\logs\singbox.log`
+    - service-generated start/stop/error lines are pushed over IPC as `LogLine` events with source `service`
+  - UI/client transport signals:
+    - `ServiceClient.Connected`
+    - `ServiceClient.Disconnected`
+    - `ServiceClient.DiagnosticMessage`
+    - current UI intentionally collapses reconnect noise into:
+      - `Service disconnected`
+      - `Waiting for service...`
+      - `Service connected`
+- Category: reliable now for honest UI
+  - Local tunnel started:
+    - `CaptureRunning=true`
+    - `SelectedMode=Tun`
+    - `SingBoxStatus=Running`
+    - `SingBoxRunning=true`
+    - `TunnelInterfaceUp=true`
+    - together these are reliable for "local TUN stack is up" only
+  - Local startup blocked before runtime:
+    - `OrchestratorService` already emits explicit service log errors for:
+      - no active profile
+      - active profile not found
+      - missing `ServerAddress` / `UserId`
+      - missing `sing-box.exe`
+      - TUN-only prerequisites not met
+      - TUN activation failure
+      - top-level `StartCaptureAsync failed`
+  - Local runtime process failure:
+    - `SingBoxStatus=Restarting` / `Crashed`
+    - restart-attempt count via `PushSingBoxCrashed(...)`
+    - fail-closed stop when max restarts are exceeded
+- Category: heuristic only / noisy today
+  - Upstream/server unreachable:
+    - only observable indirectly through raw sing-box log lines on stdout/stderr / `singbox.log`
+    - no structured code currently parses or classifies those lines
+  - Auth/account failure:
+    - only observable indirectly through raw sing-box error text if sing-box emits a distinctive message
+    - no current structured field/event/counter exists
+  - Transport/protocol failure:
+    - likewise only inferable from raw sing-box log text
+    - no existing parser distinguishes handshake/TLS/REALITY/protocol failures
+  - General no-connectivity / upstream broken state after local start:
+    - process-stable startup in TUN mode uses a 2-second observation window only
+    - this confirms only "sing-box did not exit immediately", not that any traffic succeeds
+  - UI reconnect/client diagnostics:
+    - `Connect failed...` and `ReadLoop error...` only describe IPC/service availability, not upstream connectivity
+- Category: missing today
+  - no explicit "first successful proxied connection" signal
+  - no explicit "upstream reachable" state
+  - no explicit auth failure classification
+  - no explicit transport/protocol failure classification
+  - no counters/timestamps for recurring outbound failures
+  - no separation between:
+    - local tunnel running
+    - remote path working
+    - remote path failing
+- Reliability conclusion:
+  - honest UI can already say:
+    - local service connected / disconnected
+    - local TUN stack started / stopped
+    - sing-box process running / restarting / crashed
+  - honest UI cannot currently say:
+    - server reachable
+    - credentials/account valid
+    - transport healthy
+    - traffic actually working
+    without introducing either log parsing heuristics or new active/runtime probes
+- Minimal Phase 2 plan:
+  1. Keep existing structured local runtime state as-is for "local tunnel started".
+  2. Add one narrow service-side sing-box log classifier layer only:
+     - consume existing `SingBoxManager.LogLine` text
+     - map a small allowlist of known patterns into a new coarse structured event/state category, for example:
+       - `UpstreamUnreachable`
+       - `AuthFailure`
+       - `TransportFailure`
+       - `UnknownRuntimeFailure`
+     - preserve raw log lines unchanged alongside classification.
+  3. Expose that new coarse runtime issue state through `StatusPayload` / `StatePayload` as optional fields.
+  4. In UI, present it only as a secondary warning tied to the local-running state, with wording like:
+     - local tunnel running
+     - recent upstream/auth/transport issue detected
+  5. Do not claim healthy connectivity in Phase 2; only surface detected failure evidence when it exists.
+- Validation:
+  - docs-only audit
+  - no build was needed or run in this step
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Capture.FeatureFlagTcpRedirectProviderTests" --logger "console;verbosity=minimal"`
     - passed: 3
     - failed: 0
