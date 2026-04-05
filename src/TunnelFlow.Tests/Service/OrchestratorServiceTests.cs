@@ -175,7 +175,8 @@ public class OrchestratorServiceTests
             TunnelMode.Tun,
             captureRunning: true,
             tunModeActive: true,
-            SingBoxStatus.Running);
+            SingBoxStatus.Running,
+            RuntimeWarningEvidence.ConnectionProblem);
 
         Assert.Equal(TunnelStatusMode.Tun, summary.SelectedMode);
         Assert.True(summary.CaptureRunning);
@@ -187,6 +188,7 @@ public class OrchestratorServiceTests
         Assert.Equal(1, summary.ProxyRuleCount);
         Assert.Equal(1, summary.DirectRuleCount);
         Assert.Equal(1, summary.BlockRuleCount);
+        Assert.Equal(RuntimeWarningEvidence.ConnectionProblem, summary.RuntimeWarning);
     }
 
     [Fact]
@@ -224,5 +226,42 @@ public class OrchestratorServiceTests
         Assert.Equal(0, summary.ProxyRuleCount);
         Assert.Equal(0, summary.DirectRuleCount);
         Assert.Equal(0, summary.BlockRuleCount);
+        Assert.Equal(RuntimeWarningEvidence.None, summary.RuntimeWarning);
+    }
+
+    [Theory]
+    [InlineData("outbound/vless[vless-out]: authentication failed", (int)RuntimeWarningDetail.AuthenticationFailure)]
+    [InlineData("dial tcp 1.2.3.4:443: connectex: No route to host", (int)RuntimeWarningDetail.StrongConnectionProblem)]
+    [InlineData("connection download closed: wsarecv: An existing connection was forcibly closed by the remote host", (int)RuntimeWarningDetail.WeakConnectionNoise)]
+    [InlineData("started at 127.0.0.1", (int)RuntimeWarningDetail.None)]
+    public void ClassifyRuntimeWarningDetail_UsesConservativeBuckets(string line, int expectedValue)
+    {
+        var expected = (RuntimeWarningDetail)expectedValue;
+
+        var detail = OrchestratorService.ClassifyRuntimeWarningDetail(line);
+
+        Assert.Equal(expected, detail);
+    }
+
+    [Theory]
+    [InlineData("outbound/vless[vless-out]: outbound connection to example.com:443")]
+    [InlineData("outbound/vless[vless-out]: connected to 1.2.3.4:443")]
+    public void IsSuccessfulOutboundVlessActivity_RecognizesClearSuccessSignals(string line)
+    {
+        Assert.True(OrchestratorService.IsSuccessfulOutboundVlessActivity(line));
+    }
+
+    [Theory]
+    [InlineData((int)RuntimeWarningDetail.AuthenticationFailure, RuntimeWarningEvidence.AuthenticationFailure)]
+    [InlineData((int)RuntimeWarningDetail.StrongConnectionProblem, RuntimeWarningEvidence.ConnectionProblem)]
+    [InlineData((int)RuntimeWarningDetail.WeakConnectionNoise, RuntimeWarningEvidence.ConnectionProblem)]
+    [InlineData((int)RuntimeWarningDetail.None, RuntimeWarningEvidence.None)]
+    public void MapRuntimeWarningEvidence_CollapsesDetailedCategories(int detailValue, RuntimeWarningEvidence expected)
+    {
+        var detail = (RuntimeWarningDetail)detailValue;
+
+        var warning = OrchestratorService.MapRuntimeWarningEvidence(detail);
+
+        Assert.Equal(expected, warning);
     }
 }

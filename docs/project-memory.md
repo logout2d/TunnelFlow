@@ -3411,3 +3411,51 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed: 1
     - failed: 0
     - skipped: 0
+
+## Runtime connectivity warning evidence - coarse UI + anti-noise refinement
+- Implemented a narrow structured warning path over existing sing-box log forwarding without changing runtime behavior.
+- Shared payload state added:
+  - `RuntimeWarningEvidence.None`
+  - `RuntimeWarningEvidence.AuthenticationFailure`
+  - `RuntimeWarningEvidence.ConnectionProblem`
+- User-facing runtime card remains intentionally coarse:
+  - `Authentication failed`
+  - `Connection problem`
+  - no healthy/connected/traffic-working state
+- Runtime panel simplification:
+  - removed the `Mode` row
+  - added one optional `Warning` row only when structured evidence exists
+- Internal service-side classifier remains conservative and uses:
+  - `AuthenticationFailure`
+  - `StrongConnectionProblem`
+  - `WeakConnectionNoise`
+- Strong auth evidence is never cleared by later outbound success.
+- Anti-noise refinement added in this step:
+  - isolated close/reset/forcibly-closed style lines are now treated as weak connection noise, not strong failure evidence
+  - clear later outbound VLESS success suppresses and clears only weak connection warnings
+  - once a successful outbound VLESS line has been observed, later isolated weak-noise lines stay suppressed for the rest of that runtime session
+- Examples now treated as weak noise:
+  - `connection reset by peer`
+  - `An existing connection was forcibly closed by the remote host`
+  - `wsarecv`
+  - `connection download closed`
+  - `connection upload closed`
+- Cases intentionally still classified:
+  - auth/account style failures such as `authentication failed`, `invalid user`, `invalid uuid`, `unauthorized`, `forbidden`
+  - stronger connection/transport failures such as `connection refused`, `no route to host`, `network is unreachable`, `i/o timeout`, `handshake failure`, `remote error: tls`
+- Exact files changed in this step:
+  - `src/TunnelFlow.Core/Models/RuntimeWarningEvidence.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatePayload.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatusPayload.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 42
+    - failed: 0
+    - skipped: 0

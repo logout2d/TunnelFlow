@@ -34,6 +34,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _proxyRuleCount;
     [ObservableProperty] private int _directRuleCount;
     [ObservableProperty] private int _blockRuleCount;
+    [ObservableProperty] private RuntimeWarningEvidence _runtimeWarning = RuntimeWarningEvidence.None;
     [ObservableProperty] private string _connectionStatus = "Connecting to service...";
     [ObservableProperty] private string _serviceActionStatus = string.Empty;
     [ObservableProperty] private bool _isServiceInstalled = true;
@@ -75,6 +76,15 @@ public partial class MainViewModel : ObservableObject
 
     public string RuleCountsSummary =>
         $"Proxy {ProxyRuleCount}  Direct {DirectRuleCount}  Block {BlockRuleCount}";
+
+    public bool ShowRuntimeWarning => RuntimeWarning != RuntimeWarningEvidence.None;
+
+    public string RuntimeWarningSummary => RuntimeWarning switch
+    {
+        RuntimeWarningEvidence.AuthenticationFailure => "Authentication failed",
+        RuntimeWarningEvidence.ConnectionProblem => "Connection problem",
+        _ => string.Empty
+    };
 
     public AppRulesViewModel AppRules { get; }
     public ProfileViewModel Profile { get; }
@@ -183,6 +193,12 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnBlockRuleCountChanged(int value) =>
         OnPropertyChanged(nameof(RuleCountsSummary));
+
+    partial void OnRuntimeWarningChanged(RuntimeWarningEvidence value)
+    {
+        OnPropertyChanged(nameof(ShowRuntimeWarning));
+        OnPropertyChanged(nameof(RuntimeWarningSummary));
+    }
 
     partial void OnServiceActionStatusChanged(string value) =>
         OnPropertyChanged(nameof(ShowServiceActionStatus));
@@ -336,6 +352,7 @@ public partial class MainViewModel : ObservableObject
         ProxyRuleCount = state.ProxyRuleCount;
         DirectRuleCount = state.DirectRuleCount;
         BlockRuleCount = state.BlockRuleCount;
+        RuntimeWarning = state.RuntimeWarning;
     }
 
     internal void ApplyStatusPayload(StatusPayload status)
@@ -351,6 +368,7 @@ public partial class MainViewModel : ObservableObject
         ProxyRuleCount = status.ProxyRuleCount;
         DirectRuleCount = status.DirectRuleCount;
         BlockRuleCount = status.BlockRuleCount;
+        RuntimeWarning = status.RuntimeWarning;
     }
 
     internal void ApplyOfflineConfigSnapshot(LocalConfigSnapshot snapshot)
@@ -444,6 +462,7 @@ public partial class MainViewModel : ObservableObject
         SingBoxRunning = false;
         TunnelInterfaceUp = false;
         SingBoxStatus = "Unavailable";
+        RuntimeWarning = RuntimeWarningEvidence.None;
         UpdateConfigEditingState();
     }
 

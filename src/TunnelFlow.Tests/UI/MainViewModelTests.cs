@@ -86,7 +86,8 @@ public class MainViewModelTests
             ActiveProfileName = "Primary",
             ProxyRuleCount = 2,
             DirectRuleCount = 1,
-            BlockRuleCount = 3
+            BlockRuleCount = 3,
+            RuntimeWarning = RuntimeWarningEvidence.AuthenticationFailure
         });
 
         Assert.True(viewModel.CaptureRunning);
@@ -100,6 +101,8 @@ public class MainViewModelTests
         Assert.Equal("Running", viewModel.EngineStatusSummary);
         Assert.Equal("Up", viewModel.TunnelStatusSummary);
         Assert.Equal("Proxy 2  Direct 1  Block 3", viewModel.RuleCountsSummary);
+        Assert.True(viewModel.ShowRuntimeWarning);
+        Assert.Equal("Authentication failed", viewModel.RuntimeWarningSummary);
         Assert.False(viewModel.AppRules.IsEditingEnabled);
         Assert.False(viewModel.Profile.IsEditingEnabled);
     }
@@ -134,6 +137,7 @@ public class MainViewModelTests
         Assert.Equal("Unavailable", viewModel.TunnelStatusSummary);
         Assert.Equal("None selected", viewModel.ActiveProfileName);
         Assert.Equal("Proxy 0  Direct 0  Block 0", viewModel.RuleCountsSummary);
+        Assert.False(viewModel.ShowRuntimeWarning);
         Assert.True(viewModel.AppRules.IsEditingEnabled);
         Assert.True(viewModel.Profile.IsEditingEnabled);
     }
@@ -198,8 +202,35 @@ public class MainViewModelTests
         Assert.Equal("Unavailable", viewModel.EngineStatusSummary);
         Assert.Equal("Unavailable", viewModel.TunnelStatusSummary);
         Assert.Equal("Proxy 1  Direct 1  Block 1", viewModel.RuleCountsSummary);
+        Assert.False(viewModel.ShowRuntimeWarning);
         Assert.Equal("Offline Tun", viewModel.Profile.Name);
         Assert.Equal(3, viewModel.AppRules.Rules.Count);
+    }
+
+    [Fact]
+    public void ApplyStatePayload_WhenConnectionProblemExists_ShowsFriendlyWarning()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client);
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatePayload(new StatePayload
+        {
+            Rules = Array.Empty<AppRule>(),
+            Profiles = Array.Empty<VlessProfile>(),
+            CaptureRunning = true,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true,
+            ProxyRuleCount = 0,
+            DirectRuleCount = 0,
+            BlockRuleCount = 0,
+            RuntimeWarning = RuntimeWarningEvidence.ConnectionProblem
+        });
+
+        Assert.True(viewModel.ShowRuntimeWarning);
+        Assert.Equal("Connection problem", viewModel.RuntimeWarningSummary);
     }
 
     [Fact]

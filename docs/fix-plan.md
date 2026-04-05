@@ -791,6 +791,25 @@ Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.DirectUrlProfileImportServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
 
+## Step 52
+Runtime connectivity warning evidence: add a coarse UI warning model with anti-noise suppression.
+Status: completed
+Scope:
+- narrow service/UI state addition only
+- no runtime/TUN changes
+- no healthy/connectivity semantics
+Outcome:
+- added shared optional runtime warning state to service/UI payloads:
+  - `AuthenticationFailure`
+  - `ConnectionProblem`
+- implemented a conservative service-side classifier over existing sing-box log lines
+- removed `Mode` from the runtime panel UI and added one optional `Warning` row
+- added anti-noise suppression so weak close/reset/forcibly-closed noise is cleared and suppressed after later successful outbound VLESS activity
+- intentionally kept strong auth and strong connection evidence classified
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 49
 Subscription status display cleanup: remove persistent import/update text from under the Import URL row.
 Status: in progress

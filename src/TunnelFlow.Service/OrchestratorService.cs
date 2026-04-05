@@ -21,6 +21,9 @@ public sealed class OrchestratorService : BackgroundService
     private bool _captureRunning;
     private bool _tunModeActive;
     private TunnelMode _selectedMode = TunnelMode.Legacy;
+    private RuntimeWarningEvidence _runtimeWarning = RuntimeWarningEvidence.None;
+    private RuntimeWarningStrength _runtimeWarningStrength = RuntimeWarningStrength.None;
+    private bool _observedSuccessfulOutboundVlessActivity;
     private int _singBoxRestartAttempts;
     private readonly SemaphoreSlim _captureLock = new(1, 1);
     private CancellationToken _stoppingToken;
@@ -77,6 +80,7 @@ public sealed class OrchestratorService : BackgroundService
                 return;
             }
 
+            ResetRuntimeWarningEvidence();
             _pipeServer.PushLogLine("service", "Info", "Starting tunnel...");
 
             var config = await _configStore.LoadAsync();
@@ -268,6 +272,7 @@ public sealed class OrchestratorService : BackgroundService
             await _singBoxManager.StopAsync(_stoppingToken);
 
             _captureRunning = false;
+            ResetRuntimeWarningEvidence();
             _pipeServer.PushLogLine("service", "Info", "Tunnel stopped.");
             PushCurrentStatus();
         }
@@ -310,7 +315,14 @@ public sealed class OrchestratorService : BackgroundService
         };
 
         _singBoxManager.LogLine += (_, line) =>
+        {
+            if (HandleRuntimeWarningEvidence(line))
+            {
+                PushCurrentStatus();
+            }
+
             _pipeServer.PushLogLine("singbox", "Info", line);
+        };
     }
 
     private void WirePipeHandlers()
@@ -388,7 +400,8 @@ public sealed class OrchestratorService : BackgroundService
             TunnelInterfaceUp = summary.TunnelInterfaceUp,
             ProxyRuleCount = summary.ProxyRuleCount,
             DirectRuleCount = summary.DirectRuleCount,
-            BlockRuleCount = summary.BlockRuleCount
+            BlockRuleCount = summary.BlockRuleCount,
+            RuntimeWarning = summary.RuntimeWarning
         };
     }
 
@@ -403,7 +416,8 @@ public sealed class OrchestratorService : BackgroundService
             selectedMode,
             _captureRunning,
             _tunModeActive,
-            _singBoxManager.GetStatus());
+            _singBoxManager.GetStatus(),
+            _runtimeWarning);
     }
 
     private TunnelMode GetEffectiveStatusMode()
@@ -448,7 +462,8 @@ public sealed class OrchestratorService : BackgroundService
         TunnelMode selectedMode,
         bool captureRunning,
         bool tunModeActive,
-        SingBoxStatus singBoxStatus)
+        SingBoxStatus singBoxStatus,
+        RuntimeWarningEvidence runtimeWarning = RuntimeWarningEvidence.None)
     {
         var activeProfile = config.ActiveProfileId is null
             ? null
@@ -488,7 +503,8 @@ public sealed class OrchestratorService : BackgroundService
             ActiveProfileName: activeProfile?.Name,
             ProxyRuleCount: proxyRuleCount,
             DirectRuleCount: directRuleCount,
-            BlockRuleCount: blockRuleCount);
+            BlockRuleCount: blockRuleCount,
+            RuntimeWarning: runtimeWarning);
     }
 
     private static StatusPayload ToStatusPayload(ServiceStatusSummary summary) => new()
@@ -502,7 +518,8 @@ public sealed class OrchestratorService : BackgroundService
         ActiveProfileName = summary.ActiveProfileName,
         ProxyRuleCount = summary.ProxyRuleCount,
         DirectRuleCount = summary.DirectRuleCount,
-        BlockRuleCount = summary.BlockRuleCount
+        BlockRuleCount = summary.BlockRuleCount,
+        RuntimeWarning = summary.RuntimeWarning
     };
 
     private static TunnelStatusMode MapTunnelStatusMode(TunnelMode selectedMode) =>
@@ -521,6 +538,171 @@ public sealed class OrchestratorService : BackgroundService
                 _ => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "direct")
             })
             .ToArray();
+
+    internal static RuntimeWarningDetail ClassifyRuntimeWarningDetail(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return RuntimeWarningDetail.None;
+        }
+
+        var normalized = line.ToLowerInvariant();
+
+        if (ContainsAny(
+                normalized,
+                "authentication failed",
+                "invalid user",
+                "invalid uuid",
+                "unauthorized",
+                "forbidden",
+                "user disabled",
+                "account disabled",
+                "permission denied"))
+        {
+            return RuntimeWarningDetail.AuthenticationFailure;
+        }
+
+        if (ContainsAny(
+                normalized,
+                "connection refused",
+                "network is unreachable",
+                "host is unreachable",
+                "no route to host",
+                "i/o timeout",
+                "timed out",
+                "context deadline exceeded",
+                "handshake failure",
+                "remote error: tls",
+                "bad certificate",
+                "first record does not look like a tls handshake"))
+        {
+            return RuntimeWarningDetail.StrongConnectionProblem;
+        }
+
+        if (ContainsAny(
+                normalized,
+                "connection reset by peer",
+                "forcibly closed by the remote host",
+                "wsarecv",
+                "download closed",
+                "upload closed"))
+        {
+            return RuntimeWarningDetail.WeakConnectionNoise;
+        }
+
+        return RuntimeWarningDetail.None;
+    }
+
+    internal static bool IsSuccessfulOutboundVlessActivity(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return false;
+        }
+
+        var normalized = line.ToLowerInvariant();
+        if (!normalized.Contains("outbound/vless"))
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            normalized,
+            "outbound connection to",
+            "connection to",
+            "connected to");
+    }
+
+    internal static RuntimeWarningEvidence MapRuntimeWarningEvidence(RuntimeWarningDetail detail) => detail switch
+    {
+        RuntimeWarningDetail.AuthenticationFailure => RuntimeWarningEvidence.AuthenticationFailure,
+        RuntimeWarningDetail.StrongConnectionProblem => RuntimeWarningEvidence.ConnectionProblem,
+        RuntimeWarningDetail.WeakConnectionNoise => RuntimeWarningEvidence.ConnectionProblem,
+        _ => RuntimeWarningEvidence.None
+    };
+
+    internal static RuntimeWarningStrength GetRuntimeWarningStrength(RuntimeWarningDetail detail) => detail switch
+    {
+        RuntimeWarningDetail.AuthenticationFailure => RuntimeWarningStrength.Strong,
+        RuntimeWarningDetail.StrongConnectionProblem => RuntimeWarningStrength.Strong,
+        RuntimeWarningDetail.WeakConnectionNoise => RuntimeWarningStrength.Weak,
+        _ => RuntimeWarningStrength.None
+    };
+
+    private bool HandleRuntimeWarningEvidence(string line)
+    {
+        if (IsSuccessfulOutboundVlessActivity(line))
+        {
+            _observedSuccessfulOutboundVlessActivity = true;
+            if (_runtimeWarning == RuntimeWarningEvidence.ConnectionProblem &&
+                _runtimeWarningStrength == RuntimeWarningStrength.Weak)
+            {
+                ClearRuntimeWarningEvidence();
+                return true;
+            }
+
+            return false;
+        }
+
+        var detail = ClassifyRuntimeWarningDetail(line);
+        if (detail == RuntimeWarningDetail.None)
+        {
+            return false;
+        }
+
+        var warning = MapRuntimeWarningEvidence(detail);
+        var strength = GetRuntimeWarningStrength(detail);
+
+        if (warning == RuntimeWarningEvidence.AuthenticationFailure)
+        {
+            return SetRuntimeWarningEvidence(warning, strength);
+        }
+
+        if (strength == RuntimeWarningStrength.Weak && _observedSuccessfulOutboundVlessActivity)
+        {
+            return false;
+        }
+
+        return SetRuntimeWarningEvidence(warning, strength);
+    }
+
+    private bool SetRuntimeWarningEvidence(RuntimeWarningEvidence warning, RuntimeWarningStrength strength)
+    {
+        if (warning == RuntimeWarningEvidence.None)
+        {
+            return false;
+        }
+
+        if (_runtimeWarning == RuntimeWarningEvidence.AuthenticationFailure &&
+            _runtimeWarningStrength == RuntimeWarningStrength.Strong)
+        {
+            return false;
+        }
+
+        if (_runtimeWarning == warning && _runtimeWarningStrength >= strength)
+        {
+            return false;
+        }
+
+        _runtimeWarning = warning;
+        _runtimeWarningStrength = strength;
+        return true;
+    }
+
+    private void ResetRuntimeWarningEvidence()
+    {
+        ClearRuntimeWarningEvidence();
+        _observedSuccessfulOutboundVlessActivity = false;
+    }
+
+    private void ClearRuntimeWarningEvidence()
+    {
+        _runtimeWarning = RuntimeWarningEvidence.None;
+        _runtimeWarningStrength = RuntimeWarningStrength.None;
+    }
+
+    private static bool ContainsAny(string text, params string[] values) =>
+        values.Any(value => text.Contains(value, StringComparison.Ordinal));
 }
 
 internal readonly record struct ServiceStatusSummary(
@@ -533,10 +715,26 @@ internal readonly record struct ServiceStatusSummary(
     string? ActiveProfileName,
     int ProxyRuleCount,
     int DirectRuleCount,
-    int BlockRuleCount);
+    int BlockRuleCount,
+    RuntimeWarningEvidence RuntimeWarning);
 
 internal readonly record struct TunPolicySummary(
     string AppPath,
     RuleMode RuleMode,
     string MappedAction,
     string? MappedOutbound);
+
+internal enum RuntimeWarningDetail
+{
+    None,
+    AuthenticationFailure,
+    StrongConnectionProblem,
+    WeakConnectionNoise
+}
+
+internal enum RuntimeWarningStrength
+{
+    None = 0,
+    Weak = 1,
+    Strong = 2
+}

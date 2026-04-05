@@ -42,4 +42,8 @@ public record StatePayload
 
     [JsonPropertyName("blockRuleCount")]
     public int BlockRuleCount { get; init; }
+
+    [JsonPropertyName("runtimeWarning")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RuntimeWarningEvidence RuntimeWarning { get; init; }
 }
