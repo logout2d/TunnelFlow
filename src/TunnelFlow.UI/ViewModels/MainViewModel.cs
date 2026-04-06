@@ -16,7 +16,17 @@ public partial class MainViewModel : ObservableObject
     private readonly LocalConfigSnapshotLoader _configLoader;
     private readonly IServiceControlManager _serviceControlManager;
     private readonly Func<string, string, bool> _confirmServiceAction;
+    private readonly Func<string, object?, CancellationToken, Task<JsonElement?>> _sendCommandAsync;
+    private readonly Action _disposeClient;
+    private readonly TimeSpan _ownerHeartbeatInterval;
     private bool _waitingForServiceLogged;
+    private Task? _shutdownTask;
+    private TaskCompletionSource<bool>? _lifecycleWaiter;
+    private Func<bool>? _lifecycleWaitPredicate;
+    private CancellationTokenSource? _ownerHeartbeatCts;
+    private Task? _ownerHeartbeatTask;
+    private string? _activeOwnerSessionId;
+    private int _ownerHeartbeatLoopVersion;
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -26,6 +36,7 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private bool _captureRunning;
+    [ObservableProperty] private TunnelLifecycleState _lifecycleState = TunnelLifecycleState.Stopped;
     [ObservableProperty] private string _singBoxStatus = "Stopped";
     [ObservableProperty] private TunnelStatusMode _selectedMode = TunnelStatusMode.Legacy;
     [ObservableProperty] private bool _singBoxRunning;
@@ -107,13 +118,20 @@ public partial class MainViewModel : ObservableObject
         ServiceClient client,
         LocalConfigSnapshotLoader? configLoader = null,
         IServiceControlManager? serviceControlManager = null,
-        Func<string, string, bool>? confirmServiceAction = null)
+        Func<string, string, bool>? confirmServiceAction = null,
+        Func<string, object?, CancellationToken, Task<JsonElement?>>? sendCommandAsync = null,
+        Action? disposeClient = null,
+        TimeSpan? ownerHeartbeatInterval = null)
     {
         _client = client;
         _configLoader = configLoader ?? new LocalConfigSnapshotLoader();
         _serviceControlManager = serviceControlManager ?? new WindowsServiceControlManager();
         _confirmServiceAction = confirmServiceAction ?? ((message, title) =>
             MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes);
+        _sendCommandAsync = sendCommandAsync ?? ((type, payload, cancellationToken) =>
+            _client.SendCommandAsync(type, payload, cancellationToken));
+        _disposeClient = disposeClient ?? _client.Dispose;
+        _ownerHeartbeatInterval = ownerHeartbeatInterval ?? TimeSpan.FromSeconds(5);
 
         AppRules = new AppRulesViewModel(client);
         Profile = new ProfileViewModel(client);
@@ -152,6 +170,8 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(EngineStatusSummary));
         OnPropertyChanged(nameof(TunnelStatusSummary));
         UpdateConfigEditingState();
+        UpdateOwnerHeartbeatLoop();
+        TryCompleteLifecycleWait();
     }
 
     partial void OnCaptureRunningChanged(bool value)
@@ -162,6 +182,14 @@ public partial class MainViewModel : ObservableObject
         _uninstallServiceCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ShowUninstallServiceAction));
         UpdateConfigEditingState();
+    }
+
+    partial void OnLifecycleStateChanged(TunnelLifecycleState value)
+    {
+        _startCmd.NotifyCanExecuteChanged();
+        _stopCmd.NotifyCanExecuteChanged();
+        UpdateOwnerHeartbeatLoop();
+        TryCompleteLifecycleWait();
     }
 
     partial void OnSelectedModeChanged(TunnelStatusMode value)
@@ -317,7 +345,10 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            await _client.SendCommandAsync("StartCapture", null, CancellationToken.None);
+            await _sendCommandAsync(
+                "StartCapture",
+                new StartCapturePayload { OwnerSessionId = _client.SessionId },
+                CancellationToken.None);
             Log.AddLine("ui", "Info", "Start capture requested");
         }
         catch (Exception ex)
@@ -330,7 +361,7 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            await _client.SendCommandAsync("StopCapture", null, CancellationToken.None);
+            await _sendCommandAsync("StopCapture", null, CancellationToken.None);
             Log.AddLine("ui", "Info", "Stop capture requested");
         }
         catch (Exception ex)
@@ -341,7 +372,9 @@ public partial class MainViewModel : ObservableObject
 
     internal void ApplyStatePayload(StatePayload state)
     {
+        _activeOwnerSessionId = state.ActiveOwnerSessionId;
         CaptureRunning = state.CaptureRunning;
+        LifecycleState = state.LifecycleState;
         SingBoxStatus = state.SingBoxStatus.ToString();
         SelectedMode = state.SelectedMode;
         SingBoxRunning = state.SingBoxRunning;
@@ -353,11 +386,14 @@ public partial class MainViewModel : ObservableObject
         DirectRuleCount = state.DirectRuleCount;
         BlockRuleCount = state.BlockRuleCount;
         RuntimeWarning = state.RuntimeWarning;
+        UpdateOwnerHeartbeatLoop();
     }
 
     internal void ApplyStatusPayload(StatusPayload status)
     {
+        _activeOwnerSessionId = status.ActiveOwnerSessionId;
         CaptureRunning = status.CaptureRunning;
+        LifecycleState = status.LifecycleState;
         SingBoxStatus = status.SingBoxStatus.ToString();
         SelectedMode = status.SelectedMode;
         SingBoxRunning = status.SingBoxRunning;
@@ -369,6 +405,7 @@ public partial class MainViewModel : ObservableObject
         DirectRuleCount = status.DirectRuleCount;
         BlockRuleCount = status.BlockRuleCount;
         RuntimeWarning = status.RuntimeWarning;
+        UpdateOwnerHeartbeatLoop();
     }
 
     internal void ApplyOfflineConfigSnapshot(LocalConfigSnapshot snapshot)
@@ -458,12 +495,22 @@ public partial class MainViewModel : ObservableObject
 
     private void ApplyServiceUnavailableRuntimeState()
     {
+        _activeOwnerSessionId = null;
         CaptureRunning = false;
         SingBoxRunning = false;
         TunnelInterfaceUp = false;
         SingBoxStatus = "Unavailable";
         RuntimeWarning = RuntimeWarningEvidence.None;
+        UpdateOwnerHeartbeatLoop();
         UpdateConfigEditingState();
+    }
+
+    internal bool RequiresGracefulShutdown => LifecycleState != TunnelLifecycleState.Stopped;
+
+    internal Task ShutdownForApplicationExitAsync()
+    {
+        _shutdownTask ??= ShutdownForApplicationExitCoreAsync();
+        return _shutdownTask;
     }
 
     internal async Task RequestServiceActionAsync()
@@ -671,6 +718,78 @@ public partial class MainViewModel : ObservableObject
         Profile.IsServiceConnected = IsConnected;
     }
 
+    private void UpdateOwnerHeartbeatLoop()
+    {
+        if (ShouldRunOwnerHeartbeatLoop())
+        {
+            EnsureOwnerHeartbeatLoop();
+            return;
+        }
+
+        StopOwnerHeartbeatLoop();
+    }
+
+    private bool ShouldRunOwnerHeartbeatLoop() =>
+        IsConnected &&
+        LifecycleState != TunnelLifecycleState.Stopped &&
+        !string.IsNullOrWhiteSpace(_activeOwnerSessionId) &&
+        string.Equals(_activeOwnerSessionId, _client.SessionId, StringComparison.Ordinal);
+
+    private void EnsureOwnerHeartbeatLoop()
+    {
+        if (_ownerHeartbeatTask is { IsCompleted: false })
+        {
+            return;
+        }
+
+        _ownerHeartbeatCts?.Dispose();
+        _ownerHeartbeatCts = new CancellationTokenSource();
+        var loopVersion = ++_ownerHeartbeatLoopVersion;
+        _ownerHeartbeatTask = RunOwnerHeartbeatLoopAsync(loopVersion, _ownerHeartbeatCts.Token);
+    }
+
+    private void StopOwnerHeartbeatLoop()
+    {
+        _ownerHeartbeatLoopVersion++;
+        _ownerHeartbeatCts?.Cancel();
+        _ownerHeartbeatCts?.Dispose();
+        _ownerHeartbeatCts = null;
+        _ownerHeartbeatTask = null;
+    }
+
+    private async Task RunOwnerHeartbeatLoopAsync(int loopVersion, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested && loopVersion == _ownerHeartbeatLoopVersion)
+            {
+                if (ShouldRunOwnerHeartbeatLoop() && loopVersion == _ownerHeartbeatLoopVersion)
+                {
+                    try
+                    {
+                        await _sendCommandAsync(
+                            "OwnerHeartbeat",
+                            new OwnerHeartbeatPayload { OwnerSessionId = _client.SessionId },
+                            cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    catch (Exception ex) when (IsConnected)
+                    {
+                        Log.AddLine("ui", "Debug", $"Owner heartbeat failed: {ex.Message}");
+                    }
+                }
+
+                await Task.Delay(_ownerHeartbeatInterval, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
     private bool CanExecuteManageServiceAction()
     {
         if (PendingServiceAction != ServiceActionKind.None)
@@ -683,6 +802,84 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanExecuteUninstallServiceAction() =>
         IsServiceInstalled && !IsTunnelActive && PendingServiceAction == ServiceActionKind.None;
+
+    private async Task ShutdownForApplicationExitCoreAsync()
+    {
+        try
+        {
+            await WaitForStoppedLifecycleAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.AddLine("ui", "Error", $"Application shutdown coordination failed: {ex.Message}");
+        }
+        finally
+        {
+            StopOwnerHeartbeatLoop();
+            _disposeClient();
+        }
+    }
+
+    private async Task WaitForStoppedLifecycleAsync()
+    {
+        while (true)
+        {
+            if (!IsConnected)
+            {
+                return;
+            }
+
+            switch (LifecycleState)
+            {
+                case TunnelLifecycleState.Stopped:
+                    return;
+
+                case TunnelLifecycleState.Starting:
+                    await WaitForLifecycleConditionAsync(() =>
+                        !IsConnected || LifecycleState is TunnelLifecycleState.Running or TunnelLifecycleState.Stopped);
+                    continue;
+
+                case TunnelLifecycleState.Running:
+                    Log.AddLine("ui", "Info", "Stopping tunnel before application exit...");
+                    await _sendCommandAsync("StopCapture", null, CancellationToken.None);
+                    await WaitForLifecycleConditionAsync(() =>
+                        !IsConnected || LifecycleState == TunnelLifecycleState.Stopped);
+                    return;
+
+                case TunnelLifecycleState.Stopping:
+                    await WaitForLifecycleConditionAsync(() =>
+                        !IsConnected || LifecycleState == TunnelLifecycleState.Stopped);
+                    return;
+            }
+        }
+    }
+
+    private Task WaitForLifecycleConditionAsync(Func<bool> predicate)
+    {
+        if (predicate())
+        {
+            return Task.CompletedTask;
+        }
+
+        var waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _lifecycleWaitPredicate = predicate;
+        _lifecycleWaiter = waiter;
+        TryCompleteLifecycleWait();
+        return waiter.Task;
+    }
+
+    private void TryCompleteLifecycleWait()
+    {
+        if (_lifecycleWaiter is null || _lifecycleWaitPredicate is null || !_lifecycleWaitPredicate())
+        {
+            return;
+        }
+
+        var waiter = _lifecycleWaiter;
+        _lifecycleWaiter = null;
+        _lifecycleWaitPredicate = null;
+        waiter.TrySetResult(true);
+    }
 
     private static string GetServiceActionDisplayName(ServiceActionKind action) => action switch
     {

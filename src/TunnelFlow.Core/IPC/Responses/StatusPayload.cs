@@ -8,6 +8,10 @@ public record StatusPayload
     [JsonPropertyName("captureRunning")]
     public bool CaptureRunning { get; init; }
 
+    [JsonPropertyName("lifecycleState")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public TunnelLifecycleState LifecycleState { get; init; }
+
     [JsonPropertyName("singboxStatus")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public SingBoxStatus SingBoxStatus { get; init; }
@@ -26,6 +30,9 @@ public record StatusPayload
 
     [JsonPropertyName("activeProfileName")]
     public string? ActiveProfileName { get; init; }
+
+    [JsonPropertyName("activeOwnerSessionId")]
+    public string? ActiveOwnerSessionId { get; init; }
 
     [JsonPropertyName("proxyRuleCount")]
     public int ProxyRuleCount { get; init; }

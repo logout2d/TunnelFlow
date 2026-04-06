@@ -810,6 +810,164 @@ Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
 
+## Step 53
+Runtime connectivity warning evidence Phase 3: boundary-based reset behavior.
+Status: completed
+Scope:
+- narrow warning-lifetime refinement only
+- no runtime/TUN changes
+- no healthy/connectivity semantics
+Outcome:
+- added explicit safe reset boundaries for structured warning evidence:
+  - start attempt
+  - stop
+  - sing-box restarting
+  - sing-box stopped
+  - sing-box crashed
+  - UI service-unavailable/offline boundary
+- kept strong warning evidence within a single active runtime session
+- avoided timer-based aging or a broader health engine
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 54
+Runtime connectivity warning evidence: stop clearing weak warnings from bare outbound VLESS connection-start lines.
+Status: completed
+Scope:
+- narrow classifier refinement only
+- no runtime/TUN changes
+- no healthy/connectivity semantics
+Outcome:
+- removed the optimistic success heuristic that treated bare `outbound/vless ... connection to ...` lines as enough to clear weak warning evidence
+- weak `Connection problem` evidence now remains until an explicit reset boundary occurs
+- strong auth and strong connection-failure classification remain unchanged
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 55
+Runtime connectivity warning evidence: add temporary propagation diagnostics.
+Status: completed
+Scope:
+- diagnostics only
+- no warning semantic changes
+- no runtime/TUN changes
+Outcome:
+- added temporary service log lines when warning evidence is:
+  - set by classifier
+  - cleared/reset at runtime boundaries
+  - present in a pushed status payload
+- diagnostics are explicit enough to confirm whether classifier, reset, or payload propagation fired
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+
+## Step 56
+Persistent service-side file log.
+Status: completed
+Scope:
+- diagnostics/logging only
+- no runtime/TUN changes
+Outcome:
+- added a persistent `TunnelFlow.Service` log file at:
+  - `C:\ProgramData\TunnelFlow\logs\service.log`
+- service-side orchestration/status/error logs now persist alongside `singbox.log`
+- kept existing logging behavior and added only a small file sink
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+
+## Step 57
+Runtime connectivity warning evidence: repeated weak transport-close aggregation.
+Status: completed
+Scope:
+- narrow classifier refinement only
+- no runtime/TUN changes
+- no healthy/connectivity semantics
+Outcome:
+- added a small per-session weak-evidence counter
+- threshold `2` weak close/reset lines now raises `Connection problem`
+- one isolated weak close/reset line still does not warn
+- preserved strict auth classification and strong connection classification
+- reset weak aggregation on the existing safe runtime boundaries
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 58
+Tunnel lifecycle hardening: focused validation repair after stricter TUN prerequisite gating.
+Status: completed
+Scope:
+- keep the new lifecycle semantics intact
+- fix the failing focused overlap tests without weakening them
+- no new runtime/TUN behavior changes beyond the already-intended lifecycle hardening
+Outcome:
+- confirmed the service-side lifecycle model was not the direct cause of the three focused test failures
+- found the actual issue in the focused harness:
+  - the fake TUN orchestrator claimed activation support but exposed a non-existent `ResolvedWintunPath`
+  - the stricter TUN prerequisite check therefore blocked `StartCaptureAsync` before fake TUN/sing-box calls occurred
+- updated the harness to create and use a temporary fake `wintun.dll` path so the lifecycle tests exercise the intended `Starting` / `Stopping` overlap behavior
+- removed a no-op fake-event warning so the focused build stays clean
+- validated that the overlap/ordering tests now pass with the intended lifecycle semantics still in place:
+  - start allowed only from `Stopped`
+  - stop allowed only from `Running`
+  - overlapping start during `Starting` or `Stopping` fails closed immediately
+  - stop order remains `sing-box` first, then TUN
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 59
+UI graceful shutdown flow for active tunnel sessions.
+Status: completed
+Scope:
+- narrow UI shutdown hardening only
+- no owner/lease/heartbeat yet
+- no runtime/TUN behavior changes
+Outcome:
+- `MainViewModel` now tracks the service `LifecycleState` from state/status payloads
+- closing the main window while lifecycle is not fully `Stopped` now:
+  - cancels the first close
+  - runs an async shutdown flow
+  - requests `StopCapture` only when lifecycle is `Running`
+  - waits on real lifecycle transitions for `Starting` / `Stopping`
+  - disposes the client cleanly before allowing the final close
+- duplicate close/shutdown flows are now blocked in `MainWindow`
+- `ServiceClient.Dispose()` is now explicit and idempotent so pending pipe/connect resources are torn down cleanly
+- removed the old synchronous `App.OnExit` stop path that could fight the new close flow
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 60
+Tunnel owner lease / heartbeat for non-graceful UI termination, plus reconnect-hang repair.
+Status: completed
+Scope:
+- narrow owner/lease/heartbeat only
+- no broad IPC refactor
+- preserve graceful shutdown behavior
+Outcome:
+- added a stable `SessionId` on `ServiceClient`
+- `StartCapture` now carries `ownerSessionId`
+- added `OwnerHeartbeat` IPC command/payload
+- service now tracks:
+  - active owner session id
+  - last heartbeat time
+- UI now sends heartbeats every `5s` while it owns the active tunnel session
+- service now expires the owner lease after `15s` without heartbeat and then performs the normal controlled tunnel stop path
+- added owner session propagation in `StatePayload` / `StatusPayload`
+- preserved owner session across service-side profile-activation restart while already running
+- reconnect hang root cause was validated as a test cleanup issue:
+  - the reconnect heartbeat test called graceful shutdown while still leaving lifecycle at `Running`
+  - no `Stopped` payload was ever applied, so shutdown waited forever by design
+- narrow reconnect-lifecycle repair applied:
+  - test now supplies a final `Stopped` status before cleanup
+  - heartbeat loop restart now uses loop-version invalidation so canceled loops cannot continue sending after reconnect replacement
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests.ApplyStatePayload_WhenOwnedTunnelReconnects_RestartsHeartbeatLoop" --blame-hang --blame-hang-timeout 15s --logger "console;verbosity=minimal"`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --blame-hang --blame-hang-timeout 20s --logger "console;verbosity=minimal"`
+
 ## Step 49
 Subscription status display cleanup: remove persistent import/update text from under the Import URL row.
 Status: in progress

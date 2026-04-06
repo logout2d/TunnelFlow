@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TunnelFlow.Core.IPC.Responses;
 using TunnelFlow.Core.Models;
 using TunnelFlow.UI.Services;
@@ -231,6 +232,44 @@ public class MainViewModelTests
 
         Assert.True(viewModel.ShowRuntimeWarning);
         Assert.Equal("Connection problem", viewModel.RuntimeWarningSummary);
+    }
+
+    [Fact]
+    public void ApplyStatePayload_WhenNewSnapshotHasNoWarning_ClearsPreviousWarning()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client);
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = true,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true,
+            RuntimeWarning = RuntimeWarningEvidence.AuthenticationFailure
+        });
+
+        Assert.True(viewModel.ShowRuntimeWarning);
+
+        viewModel.ApplyStatePayload(new StatePayload
+        {
+            Rules = Array.Empty<AppRule>(),
+            Profiles = Array.Empty<VlessProfile>(),
+            CaptureRunning = false,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false,
+            ProxyRuleCount = 0,
+            DirectRuleCount = 0,
+            BlockRuleCount = 0,
+            RuntimeWarning = RuntimeWarningEvidence.None
+        });
+
+        Assert.False(viewModel.ShowRuntimeWarning);
+        Assert.Equal(string.Empty, viewModel.RuntimeWarningSummary);
     }
 
     [Fact]
@@ -649,6 +688,350 @@ public class MainViewModelTests
 
         Assert.Equal("Uninstall failed", viewModel.ServiceActionStatus);
         Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Delete failed with raw details."));
+    }
+
+    [Fact]
+    public async Task ShutdownForApplicationExitAsync_WhenLifecycleIsStopped_DisposesClientWithoutStopRequest()
+    {
+        using var client = new ServiceClient();
+        var sendCalls = 0;
+        var disposeCalls = 0;
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (_, _, _) =>
+            {
+                sendCalls++;
+                return Task.FromResult<JsonElement?>(null);
+            },
+            disposeClient: () => disposeCalls++);
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        await viewModel.ShutdownForApplicationExitAsync();
+
+        Assert.Equal(0, sendCalls);
+        Assert.Equal(1, disposeCalls);
+    }
+
+    [Fact]
+    public async Task ShutdownForApplicationExitAsync_WhenRunning_StopsThenWaitsForStoppedBeforeDispose()
+    {
+        using var client = new ServiceClient();
+        var stopRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopReply = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCalls = 0;
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                Assert.Equal("StopCapture", type);
+                stopRequested.TrySetResult();
+                return stopReply.Task;
+            },
+            disposeClient: () => disposeCalls++);
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = true,
+            LifecycleState = TunnelLifecycleState.Running,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true
+        });
+
+        var shutdownTask = viewModel.ShutdownForApplicationExitAsync();
+        await stopRequested.Task;
+
+        Assert.False(shutdownTask.IsCompleted);
+        Assert.Equal(0, disposeCalls);
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        Assert.False(shutdownTask.IsCompleted);
+
+        stopReply.SetResult(null);
+        await shutdownTask;
+
+        Assert.Equal(1, disposeCalls);
+        Assert.Contains(viewModel.Log.Lines, line => line.Message == "Stopping tunnel before application exit...");
+    }
+
+    [Fact]
+    public async Task ShutdownForApplicationExitAsync_WhenStarting_WaitsForRunningThenStops()
+    {
+        using var client = new ServiceClient();
+        var stopRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopReply = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCalls = 0;
+        var stopCalls = 0;
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                stopCalls++;
+                Assert.Equal("StopCapture", type);
+                stopRequested.TrySetResult();
+                return stopReply.Task;
+            },
+            disposeClient: () => disposeCalls++);
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Starting,
+            SingBoxStatus = SingBoxStatus.Starting,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        var shutdownTask = viewModel.ShutdownForApplicationExitAsync();
+
+        Assert.Equal(0, stopCalls);
+        Assert.False(shutdownTask.IsCompleted);
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = true,
+            LifecycleState = TunnelLifecycleState.Running,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true
+        });
+
+        await stopRequested.Task;
+        Assert.Equal(1, stopCalls);
+        Assert.Equal(0, disposeCalls);
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        stopReply.SetResult(null);
+        await shutdownTask;
+
+        Assert.Equal(1, disposeCalls);
+    }
+
+    [Fact]
+    public async Task ShutdownForApplicationExitAsync_WhenCalledTwice_ReusesSingleFlow()
+    {
+        using var client = new ServiceClient();
+        var stopRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopReply = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCalls = 0;
+        var stopCalls = 0;
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                stopCalls++;
+                Assert.Equal("StopCapture", type);
+                stopRequested.TrySetResult();
+                return stopReply.Task;
+            },
+            disposeClient: () => disposeCalls++);
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = true,
+            LifecycleState = TunnelLifecycleState.Running,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true
+        });
+
+        var first = viewModel.ShutdownForApplicationExitAsync();
+        var second = viewModel.ShutdownForApplicationExitAsync();
+
+        await stopRequested.Task;
+
+        Assert.Same(first, second);
+        Assert.Equal(1, stopCalls);
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        stopReply.SetResult(null);
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(1, disposeCalls);
+    }
+
+    [Fact]
+    public async Task ApplyStatusPayload_WhenOwnedTunnelIsRunning_StartsHeartbeatLoop()
+    {
+        using var client = new ServiceClient();
+        var sentCommands = new List<string>();
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                lock (sentCommands)
+                {
+                    sentCommands.Add(type);
+                }
+
+                return Task.FromResult<JsonElement?>(null);
+            },
+            ownerHeartbeatInterval: TimeSpan.FromMilliseconds(20))
+        {
+            IsConnected = true
+        };
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = true,
+            LifecycleState = TunnelLifecycleState.Running,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true,
+            ActiveOwnerSessionId = client.SessionId
+        });
+
+        await Task.Delay(70);
+
+        lock (sentCommands)
+        {
+            Assert.Contains("OwnerHeartbeat", sentCommands);
+        }
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false,
+            ActiveOwnerSessionId = null
+        });
+
+        await viewModel.ShutdownForApplicationExitAsync();
+    }
+
+    [Fact]
+    public async Task ApplyStatePayload_WhenOwnedTunnelReconnects_RestartsHeartbeatLoop()
+    {
+        using var client = new ServiceClient();
+        var sentCommands = new List<string>();
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                lock (sentCommands)
+                {
+                    sentCommands.Add(type);
+                }
+
+                return Task.FromResult<JsonElement?>(null);
+            },
+            ownerHeartbeatInterval: TimeSpan.FromMilliseconds(20));
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = true,
+            LifecycleState = TunnelLifecycleState.Running,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true,
+            ActiveOwnerSessionId = client.SessionId
+        });
+
+        await Task.Delay(50);
+        viewModel.IsConnected = false;
+
+        int countAfterDisconnect;
+        lock (sentCommands)
+        {
+            countAfterDisconnect = sentCommands.Count(command => command == "OwnerHeartbeat");
+        }
+
+        await Task.Delay(50);
+
+        lock (sentCommands)
+        {
+            Assert.Equal(countAfterDisconnect, sentCommands.Count(command => command == "OwnerHeartbeat"));
+        }
+
+        viewModel.IsConnected = true;
+        viewModel.ApplyStatePayload(new StatePayload
+        {
+            Rules = Array.Empty<AppRule>(),
+            Profiles = Array.Empty<VlessProfile>(),
+            ActiveProfileId = null,
+            ActiveProfileName = null,
+            ActiveOwnerSessionId = client.SessionId,
+            CaptureRunning = true,
+            LifecycleState = TunnelLifecycleState.Running,
+            SingBoxStatus = SingBoxStatus.Running,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = true,
+            TunnelInterfaceUp = true,
+            ProxyRuleCount = 0,
+            DirectRuleCount = 0,
+            BlockRuleCount = 0,
+            RuntimeWarning = RuntimeWarningEvidence.None
+        });
+
+        await Task.Delay(50);
+
+        lock (sentCommands)
+        {
+            Assert.True(sentCommands.Count(command => command == "OwnerHeartbeat") > countAfterDisconnect);
+        }
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false,
+            ActiveOwnerSessionId = null
+        });
+
+        await viewModel.ShutdownForApplicationExitAsync();
     }
 
     [Fact]

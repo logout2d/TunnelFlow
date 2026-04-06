@@ -6,6 +6,99 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## Tunnel owner lease / heartbeat and reconnect-hang repair
+- Scope:
+  - narrow service/UI lifecycle hardening only
+  - add owner/lease/heartbeat for UI-started tunnel sessions
+  - keep graceful shutdown behavior intact
+  - no runtime/TUN behavior changes beyond controlled auto-stop on owner lease expiry
+- Owner/lease model added:
+  - `ServiceClient` now has a stable per-process/session id:
+    - `SessionId`
+  - `StartCapture` now carries:
+    - `ownerSessionId`
+  - service-side orchestration now associates a successfully started tunnel with that owner session
+  - UI sends periodic `OwnerHeartbeat` IPC commands while:
+    - connected
+    - lifecycle is not `Stopped`
+    - and the active tunnel owner session matches this client `SessionId`
+  - service tracks:
+    - active owner session id
+    - last heartbeat timestamp
+  - service auto-stop path:
+    - owner heartbeat interval chosen in UI: `5s`
+    - lease timeout chosen in service: `15s`
+    - expiry is checked on a small service-side `PeriodicTimer` loop
+    - on expiry, the service logs the event and runs the normal `StopCaptureAsync()` path
+- Payload/IPC updates:
+  - added `ActiveOwnerSessionId` to:
+    - `StatePayload`
+    - `StatusPayload`
+  - added `OwnerHeartbeat` IPC payload support in `PipeServer`
+  - `ActivateProfile` restart while already running now preserves the current owner session id across the internal stop/start sequence
+- Reconnect-hang root cause found during validation:
+  - the hanging UI test was not exposing a production deadlock in the reconnect heartbeat loop itself
+  - the test cleanup called `ShutdownForApplicationExitAsync()` while leaving the view-model in lifecycle state `Running`
+  - graceful shutdown correctly waits for a real `Stopped` transition before completing, so the test blocked forever because it never simulated that transition
+- Narrow reconnect/heartbeat lifecycle fix added:
+  - test cleanup now applies a final `Stopped` status before calling graceful shutdown
+  - heartbeat loop restart is now safer and more explicit in `MainViewModel`:
+    - added loop-version invalidation
+    - stopping the current heartbeat loop increments the version and cancels its CTS
+    - reconnect restart creates a fresh loop version so an old loop cannot continue sending after replacement
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests.ApplyStatePayload_WhenOwnedTunnelReconnects_RestartsHeartbeatLoop" --blame-hang --blame-hang-timeout 15s --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --blame-hang --blame-hang-timeout 20s --logger "console;verbosity=minimal"`
+    - passed: 71
+    - failed: 0
+    - skipped: 0
+
+## UI graceful shutdown flow for active tunnel sessions
+- Scope:
+  - narrow UI/client shutdown hardening only
+  - no owner/lease/heartbeat work
+  - no runtime/TUN behavior changes
+- Problem addressed:
+  - closing the UI while the tunnel was active could stop sing-box but still leave `TunnelFlow.UI.exe` hanging
+  - the old path relied on:
+    - `MainWindow.OnClosing -> Application.Current.Shutdown()`
+    - `App.OnExit` doing a synchronous `StopCapture` call
+  - the UI was not using the new service lifecycle state for close coordination
+- Changes made:
+  - `MainViewModel` now consumes `LifecycleState` from both `StatePayload` and `StatusPayload`
+  - added a narrow shutdown flow in `MainViewModel`:
+    - `ShutdownForApplicationExitAsync()`
+    - if lifecycle is `Starting`, wait for `Running` or `Stopped`
+    - if lifecycle is `Running`, request `StopCapture`
+    - if lifecycle is `Stopping`, wait for `Stopped`
+    - once shutdown coordination completes, dispose the client resources
+  - `MainWindow` now:
+    - cancels the first close when lifecycle is not fully stopped
+    - prevents duplicate overlapping close flows
+    - performs the async shutdown flow
+    - reissues the final close only once shutdown coordination is done
+  - `ServiceClient.Dispose()` is now more explicit and idempotent:
+    - cancels lifetime and connection CTS
+    - disposes writer and pipe
+    - clears pending requests
+    - marks the client disconnected
+  - `App.OnExit` no longer performs the old synchronous stop request and now only disposes the client as a fallback
+- Notes:
+  - shutdown coordination is intentionally lifecycle-boundary based, not sleep-based
+  - if the client is already disconnected, the UI falls back to local client disposal instead of waiting forever for a lifecycle transition it can no longer observe
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 31
+    - failed: 0
+    - skipped: 0
+
 ## TUN-only cleanup Phase 6: physical pruning of dead legacy capture files/assets
 - Implemented in this step:
   - physically removed the now-dead legacy capture/vendor directories after they had already been cut out of the active build graph
@@ -3457,5 +3550,222 @@ Google may still work in some fallback scenarios, while many other sites fail.
     - passed
   - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
     - passed: 42
+    - failed: 0
+    - skipped: 0
+
+## Runtime connectivity warning evidence - boundary-based reset rules
+- Refined warning lifetime to be less sticky using only safe runtime/session boundaries.
+- Existing warning model is unchanged:
+  - `Authentication failed`
+  - `Connection problem`
+- Warning evidence now resets at these clear boundaries:
+  - new start attempt (`StartCaptureAsync`)
+  - explicit tunnel stop (`StopCaptureAsync`)
+  - sing-box `Restarting`
+  - sing-box `Stopped`
+  - sing-box `Crashed`
+  - UI service-unavailable/offline state via `ApplyServiceUnavailableRuntimeState`
+- This means warnings are now cleared when a clearly new runtime session is beginning or when the current runtime session has ended.
+- Warnings intentionally still remain within the same active runtime session:
+  - strong auth evidence
+  - strong connection evidence
+  - unless the earlier anti-noise rule clears weak transport-close noise after later successful outbound VLESS activity
+- Exact files changed in this step:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 48
+    - failed: 0
+    - skipped: 0
+
+## Runtime connectivity warning evidence - weak-warning clearing refinement
+- Refined the anti-noise behavior to avoid clearing weak `Connection problem` evidence too optimistically.
+- Previous behavior:
+  - a bare sing-box line such as `outbound/vless[vless-out]: outbound connection to ...`
+  - or `outbound/vless[vless-out]: connected to ...`
+  - was treated as sufficient success evidence to clear/suppress weak connection warnings
+- New behavior:
+  - bare outbound VLESS connection-start lines are no longer treated as success evidence
+  - weak connection warnings now remain until a real reset boundary occurs
+  - no positive/healthy state is introduced
+- This means repeated weak noise such as:
+  - `connection download closed`
+  - `wsarecv`
+  - `forcibly closed by the remote host`
+  is no longer hidden just because sing-box also logged outbound connection attempts
+- Cases intentionally unchanged:
+  - strong auth/account evidence still maps to `Authentication failed`
+  - strong connection/transport evidence still maps to `Connection problem`
+  - warning reset still happens only on safe runtime boundaries such as start/stop/restarting/crashed/stopped/offline
+- Exact files changed in this step:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 46
+    - failed: 0
+    - skipped: 0
+
+## Runtime connectivity warning evidence - temporary propagation diagnostics
+- Added a very small temporary service-side diagnostic trace to verify warning propagation without changing warning semantics.
+- New temporary service log lines now appear when:
+  - classifier sets warning evidence:
+    - `runtime-warning diag: set warning=..., strength=..., detail=...`
+  - reset/clear boundary removes warning evidence:
+    - `runtime-warning diag: clear warning=..., strength=..., reason=...`
+  - a pushed status payload still carries warning evidence:
+    - `runtime-warning diag: push warning=..., singBoxStatus=..., captureRunning=..., tunnelInterfaceUp=...`
+- The reset reasons currently logged include:
+  - `start-session`
+  - `stop-session`
+  - `singbox-status:Restarting`
+  - `singbox-status:Stopped`
+  - `singbox-status:Crashed`
+- This is intended only to determine whether:
+  - classifier fired
+  - reset fired
+  - payload push carried the warning
+- Exact files changed in this step:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+    - passed: 19
+    - failed: 0
+    - skipped: 0
+
+## Persistent service-side file log
+- Added a narrow persistent file logger for `TunnelFlow.Service` itself.
+- Log path:
+  - `C:\ProgramData\TunnelFlow\logs\service.log`
+- The service now persists the same host/service `ILogger` output that previously only went to default providers.
+- This makes it much easier to diagnose service-side orchestration behavior that is not present in `singbox.log`, including:
+  - sing-box status changes
+  - restart/crash transitions
+  - start/stop failures
+  - TUN activation failures
+  - other service/orchestration exceptions and warnings
+- Implementation notes:
+  - kept existing logging behavior intact and only added a narrow file sink
+  - writes plain appended text lines with timestamp, level, category, and exception details
+  - reuses the existing ProgramData `logs` area beside `singbox.log`
+  - no log rotation was added in this step
+- Exact files changed in this step:
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/Logging/ServiceFileLoggerProvider.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+
+## Runtime connectivity warning evidence - repeated weak close/reset aggregation
+- Refined the classifier so repeated weak transport-close evidence in the same active runtime session can raise a coarse `Connection problem` warning.
+- User-facing warnings remain unchanged:
+  - `Authentication failed`
+  - `Connection problem`
+- Weak evidence aggregation rule added:
+  - a single weak close/reset line is not enough
+  - threshold chosen: `2`
+  - on the second weak close/reset line in the same active runtime session, warning state becomes:
+    - `RuntimeWarningEvidence.ConnectionProblem`
+    - with weak warning strength internally
+- Weak evidence family now includes:
+  - `connection download closed`
+  - `connection upload closed`
+  - `packet download closed`
+  - `packet upload closed`
+  - `wsarecv`
+  - `forcibly closed by the remote host`
+  - `connection reset by peer`
+- Strong auth classification remains strict and now explicitly includes:
+  - `authentication failed`
+  - `message authentication failed`
+  - `invalid user`
+  - `invalid uuid`
+  - `unauthorized`
+  - `forbidden`
+  - `status code: 403`
+- Strong connection classification remains unchanged for explicit infrastructure/transport failures such as:
+  - `connection refused`
+  - `network is unreachable`
+  - `i/o timeout`
+  - `handshake failure`
+  - `remote error: tls`
+- Weak aggregation resets on the existing safe runtime boundaries already implemented:
+  - start
+  - stop
+  - sing-box restarting
+  - sing-box stopped
+  - sing-box crashed
+  - offline/service-unavailable UI boundary
+- Exact files changed in this step:
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+  - passed: 50
+  - failed: 0
+  - skipped: 0
+
+## Tunnel lifecycle hardening: validation repair for focused overlap tests
+- Scope:
+  - keep the new service-side lifecycle hardening semantics intact
+  - fix the focused validation failures without weakening the lifecycle tests
+  - no runtime/TUN behavior changes beyond the already-intended lifecycle gating and stop-order work
+- Actual root cause found:
+  - the new service lifecycle logic was already failing closed before overlap, but the focused test harness no longer satisfied the stricter TUN prerequisite check
+  - `FakeTunOrchestrator` advertised:
+    - `SupportsActivation = true`
+  - but it returned a non-existent `ResolvedWintunPath`
+  - `TunModeSelector.Select(...)` therefore correctly chose `Legacy`, and `GetTunOnlyStartBlockReason(...)` blocked `StartCaptureAsync` before any fake TUN or fake sing-box call happened
+  - that produced:
+    - empty call-order list `[]`
+    - timeout in tests waiting for fake `StartEntered` / `StopEntered` signals that never fired
+- Narrow fix applied:
+  - kept the service lifecycle implementation intact:
+    - explicit `TunnelLifecycleState`
+    - fail-closed `StartCaptureAsync` / `StopCaptureAsync` gating
+    - stop order remains `sing-box` first, then TUN
+  - updated the focused service test harness so it creates a temporary fake `wintun.dll` file and assigns that path to `FakeTunOrchestrator.ResolvedWintunPath`
+  - removed one no-op fake-event warning in the harness so validation stays clean
+- Result:
+  - the intended overlap tests now exercise the real lifecycle path:
+    - first start can enter `Starting`
+    - overlapping start during `Starting` fails closed immediately
+    - overlapping start during `Stopping` fails closed immediately
+    - normal stop order remains:
+      - `tun:start`
+      - `singbox:start`
+      - `singbox:stop`
+      - `tun:stop`
+- Exact files changed in this repair step:
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 61
     - failed: 0
     - skipped: 0

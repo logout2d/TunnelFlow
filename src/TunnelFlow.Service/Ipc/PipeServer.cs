@@ -50,8 +50,9 @@ public sealed class PipeServer
     public Func<VlessProfile, Task>? UpsertProfileHandler { get; set; }
     public Func<Guid, Task>? ActivateProfileHandler { get; set; }
     public Func<Guid, Task>? DeleteProfileHandler { get; set; }
-    public Func<Task>? StartCaptureHandler { get; set; }
+    public Func<string?, Task>? StartCaptureHandler { get; set; }
     public Func<Task>? StopCaptureHandler { get; set; }
+    public Func<string, Task>? OwnerHeartbeatHandler { get; set; }
     public PipeServer(ILogger<PipeServer> logger) => _logger = logger;
 
     public async Task StartAsync(CancellationToken ct)
@@ -309,7 +310,14 @@ public sealed class PipeServer
             case "StartCapture":
             {
                 if (StartCaptureHandler is null) return MakeError(cmd.Id, "NOT_READY", "Service not ready");
-                await StartCaptureHandler();
+                string? ownerSessionId = null;
+                if (cmd.Payload is not null)
+                {
+                    var payload = JsonSerializer.Deserialize<StartCapturePayload>(cmd.Payload.Value, _serializerOptions);
+                    ownerSessionId = payload?.OwnerSessionId;
+                }
+
+                await StartCaptureHandler(ownerSessionId);
                 return MakeOk(cmd.Id, null);
             }
 
@@ -317,6 +325,20 @@ public sealed class PipeServer
             {
                 if (StopCaptureHandler is null) return MakeError(cmd.Id, "NOT_READY", "Service not ready");
                 await StopCaptureHandler();
+                return MakeOk(cmd.Id, null);
+            }
+
+            case "OwnerHeartbeat":
+            {
+                if (OwnerHeartbeatHandler is null) return MakeError(cmd.Id, "NOT_READY", "Service not ready");
+                if (cmd.Payload is null) return MakeError(cmd.Id, "BAD_PAYLOAD", "Payload required");
+                var payload = JsonSerializer.Deserialize<OwnerHeartbeatPayload>(cmd.Payload.Value, _serializerOptions);
+                if (payload is null || string.IsNullOrWhiteSpace(payload.OwnerSessionId))
+                {
+                    return MakeError(cmd.Id, "BAD_PAYLOAD", "Invalid owner heartbeat payload");
+                }
+
+                await OwnerHeartbeatHandler(payload.OwnerSessionId);
                 return MakeOk(cmd.Id, null);
             }
 

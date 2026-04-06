@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TunnelFlow.Core;
+using TunnelFlow.Core.IPC.Messages;
 using TunnelFlow.Core.IPC.Responses;
 using TunnelFlow.Core.Models;
 using TunnelFlow.Service.Configuration;
@@ -18,15 +19,21 @@ public sealed class OrchestratorService : BackgroundService
     private readonly ILogger<OrchestratorService> _logger;
 
     private TunnelFlowConfig _config = new();
-    private bool _captureRunning;
+    private TunnelLifecycleState _lifecycleState = TunnelLifecycleState.Stopped;
     private bool _tunModeActive;
     private TunnelMode _selectedMode = TunnelMode.Legacy;
     private RuntimeWarningEvidence _runtimeWarning = RuntimeWarningEvidence.None;
     private RuntimeWarningStrength _runtimeWarningStrength = RuntimeWarningStrength.None;
-    private bool _observedSuccessfulOutboundVlessActivity;
+    private int _weakConnectionEvidenceCount;
     private int _singBoxRestartAttempts;
     private readonly SemaphoreSlim _captureLock = new(1, 1);
+    private readonly object _ownerLeaseGate = new();
     private CancellationToken _stoppingToken;
+    private string? _activeOwnerSessionId;
+    private DateTimeOffset? _activeOwnerHeartbeatUtc;
+
+    internal static readonly TimeSpan OwnerHeartbeatInterval = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan OwnerLeaseTimeout = TimeSpan.FromSeconds(15);
 
     private static readonly string DataDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TunnelFlow");
@@ -58,6 +65,7 @@ public sealed class OrchestratorService : BackgroundService
         WireEvents();
 
         var pipeTask = _pipeServer.StartAsync(stoppingToken);
+        var ownerLeaseTask = MonitorOwnerLeaseAsync(stoppingToken);
 
         if (_config.StartCaptureOnServiceStart && _config.ActiveProfileId is not null)
         {
@@ -66,46 +74,53 @@ public sealed class OrchestratorService : BackgroundService
         }
 
         PushCurrentStatus();
-        await pipeTask;
+        await Task.WhenAll(pipeTask, ownerLeaseTask);
     }
 
-    public async Task StartCaptureAsync()
+    public async Task StartCaptureAsync(string? ownerSessionId = null)
     {
+        var requestedState = ReadLifecycleState();
+        if (!CanStartCapture(requestedState))
+        {
+            _pipeServer.PushLogLine("service", "Warning", GetStartBlockedReason(requestedState));
+            return;
+        }
+
         await _captureLock.WaitAsync(_stoppingToken);
         try
         {
-            if (_captureRunning)
+            var lifecycleState = ReadLifecycleState();
+            if (!CanStartCapture(lifecycleState))
             {
-                _pipeServer.PushLogLine("service", "Warning", "Tunnel is already running.");
+                _pipeServer.PushLogLine("service", "Warning", GetStartBlockedReason(lifecycleState));
                 return;
             }
 
-            ResetRuntimeWarningEvidence();
+            SetLifecycleState(TunnelLifecycleState.Starting);
+            ResetRuntimeWarningEvidence("start-session");
             _pipeServer.PushLogLine("service", "Info", "Starting tunnel...");
+            PushCurrentStatus();
 
             var config = await _configStore.LoadAsync();
             _config = config;
 
             if (config.ActiveProfileId is null)
             {
-                _pipeServer.PushLogLine("service", "Error",
-                    "Cannot start: no active VLESS profile selected.");
+                AbortStart("Cannot start: no active VLESS profile selected.");
                 return;
             }
 
             var profile = config.Profiles.FirstOrDefault(p => p.Id == config.ActiveProfileId);
             if (profile is null)
             {
-                _pipeServer.PushLogLine("service", "Error",
-                    "Cannot start: active profile not found in config.");
+                AbortStart("Cannot start: active profile not found in config.");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(profile.ServerAddress) ||
                 string.IsNullOrWhiteSpace(profile.UserId))
             {
-                _pipeServer.PushLogLine("service", "Error",
-                    "Cannot start: profile is missing ServerAddress or UserId.");
+                AbortStart("Cannot start: profile is missing ServerAddress or UserId.");
                 return;
             }
 
@@ -119,8 +134,7 @@ public sealed class OrchestratorService : BackgroundService
 
             if (!File.Exists(singBoxExe))
             {
-                _pipeServer.PushLogLine("service", "Error",
-                    $"sing-box binary not found at: {singBoxExe}");
+                AbortStart($"sing-box binary not found at: {singBoxExe}");
                 _pipeServer.PushLogLine("service", "Error",
                     "Download sing-box.exe and place it in third_party/singbox/");
                 return;
@@ -149,7 +163,7 @@ public sealed class OrchestratorService : BackgroundService
                     tunModeSelection.SelectedMode,
                     tunModeSelection.SelectionReason,
                     tunModeSelection.WintunPath);
-                _pipeServer.PushLogLine("service", "Error", tunOnlyStartBlockReason);
+                AbortStart(tunOnlyStartBlockReason);
                 return;
             }
 
@@ -181,10 +195,7 @@ public sealed class OrchestratorService : BackgroundService
                     ex,
                     "TUN activation failed in TUN-only runtime wintunPath={WintunPath}",
                     tunModeSelection.WintunPath);
-                _pipeServer.PushLogLine(
-                    "service",
-                    "Error",
-                    $"Cannot start: TUN activation failed: {ex.Message}");
+                AbortStart($"Cannot start: TUN activation failed: {ex.Message}");
                 return;
             }
 
@@ -228,7 +239,8 @@ public sealed class OrchestratorService : BackgroundService
             _pipeServer.PushLogLine("service", "Info", $"Starting sing-box: {singBoxExe}");
             await _singBoxManager.StartAsync(profile, singBoxConfig, _stoppingToken);
 
-            _captureRunning = true;
+            SetLifecycleState(TunnelLifecycleState.Running);
+            AcquireTunnelOwner(ownerSessionId);
             _singBoxRestartAttempts = 0;
             _pipeServer.PushLogLine("service", "Info", "Tunnel started successfully.");
             PushCurrentStatus();
@@ -237,6 +249,7 @@ public sealed class OrchestratorService : BackgroundService
         {
             try
             {
+                await SafeStopSingBoxAsync();
                 if (_tunModeActive)
                 {
                     await _tunOrchestrator.StopAsync(_stoppingToken);
@@ -244,6 +257,7 @@ public sealed class OrchestratorService : BackgroundService
                 }
             }
             catch { }
+            SetLifecycleState(TunnelLifecycleState.Stopped);
             _logger.LogError(ex, "StartCaptureAsync failed");
             _pipeServer.PushLogLine("service", "Error",
                 $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
@@ -257,22 +271,37 @@ public sealed class OrchestratorService : BackgroundService
 
     public async Task StopCaptureAsync()
     {
+        var requestedState = ReadLifecycleState();
+        if (!CanStopCapture(requestedState))
+        {
+            _pipeServer.PushLogLine("service", "Warning", GetStopBlockedReason(requestedState));
+            return;
+        }
+
         await _captureLock.WaitAsync(_stoppingToken);
         try
         {
-            if (!_captureRunning)
+            var lifecycleState = ReadLifecycleState();
+            if (!CanStopCapture(lifecycleState))
+            {
+                _pipeServer.PushLogLine("service", "Warning", GetStopBlockedReason(lifecycleState));
                 return;
+            }
 
+            SetLifecycleState(TunnelLifecycleState.Stopping);
             _pipeServer.PushLogLine("service", "Info", "Stopping tunnel...");
+            PushCurrentStatus();
+
+            await _singBoxManager.StopAsync(_stoppingToken);
             if (_tunModeActive)
             {
                 await _tunOrchestrator.StopAsync(_stoppingToken);
                 _tunModeActive = false;
             }
-            await _singBoxManager.StopAsync(_stoppingToken);
 
-            _captureRunning = false;
-            ResetRuntimeWarningEvidence();
+            SetLifecycleState(TunnelLifecycleState.Stopped);
+            ResetRuntimeWarningEvidence("stop-session");
+            ClearTunnelOwner("stop-session");
             _pipeServer.PushLogLine("service", "Info", "Tunnel stopped.");
             PushCurrentStatus();
         }
@@ -293,6 +322,11 @@ public sealed class OrchestratorService : BackgroundService
         _singBoxManager.StatusChanged += (_, status) =>
         {
             _pipeServer.PushLogLine("service", "Info", $"sing-box status changed: {status}");
+
+            if (IsRuntimeWarningResetBoundary(status))
+            {
+                ResetRuntimeWarningEvidence($"singbox-status:{status}");
+            }
 
             switch (status)
             {
@@ -359,10 +393,11 @@ public sealed class OrchestratorService : BackgroundService
             _config.ActiveProfileId = profileId;
             await _configStore.SaveAsync(_config);
 
-            if (_captureRunning)
+            if (ReadLifecycleState() == TunnelLifecycleState.Running)
             {
+                var ownerSessionId = GetActiveOwnerSessionId();
                 await StopCaptureAsync();
-                await StartCaptureAsync();
+                await StartCaptureAsync(ownerSessionId);
             }
         };
 
@@ -380,8 +415,13 @@ public sealed class OrchestratorService : BackgroundService
             await _configStore.SaveAsync(_config);
         };
 
-        _pipeServer.StartCaptureHandler = () => StartCaptureAsync();
+        _pipeServer.StartCaptureHandler = ownerSessionId => StartCaptureAsync(ownerSessionId);
         _pipeServer.StopCaptureHandler = () => StopCaptureAsync();
+        _pipeServer.OwnerHeartbeatHandler = ownerSessionId =>
+        {
+            RefreshTunnelOwnerHeartbeat(ownerSessionId);
+            return Task.CompletedTask;
+        };
     }
 
     private StatePayload BuildStatePayload()
@@ -393,7 +433,9 @@ public sealed class OrchestratorService : BackgroundService
             Profiles = _config.Profiles,
             ActiveProfileId = summary.ActiveProfileId,
             ActiveProfileName = summary.ActiveProfileName,
+            ActiveOwnerSessionId = summary.ActiveOwnerSessionId,
             CaptureRunning = summary.CaptureRunning,
+            LifecycleState = summary.LifecycleState,
             SingBoxStatus = summary.SingBoxStatus,
             SelectedMode = summary.SelectedMode,
             SingBoxRunning = summary.SingBoxRunning,
@@ -405,24 +447,38 @@ public sealed class OrchestratorService : BackgroundService
         };
     }
 
-    private void PushCurrentStatus() =>
-        _pipeServer.PushStatusChanged(ToStatusPayload(BuildStatusSummary()));
+    private void PushCurrentStatus()
+    {
+        var payload = ToStatusPayload(BuildStatusSummary());
+        if (payload.RuntimeWarning != RuntimeWarningEvidence.None)
+        {
+            _pipeServer.PushLogLine(
+                "service",
+                "Debug",
+                $"runtime-warning diag: push warning={payload.RuntimeWarning}, singBoxStatus={payload.SingBoxStatus}, captureRunning={payload.CaptureRunning}, tunnelInterfaceUp={payload.TunnelInterfaceUp}");
+        }
+
+        _pipeServer.PushStatusChanged(payload);
+    }
 
     private ServiceStatusSummary BuildStatusSummary()
     {
-        var selectedMode = GetEffectiveStatusMode();
-        return BuildStatusSummary(
+        var lifecycleState = ReadLifecycleState();
+        var selectedMode = GetEffectiveStatusMode(lifecycleState);
+        var summary = BuildStatusSummary(
             _config,
+            lifecycleState,
             selectedMode,
-            _captureRunning,
             _tunModeActive,
             _singBoxManager.GetStatus(),
             _runtimeWarning);
+
+        return summary with { ActiveOwnerSessionId = GetActiveOwnerSessionId() };
     }
 
-    private TunnelMode GetEffectiveStatusMode()
+    private TunnelMode GetEffectiveStatusMode(TunnelLifecycleState lifecycleState)
     {
-        if (_captureRunning)
+        if (lifecycleState != TunnelLifecycleState.Stopped)
             return _selectedMode;
 
         return TunModeSelector.Select(
@@ -459,8 +515,8 @@ public sealed class OrchestratorService : BackgroundService
 
     internal static ServiceStatusSummary BuildStatusSummary(
         TunnelFlowConfig config,
+        TunnelLifecycleState lifecycleState,
         TunnelMode selectedMode,
-        bool captureRunning,
         bool tunModeActive,
         SingBoxStatus singBoxStatus,
         RuntimeWarningEvidence runtimeWarning = RuntimeWarningEvidence.None)
@@ -493,7 +549,8 @@ public sealed class OrchestratorService : BackgroundService
 
         return new ServiceStatusSummary(
             SelectedMode: MapTunnelStatusMode(selectedMode),
-            CaptureRunning: captureRunning,
+            CaptureRunning: lifecycleState is TunnelLifecycleState.Running or TunnelLifecycleState.Stopping,
+            LifecycleState: lifecycleState,
             SingBoxStatus: singBoxStatus,
             SingBoxRunning: singBoxStatus == SingBoxStatus.Running,
             TunnelInterfaceUp: selectedMode == TunnelMode.Tun &&
@@ -501,6 +558,7 @@ public sealed class OrchestratorService : BackgroundService
                                singBoxStatus == SingBoxStatus.Running,
             ActiveProfileId: config.ActiveProfileId,
             ActiveProfileName: activeProfile?.Name,
+            ActiveOwnerSessionId: null,
             ProxyRuleCount: proxyRuleCount,
             DirectRuleCount: directRuleCount,
             BlockRuleCount: blockRuleCount,
@@ -510,12 +568,14 @@ public sealed class OrchestratorService : BackgroundService
     private static StatusPayload ToStatusPayload(ServiceStatusSummary summary) => new()
     {
         CaptureRunning = summary.CaptureRunning,
+        LifecycleState = summary.LifecycleState,
         SingBoxStatus = summary.SingBoxStatus,
         SelectedMode = summary.SelectedMode,
         SingBoxRunning = summary.SingBoxRunning,
         TunnelInterfaceUp = summary.TunnelInterfaceUp,
         ActiveProfileId = summary.ActiveProfileId,
         ActiveProfileName = summary.ActiveProfileName,
+        ActiveOwnerSessionId = summary.ActiveOwnerSessionId,
         ProxyRuleCount = summary.ProxyRuleCount,
         DirectRuleCount = summary.DirectRuleCount,
         BlockRuleCount = summary.BlockRuleCount,
@@ -551,10 +611,12 @@ public sealed class OrchestratorService : BackgroundService
         if (ContainsAny(
                 normalized,
                 "authentication failed",
+                "message authentication failed",
                 "invalid user",
                 "invalid uuid",
                 "unauthorized",
                 "forbidden",
+                "status code: 403",
                 "user disabled",
                 "account disabled",
                 "permission denied"))
@@ -585,32 +647,14 @@ public sealed class OrchestratorService : BackgroundService
                 "forcibly closed by the remote host",
                 "wsarecv",
                 "download closed",
-                "upload closed"))
+                "upload closed",
+                "packet download closed",
+                "packet upload closed"))
         {
             return RuntimeWarningDetail.WeakConnectionNoise;
         }
 
         return RuntimeWarningDetail.None;
-    }
-
-    internal static bool IsSuccessfulOutboundVlessActivity(string line)
-    {
-        if (string.IsNullOrWhiteSpace(line))
-        {
-            return false;
-        }
-
-        var normalized = line.ToLowerInvariant();
-        if (!normalized.Contains("outbound/vless"))
-        {
-            return false;
-        }
-
-        return ContainsAny(
-            normalized,
-            "outbound connection to",
-            "connection to",
-            "connected to");
     }
 
     internal static RuntimeWarningEvidence MapRuntimeWarningEvidence(RuntimeWarningDetail detail) => detail switch
@@ -629,25 +673,50 @@ public sealed class OrchestratorService : BackgroundService
         _ => RuntimeWarningStrength.None
     };
 
-    private bool HandleRuntimeWarningEvidence(string line)
+    internal const int WeakConnectionProblemThreshold = 2;
+
+    internal static bool IsRuntimeWarningResetBoundary(SingBoxStatus status) => status switch
     {
-        if (IsSuccessfulOutboundVlessActivity(line))
-        {
-            _observedSuccessfulOutboundVlessActivity = true;
-            if (_runtimeWarning == RuntimeWarningEvidence.ConnectionProblem &&
-                _runtimeWarningStrength == RuntimeWarningStrength.Weak)
-            {
-                ClearRuntimeWarningEvidence();
-                return true;
-            }
+        SingBoxStatus.Stopped => true,
+        SingBoxStatus.Restarting => true,
+        SingBoxStatus.Crashed => true,
+        _ => false
+    };
 
-            return false;
-        }
-
+    internal static RuntimeWarningTracker ApplyRuntimeWarningEvidence(RuntimeWarningTracker current, string line)
+    {
         var detail = ClassifyRuntimeWarningDetail(line);
         if (detail == RuntimeWarningDetail.None)
         {
-            return false;
+            return current;
+        }
+
+        if (detail == RuntimeWarningDetail.WeakConnectionNoise)
+        {
+            if (current.Warning == RuntimeWarningEvidence.AuthenticationFailure &&
+                current.Strength == RuntimeWarningStrength.Strong)
+            {
+                return current;
+            }
+
+            if (current.Warning == RuntimeWarningEvidence.ConnectionProblem &&
+                current.Strength == RuntimeWarningStrength.Strong)
+            {
+                return current;
+            }
+
+            var nextWeakCount = Math.Min(current.WeakConnectionEvidenceCount + 1, WeakConnectionProblemThreshold);
+            if (nextWeakCount < WeakConnectionProblemThreshold)
+            {
+                return current with { WeakConnectionEvidenceCount = nextWeakCount };
+            }
+
+            return current with
+            {
+                Warning = RuntimeWarningEvidence.ConnectionProblem,
+                Strength = RuntimeWarningStrength.Weak,
+                WeakConnectionEvidenceCount = nextWeakCount
+            };
         }
 
         var warning = MapRuntimeWarningEvidence(detail);
@@ -655,64 +724,306 @@ public sealed class OrchestratorService : BackgroundService
 
         if (warning == RuntimeWarningEvidence.AuthenticationFailure)
         {
-            return SetRuntimeWarningEvidence(warning, strength);
+            return current with
+            {
+                Warning = warning,
+                Strength = strength,
+                WeakConnectionEvidenceCount = 0
+            };
         }
 
-        if (strength == RuntimeWarningStrength.Weak && _observedSuccessfulOutboundVlessActivity)
+        if (current.Warning == RuntimeWarningEvidence.AuthenticationFailure &&
+            current.Strength == RuntimeWarningStrength.Strong)
         {
-            return false;
+            return current;
         }
 
-        return SetRuntimeWarningEvidence(warning, strength);
+        return current with
+        {
+            Warning = warning,
+            Strength = strength,
+            WeakConnectionEvidenceCount = 0
+        };
     }
 
-    private bool SetRuntimeWarningEvidence(RuntimeWarningEvidence warning, RuntimeWarningStrength strength)
+    internal static RuntimeWarningTracker ApplyRuntimeWarningResetBoundary(
+        RuntimeWarningTracker current,
+        SingBoxStatus status) =>
+        IsRuntimeWarningResetBoundary(status)
+            ? RuntimeWarningTracker.Empty
+            : current;
+
+    private bool HandleRuntimeWarningEvidence(string line)
     {
-        if (warning == RuntimeWarningEvidence.None)
+        var current = GetRuntimeWarningTracker();
+        var next = ApplyRuntimeWarningEvidence(current, line);
+        SetRuntimeWarningTracker(next);
+
+        if (next.Warning == current.Warning && next.Strength == current.Strength)
         {
             return false;
         }
 
-        if (_runtimeWarning == RuntimeWarningEvidence.AuthenticationFailure &&
-            _runtimeWarningStrength == RuntimeWarningStrength.Strong)
+        var detail = ClassifyRuntimeWarningDetail(line);
+        if (next.Warning != RuntimeWarningEvidence.None)
         {
-            return false;
+            _pipeServer.PushLogLine(
+                "service",
+                "Debug",
+                $"runtime-warning diag: set warning={next.Warning}, strength={next.Strength}, detail={detail}, weakCount={next.WeakConnectionEvidenceCount}");
         }
 
-        if (_runtimeWarning == warning && _runtimeWarningStrength >= strength)
-        {
-            return false;
-        }
-
-        _runtimeWarning = warning;
-        _runtimeWarningStrength = strength;
         return true;
     }
 
-    private void ResetRuntimeWarningEvidence()
+    internal static TunnelOwnerLeaseState AcquireOwnerLease(
+        TunnelOwnerLeaseState current,
+        string? ownerSessionId,
+        DateTimeOffset nowUtc)
     {
-        ClearRuntimeWarningEvidence();
-        _observedSuccessfulOutboundVlessActivity = false;
+        if (string.IsNullOrWhiteSpace(ownerSessionId))
+        {
+            return TunnelOwnerLeaseState.Empty;
+        }
+
+        return new TunnelOwnerLeaseState(ownerSessionId, nowUtc);
     }
 
-    private void ClearRuntimeWarningEvidence()
+    internal static TunnelOwnerLeaseState RefreshOwnerLease(
+        TunnelOwnerLeaseState current,
+        string ownerSessionId,
+        TunnelLifecycleState lifecycleState,
+        DateTimeOffset nowUtc)
     {
+        if (string.IsNullOrWhiteSpace(ownerSessionId) ||
+            lifecycleState == TunnelLifecycleState.Stopped ||
+            !string.Equals(current.OwnerSessionId, ownerSessionId, StringComparison.Ordinal))
+        {
+            return current;
+        }
+
+        return current with { LastHeartbeatUtc = nowUtc };
+    }
+
+    internal static bool HasOwnerLeaseExpired(
+        TunnelOwnerLeaseState current,
+        TunnelLifecycleState lifecycleState,
+        DateTimeOffset nowUtc,
+        TimeSpan timeout)
+    {
+        if (lifecycleState != TunnelLifecycleState.Running ||
+            string.IsNullOrWhiteSpace(current.OwnerSessionId) ||
+            current.LastHeartbeatUtc is null)
+        {
+            return false;
+        }
+
+        return nowUtc - current.LastHeartbeatUtc.Value >= timeout;
+    }
+
+    internal async Task HandleOwnerLeaseTickAsync(DateTimeOffset nowUtc)
+    {
+        TunnelOwnerLeaseState leaseState;
+        lock (_ownerLeaseGate)
+        {
+            leaseState = new TunnelOwnerLeaseState(_activeOwnerSessionId, _activeOwnerHeartbeatUtc);
+        }
+
+        if (!HasOwnerLeaseExpired(leaseState, ReadLifecycleState(), nowUtc, OwnerLeaseTimeout))
+        {
+            return;
+        }
+
+        _logger.LogWarning(
+            "Tunnel owner lease expired for {OwnerSessionId}; stopping tunnel",
+            leaseState.OwnerSessionId);
+        _pipeServer.PushLogLine(
+            "service",
+            "Warning",
+            $"Tunnel owner lease expired for session {leaseState.OwnerSessionId}; stopping tunnel.");
+        ClearTunnelOwner("lease-expired");
+        await StopCaptureAsync();
+    }
+
+    private async Task MonitorOwnerLeaseAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            await HandleOwnerLeaseTickAsync(DateTimeOffset.UtcNow);
+        }
+    }
+
+    private void AcquireTunnelOwner(string? ownerSessionId)
+    {
+        var leaseState = AcquireOwnerLease(
+            new TunnelOwnerLeaseState(_activeOwnerSessionId, _activeOwnerHeartbeatUtc),
+            ownerSessionId,
+            DateTimeOffset.UtcNow);
+
+        if (string.IsNullOrWhiteSpace(leaseState.OwnerSessionId))
+        {
+            ClearTunnelOwner("start-without-owner");
+            _logger.LogInformation("Tunnel started without an active owner lease");
+            _pipeServer.PushLogLine("service", "Info", "Tunnel started without an active owner lease.");
+            return;
+        }
+
+        lock (_ownerLeaseGate)
+        {
+            _activeOwnerSessionId = leaseState.OwnerSessionId;
+            _activeOwnerHeartbeatUtc = leaseState.LastHeartbeatUtc;
+        }
+
+        _logger.LogInformation(
+            "Tunnel owner acquired for session {OwnerSessionId}",
+            leaseState.OwnerSessionId);
+        _pipeServer.PushLogLine(
+            "service",
+            "Info",
+            $"Tunnel owner acquired: session {leaseState.OwnerSessionId}");
+    }
+
+    private void RefreshTunnelOwnerHeartbeat(string ownerSessionId)
+    {
+        TunnelOwnerLeaseState current;
+        lock (_ownerLeaseGate)
+        {
+            current = new TunnelOwnerLeaseState(_activeOwnerSessionId, _activeOwnerHeartbeatUtc);
+            var refreshed = RefreshOwnerLease(current, ownerSessionId, ReadLifecycleState(), DateTimeOffset.UtcNow);
+            _activeOwnerSessionId = refreshed.OwnerSessionId;
+            _activeOwnerHeartbeatUtc = refreshed.LastHeartbeatUtc;
+            current = refreshed;
+        }
+
+        if (string.Equals(current.OwnerSessionId, ownerSessionId, StringComparison.Ordinal))
+        {
+            _logger.LogDebug("Tunnel owner heartbeat refreshed for session {OwnerSessionId}", ownerSessionId);
+        }
+    }
+
+    private string? GetActiveOwnerSessionId()
+    {
+        lock (_ownerLeaseGate)
+        {
+            return _activeOwnerSessionId;
+        }
+    }
+
+    private void ResetRuntimeWarningEvidence(string reason)
+    {
+        ClearRuntimeWarningEvidence(reason);
+    }
+
+    private void ClearRuntimeWarningEvidence(string reason)
+    {
+        if (_runtimeWarning != RuntimeWarningEvidence.None)
+        {
+            _pipeServer.PushLogLine(
+                "service",
+                "Debug",
+                $"runtime-warning diag: clear warning={_runtimeWarning}, strength={_runtimeWarningStrength}, weakCount={_weakConnectionEvidenceCount}, reason={reason}");
+        }
+
         _runtimeWarning = RuntimeWarningEvidence.None;
         _runtimeWarningStrength = RuntimeWarningStrength.None;
+        _weakConnectionEvidenceCount = 0;
+    }
+
+    private void ClearTunnelOwner(string reason)
+    {
+        string? ownerSessionId;
+        lock (_ownerLeaseGate)
+        {
+            ownerSessionId = _activeOwnerSessionId;
+            _activeOwnerSessionId = null;
+            _activeOwnerHeartbeatUtc = null;
+        }
+
+        if (string.IsNullOrWhiteSpace(ownerSessionId))
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Tunnel owner cleared for session {OwnerSessionId}; reason={Reason}",
+            ownerSessionId,
+            reason);
+        _pipeServer.PushLogLine(
+            "service",
+            "Info",
+            $"Tunnel owner cleared: session {ownerSessionId}, reason={reason}");
+    }
+
+    private RuntimeWarningTracker GetRuntimeWarningTracker() =>
+        new(_runtimeWarning, _runtimeWarningStrength, _weakConnectionEvidenceCount);
+
+    private void SetRuntimeWarningTracker(RuntimeWarningTracker tracker)
+    {
+        _runtimeWarning = tracker.Warning;
+        _runtimeWarningStrength = tracker.Strength;
+        _weakConnectionEvidenceCount = tracker.WeakConnectionEvidenceCount;
     }
 
     private static bool ContainsAny(string text, params string[] values) =>
         values.Any(value => text.Contains(value, StringComparison.Ordinal));
+
+    private TunnelLifecycleState ReadLifecycleState() => _lifecycleState;
+
+    private void SetLifecycleState(TunnelLifecycleState lifecycleState) => _lifecycleState = lifecycleState;
+
+    private async Task SafeStopSingBoxAsync()
+    {
+        try
+        {
+            await _singBoxManager.StopAsync(_stoppingToken);
+        }
+        catch
+        {
+            // Best-effort cleanup after start failure.
+        }
+    }
+
+    internal static bool CanStartCapture(TunnelLifecycleState lifecycleState) =>
+        lifecycleState == TunnelLifecycleState.Stopped;
+
+    internal static bool CanStopCapture(TunnelLifecycleState lifecycleState) =>
+        lifecycleState == TunnelLifecycleState.Running;
+
+    internal static string GetStartBlockedReason(TunnelLifecycleState lifecycleState) => lifecycleState switch
+    {
+        TunnelLifecycleState.Starting => "Cannot start: tunnel startup is already in progress.",
+        TunnelLifecycleState.Running => "Cannot start: tunnel is already running.",
+        TunnelLifecycleState.Stopping => "Cannot start: tunnel shutdown is still in progress.",
+        _ => "Cannot start: tunnel is not in a startable state."
+    };
+
+    internal static string GetStopBlockedReason(TunnelLifecycleState lifecycleState) => lifecycleState switch
+    {
+        TunnelLifecycleState.Stopped => "Cannot stop: tunnel is already stopped.",
+        TunnelLifecycleState.Starting => "Cannot stop: tunnel startup is still in progress.",
+        TunnelLifecycleState.Stopping => "Cannot stop: tunnel shutdown is already in progress.",
+        _ => "Cannot stop: tunnel is not in a stoppable state."
+    };
+
+    private void AbortStart(string message)
+    {
+        _pipeServer.PushLogLine("service", "Error", message);
+        SetLifecycleState(TunnelLifecycleState.Stopped);
+        PushCurrentStatus();
+    }
 }
 
 internal readonly record struct ServiceStatusSummary(
     TunnelStatusMode SelectedMode,
     bool CaptureRunning,
+    TunnelLifecycleState LifecycleState,
     SingBoxStatus SingBoxStatus,
     bool SingBoxRunning,
     bool TunnelInterfaceUp,
     Guid? ActiveProfileId,
     string? ActiveProfileName,
+    string? ActiveOwnerSessionId,
     int ProxyRuleCount,
     int DirectRuleCount,
     int BlockRuleCount,
@@ -737,4 +1048,22 @@ internal enum RuntimeWarningStrength
     None = 0,
     Weak = 1,
     Strong = 2
+}
+
+internal readonly record struct RuntimeWarningTracker(
+    RuntimeWarningEvidence Warning,
+    RuntimeWarningStrength Strength,
+    int WeakConnectionEvidenceCount)
+{
+    public static RuntimeWarningTracker Empty => new(
+        RuntimeWarningEvidence.None,
+        RuntimeWarningStrength.None,
+        0);
+}
+
+internal readonly record struct TunnelOwnerLeaseState(
+    string? OwnerSessionId,
+    DateTimeOffset? LastHeartbeatUtc)
+{
+    public static TunnelOwnerLeaseState Empty => new(null, null);
 }

@@ -34,6 +34,7 @@ public sealed class ServiceClient : IDisposable
     private CancellationTokenSource? _connectionCts;
     private NamedPipeClientStream? _pipe;
     private StreamWriter? _writer;
+    private bool _disposed;
 
     public event EventHandler<EventMessage>? EventReceived;
     public event EventHandler? Disconnected;
@@ -42,11 +43,35 @@ public sealed class ServiceClient : IDisposable
 
     public bool IsConnected { get; private set; }
 
+    public string SessionId { get; } = Guid.NewGuid().ToString("N");
+
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _lifetimeCts.Cancel();
+        _connectionCts?.Cancel();
         _connectionCts?.Dispose();
+        _connectionCts = null;
+
+        _writer?.Dispose();
+        _writer = null;
+
         _pipe?.Dispose();
+        _pipe = null;
+
+        IsConnected = false;
+
+        foreach (var (_, tcs) in _pending)
+        {
+            tcs.TrySetCanceled();
+        }
+
+        _pending.Clear();
         _lifetimeCts.Dispose();
         _writeLock.Dispose();
     }
