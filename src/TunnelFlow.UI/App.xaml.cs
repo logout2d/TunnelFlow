@@ -25,17 +25,6 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        if (_mainViewModel?.IsConnected == true && _mainViewModel?.CaptureRunning == true)
-        {
-            try
-            {
-                _serviceClient?
-                    .SendCommandAsync("StopCapture", null, CancellationToken.None)
-                    .GetAwaiter()
-                    .GetResult();
-            }
-            catch { }
-        }
         _serviceClient?.Dispose();
         base.OnExit(e);
     }

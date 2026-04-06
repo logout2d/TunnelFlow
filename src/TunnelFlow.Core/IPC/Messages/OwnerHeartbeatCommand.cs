@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace TunnelFlow.Core.IPC.Messages;
 
-public record StartCaptureCommand
+public record OwnerHeartbeatCommand
 {
     [JsonPropertyName("type")]
     public required string Type { get; init; }
@@ -11,8 +11,8 @@ public record StartCaptureCommand
     public required string Id { get; init; }
 }
 
-public record StartCapturePayload
+public record OwnerHeartbeatPayload
 {
     [JsonPropertyName("ownerSessionId")]
-    public string? OwnerSessionId { get; init; }
+    public required string OwnerSessionId { get; init; }
 }
