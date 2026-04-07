@@ -56,10 +56,13 @@ public partial class ProfileViewModel : ObservableObject
     public IRelayCommand CleanupMissingSubscriptionProfileCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled || !IsServiceConnected;
     public string EditHintText => !IsEditingEnabled
-        ? "Stop the tunnel to edit profile settings."
+        ? "Stop the tunnel to edit profile settings"
         : !IsServiceConnected
-            ? "Start the service to save profile changes."
+            ? "Start the service to save profile changes"
             : string.Empty;
+    public string ProfileTitle => ShowEditHint
+        ? $"VLESS Profile ({EditHintText})"
+        : "VLESS Profile";
     public bool HasUnsavedChanges
     {
         get => _hasUnsavedChanges;
@@ -95,7 +98,32 @@ public partial class ProfileViewModel : ObservableObject
     public string ActiveProfileDisplayName => string.IsNullOrWhiteSpace(GetActiveProfile()?.Name)
         ? "None selected"
         : GetActiveProfile()!.Name;
-    public string ActiveProfileSummary => $"Active profile: {ActiveProfileDisplayName}";
+    public string ActiveProfileSubscriptionStateText
+    {
+        get
+        {
+            var activeProfile = GetActiveProfile();
+            if (activeProfile is null || string.IsNullOrWhiteSpace(activeProfile.SubscriptionSourceUrl))
+            {
+                return string.Empty;
+            }
+
+            return activeProfile.SubscriptionMissingFromSource
+                ? "Missing from subscription"
+                : "Present in subscription";
+        }
+    }
+    public bool ActiveProfileSubscriptionMissingFromSource =>
+        GetActiveProfile()?.SubscriptionMissingFromSource == true &&
+        !string.IsNullOrWhiteSpace(GetActiveProfile()?.SubscriptionSourceUrl);
+    public bool ShowActiveProfileSubscriptionState => !string.IsNullOrWhiteSpace(ActiveProfileSubscriptionStateText);
+    public string ActiveProfileSummaryPrefix => $"Active profile: {ActiveProfileDisplayName}";
+    public string ActiveProfileSummaryStateWithParens => ShowActiveProfileSubscriptionState
+        ? $"({ActiveProfileSubscriptionStateText})"
+        : string.Empty;
+    public string ActiveProfileSummary => ShowActiveProfileSubscriptionState
+        ? $"{ActiveProfileSummaryPrefix} {ActiveProfileSummaryStateWithParens}"
+        : ActiveProfileSummaryPrefix;
 
     public static IReadOnlyList<string> Networks { get; } = ["tcp", "ws", "grpc"];
     public static IReadOnlyList<string> Securities { get; } = ["tls", "reality", "none"];
@@ -187,6 +215,7 @@ public partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
         OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
         OnPropertyChanged(nameof(MissingSubscriptionCleanupSummary));
+        NotifyActiveProfileSummaryChanged();
         _updateSubscriptionCmd.NotifyCanExecuteChanged();
         _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
     }
@@ -196,6 +225,7 @@ public partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(SubscriptionUpdateSummary));
         OnPropertyChanged(nameof(ShowMissingSubscriptionCleanupAction));
         OnPropertyChanged(nameof(MissingSubscriptionCleanupSummary));
+        NotifyActiveProfileSummaryChanged();
         _cleanupMissingSubscriptionProfileCmd.NotifyCanExecuteChanged();
     }
     partial void OnIsActiveChanged(bool value) => _activateCmd.NotifyCanExecuteChanged();
@@ -203,6 +233,7 @@ public partial class ProfileViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowEditHint));
         OnPropertyChanged(nameof(EditHintText));
+        OnPropertyChanged(nameof(ProfileTitle));
         RefreshCommandStates();
     }
     partial void OnIsCreatingNewProfileChanged(bool value)
@@ -218,6 +249,7 @@ public partial class ProfileViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowEditHint));
         OnPropertyChanged(nameof(EditHintText));
+        OnPropertyChanged(nameof(ProfileTitle));
         RefreshCommandStates();
     }
     partial void OnImportStatusChanged(string value) => OnPropertyChanged(nameof(ShowImportStatus));
@@ -295,8 +327,7 @@ public partial class ProfileViewModel : ObservableObject
         _suppressFormStateTracking = false;
         SetSavedFormState(ProfileFormState.Empty, clearStatus: true);
         OnPropertyChanged(nameof(ShowProfileSelector));
-        OnPropertyChanged(nameof(ActiveProfileDisplayName));
-        OnPropertyChanged(nameof(ActiveProfileSummary));
+        NotifyActiveProfileSummaryChanged();
     }
 
     private async Task SaveAsync()
@@ -646,7 +677,17 @@ public partial class ProfileViewModel : ObservableObject
         _suppressSelectionChange = false;
 
         OnPropertyChanged(nameof(ShowProfileSelector));
+        NotifyActiveProfileSummaryChanged();
+    }
+
+    private void NotifyActiveProfileSummaryChanged()
+    {
         OnPropertyChanged(nameof(ActiveProfileDisplayName));
+        OnPropertyChanged(nameof(ActiveProfileSubscriptionStateText));
+        OnPropertyChanged(nameof(ActiveProfileSubscriptionMissingFromSource));
+        OnPropertyChanged(nameof(ShowActiveProfileSubscriptionState));
+        OnPropertyChanged(nameof(ActiveProfileSummaryPrefix));
+        OnPropertyChanged(nameof(ActiveProfileSummaryStateWithParens));
         OnPropertyChanged(nameof(ActiveProfileSummary));
     }
 

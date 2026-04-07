@@ -6,6 +6,250 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## Profile title polish: move edit hint into the title and remove the standalone helper line
+- Scope:
+  - very small Profile-only UI polish
+  - reuse the existing edit-hint state and wording
+  - no runtime/service/view-model behavior changes beyond one computed title string
+- Changes made:
+  - added a narrow computed `ProfileTitle` view-model property:
+    - `VLESS Profile`
+    - or, when the existing edit hint is active:
+      - `VLESS Profile (<existing hint text>)`
+  - the Profile title `TextBlock` now binds to `ProfileTitle`
+  - removed the old standalone helper `TextBlock` that previously rendered below the selector area
+- Behavior notes:
+  - current offline/non-editable wording is unchanged, only relocated
+  - if the existing hint is:
+    - `Start the service to save profile changes.`
+    - the title becomes:
+      - `VLESS Profile (Start the service to save profile changes.)`
+  - if the existing hint is:
+    - `Stop the tunnel to edit profile settings.`
+    - the title uses that same wording in parentheses
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 20
+    - failed: 0
+    - skipped: 0
+  - real UI verification via UI Automation:
+    - launched `TunnelFlow.UI.exe`
+    - invoked the `Profile` sidebar button
+    - result:
+      - `Profile tab opened; process still running. Title found: VLESS Profile (Start the service to save profile changes.)`
+    - confirmed the old standalone helper line text did not appear in the UI Automation tree
+
+## Profile subscription row visual polish: safe alignment follow-up
+- Scope:
+  - very small Profile XAML polish only
+  - keep the current safe subscription block structure and bindings
+  - no runtime/service/view-model behavior changes
+- Visual/layout changes made:
+  - kept the same simple horizontal `Subscription` row:
+    - `Server` label
+    - read-only one-way-bound URL `TextBox`
+    - `Update` button
+  - widened the URL `TextBox` from `276` to `288`
+  - moved the horizontal gap from button margin to textbox right margin for a cleaner field-to-button rhythm
+  - added a small fixed `MinWidth="72"` and `VerticalAlignment="Center"` on the `Update` button so the row reads more like the aligned form rows below
+- Safety note:
+  - kept the simplified safe structure introduced after the earlier Profile-tab runtime crash
+  - did not reintroduce the older richer subscription block
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 20
+    - failed: 0
+    - skipped: 0
+  - real UI verification via UI Automation:
+    - launched `TunnelFlow.UI.exe`
+    - invoked the `Profile` sidebar button
+    - result:
+      - `Profile tab opened; process still running.`
+
+## Profile subscription block follow-up: safe read-only TextBox and shorter Update button
+- Scope:
+  - very small Profile XAML follow-up only
+  - keep the already-safe subscription block structure
+  - no runtime/service/view-model behavior changes
+- Requested UI tweaks applied:
+  - replaced the subscription URL display `TextBlock` with a plain read-only `TextBox`
+  - renamed the button from:
+    - `Update subscription`
+    - to `Update`
+- Important runtime detail:
+  - the subscription URL display property is read-only in the view-model
+  - `TextBox.Text` defaults to two-way binding in WPF
+  - the first real UI launch check showed the Profile tab crashing again when the plain `TextBox` used the default binding mode
+  - the narrow safe fix was:
+    - keep the simple read-only `TextBox`
+    - set `Text="{Binding SubscriptionSourceUrlDisplay, Mode=OneWay}"`
+- Result:
+  - the subscription block stays structurally close to the currently safe version
+  - no richer/crashy block structure was reintroduced
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 20
+    - failed: 0
+    - skipped: 0
+  - real UI verification via UI Automation:
+    - launched `TunnelFlow.UI.exe`
+    - invoked the `Profile` sidebar button
+    - result after the one-way binding fix:
+      - `Profile tab opened; process still running.`
+
+## Profile tab runtime crash isolation and fix after subscription UI cleanup
+- Scope:
+  - narrow Profile-tab runtime-crash repair only
+  - no runtime/service/TUN behavior changes
+- Real runtime reproduction:
+  - build and `ProfileViewModel` tests were green, but the real app process exited immediately when the Profile tab button was invoked
+  - the crash was reproduced against the built app with UI Automation by:
+    - launching `src/TunnelFlow.UI/bin/Debug/net8.0-windows/TunnelFlow.UI.exe`
+    - finding the `Profile` navigation button
+    - invoking it
+  - pre-fix result:
+    - process exited after clicking Profile
+- Fragment isolation result:
+  - the split active-profile header fragment was not the cause
+  - simplifying the header back to a single safe `TextBlock` did not stop the crash
+  - removing the new `Subscription` block under the selector immediately stopped the crash
+  - re-adding only a minimal subscription container/title remained safe
+  - the crash therefore lived in the original richer `Subscription` block, not the header
+- Fix applied:
+  - kept the intended split active-profile header with colored subscription state suffix
+  - replaced the crashing bordered/grid-heavy subscription block with a flatter `StackPanel`-based block
+  - the safer block still preserves:
+    - `Subscription` title
+    - server/source URL display
+    - `Update subscription` action
+    - stale missing-from-source warning text
+    - `Remove stale profile` cleanup action
+  - safe presentation compromise:
+    - the saved subscription URL is now shown as a trimmed read-only `TextBlock`
+    - not a read-only `TextBox`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 20
+    - failed: 0
+    - skipped: 0
+  - real UI verification via UI Automation:
+    - launched `TunnelFlow.UI.exe`
+    - invoked the `Profile` sidebar button
+    - result after fix:
+      - `Profile click completed; process still running`
+
+## Profile subscription UI cleanup: header presence suffix + compact subscription block
+- Scope:
+  - Profile tab only
+  - UI/view-model/test surface only
+  - no runtime/service/TUN behavior changes
+- Changes made:
+  - moved subscription presence display into the active-profile header
+  - active profile header now reads like:
+    - `Active profile: <name> (Present in subscription)`
+    - `Active profile: <name> (Missing from subscription)`
+  - the subscription presence suffix is now color-coded:
+    - green for `Present in subscription`
+    - red for `Missing from subscription`
+  - removed the old crowded selector-area lines:
+    - `Imported from subscription URL`
+    - separate `Present in subscription` / `Missing from subscription`
+    - the old helper sentence in that area
+  - added a compact `Subscription` block below the selector area for subscription-backed selected profiles only:
+    - `Server` label
+    - read-only textbox showing the saved subscription URL
+    - existing `Update subscription` button
+  - preserved stale-profile handling:
+    - missing-from-source warning text still appears in the subscription block
+    - `Remove stale profile` action remains available there
+- View-model notes:
+  - added narrow active-header properties for rendering the subscription presence suffix without duplicating the old selector-area state block
+  - import/update semantics were not changed
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 20
+    - failed: 0
+    - skipped: 0
+
+## Current-session traffic stats Phase 1 viability audit
+- Scope:
+  - audit only
+  - verify whether the current bundled sing-box path in this repo can support V2Ray API traffic stats for current-session counters
+  - do not add fake counters or alternate telemetry
+- Files inspected:
+  - `src/TunnelFlow.Service/SingBox/SingBoxManager.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatePayload.cs`
+  - `src/TunnelFlow.Core/IPC/Responses/StatusPayload.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/MainWindow.xaml`
+- Local binary/build-path findings:
+  - bundled binary exists at:
+    - `third_party/singbox/sing-box.exe`
+  - local version output:
+    - `sing-box version 1.13.4`
+  - local build tags reported by the bundled binary:
+    - `with_gvisor`
+    - `with_quic`
+    - `with_dhcp`
+    - `with_wireguard`
+    - `with_utls`
+    - `with_acme`
+    - `with_clash_api`
+    - `with_tailscale`
+    - `with_ccm`
+    - `with_ocm`
+    - `with_naive_outbound`
+    - `with_purego`
+  - notably absent:
+    - `with_v2ray_api`
+- Official sing-box documentation evidence checked:
+  - `https://sing-box.sagernet.org/configuration/experimental/v2ray-api/`
+    - V2Ray API is not included by default
+    - traffic stats are exposed through `experimental.v2ray_api.stats`
+  - `https://sing-box.sagernet.org/installation/build-from-source/`
+    - `with_v2ray_api` is the build tag for V2Ray API support
+- Current repo/config-path findings:
+  - `SingBoxConfigBuilder` currently emits:
+    - `log`
+    - `dns`
+    - `inbounds`
+    - `outbounds`
+    - `route`
+  - it does not emit:
+    - `experimental.v2ray_api`
+    - stats tags/polling endpoints
+  - there is currently no service-side stats reader/poller against sing-box API
+  - runtime payloads/UI currently have no byte-counter fields yet
+- Decision:
+  - stop Phase 1 implementation here as blocked
+  - do not add traffic counters from log parsing
+  - do not silently fall back to Windows interface byte counters
+  - do not implement fake "session traffic" estimates
+- Why this is blocked:
+  - the current bundled sing-box build path in this repo is expected to support Clash API, but is not expected to support V2Ray API stats because the binary does not report `with_v2ray_api`
+  - without that support, the preferred implementation model for honest per-session traffic counters cannot be implemented in this branch as-is
+- Narrow next-step options:
+  - preferred:
+    - replace or rebuild the bundled Windows sing-box binary with `with_v2ray_api`, then wire `experimental.v2ray_api.stats` for `tun-in` / `vless-out`
+  - fallback option for a later explicit design choice:
+    - evaluate whether Clash API traffic counters can satisfy the product requirement instead
+    - this was not implemented in this step because the requested direction was V2Ray API stats first, and we should not silently pivot APIs
+- Validation:
+  - docs-only blocker audit
+  - no build/test run in this step
+
 ## Tunnel owner lease / heartbeat and reconnect-hang repair
 - Scope:
   - narrow service/UI lifecycle hardening only

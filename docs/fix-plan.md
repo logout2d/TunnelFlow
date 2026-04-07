@@ -968,6 +968,147 @@ Validation:
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests.ApplyStatePayload_WhenOwnedTunnelReconnects_RestartsHeartbeatLoop" --blame-hang --blame-hang-timeout 15s --logger "console;verbosity=minimal"`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --blame-hang --blame-hang-timeout 20s --logger "console;verbosity=minimal"`
 
+## Step 61
+Current-session traffic stats Phase 1: V2Ray API viability check.
+Status: blocked
+Scope:
+- audit only
+- verify whether the current bundled sing-box path can support honest current-session traffic counters through V2Ray API stats
+- do not implement fake counters or alternate telemetry in this step
+Outcome:
+- blocked on sing-box build capability
+- the bundled binary at `third_party/singbox/sing-box.exe` reports:
+  - `with_clash_api`
+  - but not `with_v2ray_api`
+- official sing-box docs say:
+  - V2Ray API is not included by default
+  - traffic stats require `experimental.v2ray_api.stats`
+  - V2Ray API support is tied to the `with_v2ray_api` build tag
+- current repo config generation does not yet emit `experimental.v2ray_api`
+- current service/runtime path has no API stats poller or session-baseline counter model
+Decision:
+- stop implementation here instead of adding fake counters
+- do not silently fall back to:
+  - log-derived byte estimates
+  - Windows interface counters
+  - a different sing-box API
+Next recommended step:
+- either:
+  - ship/build the bundled Windows sing-box binary with `with_v2ray_api`, then implement session-baseline polling against V2Ray API stats
+- or:
+  - explicitly approve a separate design step to evaluate Clash API traffic counters as an alternative source
+Validation:
+- docs-only blocker audit
+- no build/test run in this step
+
+## Step 62
+Profile tab subscription UI cleanup: move presence state into the active header and replace crowded selector lines with a compact subscription block.
+Status: completed
+Scope:
+- Profile tab only
+- smallest necessary view-model/test surface
+- no runtime/service/TUN changes
+Outcome:
+- active profile header now includes subscription presence in parentheses when relevant
+- header suffix colors:
+  - green for `Present in subscription`
+  - red for `Missing from subscription`
+- removed the old subscription/source/helper lines from under the selector
+- added a compact `Subscription` block with:
+  - `Server`
+  - read-only subscription URL textbox
+  - existing `Update subscription` button
+- preserved stale missing-from-source warning and explicit stale cleanup action inside the subscription block
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 63
+Profile tab runtime-crash repair after subscription UI cleanup.
+Status: completed
+Scope:
+- narrow Profile XAML runtime-crash isolation and fix only
+- no runtime/service/TUN changes
+Outcome:
+- confirmed the split active-profile header fragment was not the crash source
+- confirmed the new `Subscription` block under the selector was the crash source in the real WPF render path
+- kept the colored split header
+- replaced the crashing bordered/grid-heavy subscription block with a flatter safe block
+- kept these subscription affordances:
+  - source URL display
+  - `Update subscription`
+  - stale missing-from-source warning
+  - `Remove stale profile`
+- safe presentation compromise:
+  - URL display now uses a trimmed `TextBlock` instead of the previous read-only `TextBox`
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src/TunnelFlow.UI/bin/Debug/net8.0-windows/TunnelFlow.UI.exe`
+- invoked the `Profile` navigation button via UI Automation
+- verified the process remained running after opening the Profile tab
+
+## Step 64
+Profile subscription block follow-up: safe read-only URL TextBox and shorter Update button label.
+Status: completed
+Scope:
+- very small Profile XAML follow-up only
+- keep the current safe subscription block structure
+- no runtime/service/view-model behavior changes
+Outcome:
+- replaced the subscription URL `TextBlock` with a plain read-only `TextBox`
+- renamed the subscription action button from `Update subscription` to `Update`
+- kept the block otherwise structurally close to the already-safe version
+- narrow runtime-only fix applied:
+  - `TextBox.Text` now binds with `Mode=OneWay` so the read-only display property does not crash the real WPF Profile tab through default two-way `TextBox` binding semantics
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- invoked the `Profile` navigation button via UI Automation
+- verified the process remained running after opening the Profile tab
+
+## Step 65
+Profile subscription row visual polish: align the safe URL field and Update button more cleanly.
+Status: completed
+Scope:
+- very small Profile XAML polish only
+- keep the current safe subscription block structure and bindings
+- no runtime/service/view-model behavior changes
+Outcome:
+- preserved the same simple safe `Subscription` row structure
+- widened the read-only one-way-bound URL `TextBox` slightly
+- moved the gap to the textbox right margin for cleaner row rhythm
+- added a small fixed minimum width and centered alignment to the `Update` button so the row lines up more like the form fields below
+- did not reintroduce the older richer/crashy subscription block
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- invoked the `Profile` navigation button via UI Automation
+- verified the process remained running after opening the Profile tab
+
+## Step 66
+Profile title polish: move the edit hint into the title and remove the standalone helper line.
+Status: completed
+Scope:
+- very small Profile-only UI polish
+- reuse the existing edit-hint state and wording
+- no runtime/service/view-model behavior changes beyond a computed title string
+Outcome:
+- added `ProfileTitle` in the view-model so the title now renders as:
+  - `VLESS Profile`
+  - or `VLESS Profile (<existing hint text>)` when the existing edit hint is active
+- removed the old standalone helper line from below the selector area
+- preserved the existing hint wording and logic; only the presentation changed
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.ProfileViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- invoked the `Profile` navigation button via UI Automation
+- verified the process remained running after opening the Profile tab
+- verified the title was present in the UI Automation tree and the old standalone helper line text was absent
+
 ## Step 49
 Subscription status display cleanup: remove persistent import/update text from under the Import URL row.
 Status: in progress

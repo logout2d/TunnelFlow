@@ -9,12 +9,31 @@
 
             <!-- Header -->
             <StackPanel Margin="0,0,0,16">
-                <TextBlock Text="VLESS Profile" FontSize="18" FontWeight="SemiBold"
+                <TextBlock Text="{Binding ProfileTitle}" FontSize="18" FontWeight="SemiBold"
                            Foreground="#1E293B"/>
-                <TextBlock Text="{Binding ActiveProfileSummary}"
-                           Margin="0,6,0,0"
-                           Foreground="#22C55E"
-                           FontWeight="Medium"/>
+                <WrapPanel Margin="0,6,0,0">
+                    <TextBlock Text="{Binding ActiveProfileSummaryPrefix}"
+                               Foreground="#22C55E"
+                               FontWeight="Medium"/>
+                    <TextBlock Text="{Binding ActiveProfileSummaryStateWithParens}"
+                               Margin="4,0,0,0"
+                               FontWeight="Medium">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Setter Property="Foreground" Value="#16A34A"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowActiveProfileSubscriptionState}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ActiveProfileSubscriptionMissingFromSource}" Value="True">
+                                        <Setter Property="Foreground" Value="#DC2626"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </WrapPanel>
             </StackPanel>
 
             <!-- URL import -->
@@ -99,9 +118,9 @@
                             Cursor="Hand"/>
                 </StackPanel>
 
-                <Grid Margin="0,8,0,0">
-                    <Grid.Style>
-                        <Style TargetType="Grid">
+                <StackPanel Margin="0,12,0,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Collapsed"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding HasSubscriptionSource}" Value="True">
@@ -109,128 +128,115 @@
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </Grid.Style>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    </StackPanel.Style>
 
-                    <StackPanel Margin="0,0,12,0">
-                        <TextBlock Text="{Binding SubscriptionSourceSummary}"
-                                   Foreground="#475569"
-                                   FontSize="11"
-                                   FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding SubscriptionStateText}"
-                                   Margin="0,2,0,0"
-                                   FontSize="11"
-                                   FontWeight="SemiBold">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#16A34A"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SubscriptionMissingFromSource}" Value="True">
-                                            <Setter Property="Foreground" Value="#DC2626"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <TextBlock Text="{Binding SubscriptionSourceUrlDisplay}"
-                                   Margin="0,2,0,0"
-                                   Foreground="#64748B"
-                                   FontSize="11"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding SubscriptionUpdateSummary}"
-                                   Margin="0,2,0,0"
-                                   Foreground="#94A3B8"
-                                   FontSize="10"
-                                   TextWrapping="Wrap">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Setter Property="Foreground" Value="#94A3B8"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SubscriptionMissingFromSource}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                            <Setter Property="Foreground" Value="#B45309"/>
-                                            <Setter Property="FontWeight" Value="SemiBold"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
+                    <TextBlock Text="Subscription"
+                               Foreground="#475569"
+                               FontWeight="Normal"/>
 
-                    <StackPanel Grid.Column="1">
-                        <Button Content="{Binding UpdateSubscriptionButtonText}"
-                                Command="{Binding UpdateSubscriptionCommand}"
-                                Padding="11,5"
-                                Background="#E2E8F0"
-                                Foreground="#334155"
-                                BorderBrush="#CBD5E1"
-                                Cursor="Hand"/>
+                    <Grid Margin="0,8,0,0">
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="120"/>
+							<ColumnDefinition Width="325"/>
+							<ColumnDefinition Width="Auto"/>
+						</Grid.ColumnDefinitions>
 
-                        <TextBlock Text="{Binding MissingSubscriptionCleanupSummary}"
-                                   Margin="0,6,0,0"
-                                   Foreground="#B45309"
-                                   FontSize="10"
-                                   FontWeight="SemiBold"
-                                   TextWrapping="Wrap">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ShowMissingSubscriptionCleanupAction}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+						<TextBlock Grid.Column="0"
+									Text="URL"
+									VerticalAlignment="Center"
+									Margin="0,0,12,0"
+									Width="120"
+									Foreground="#475569"
+									FontWeight="Medium"/>
 
-                        <Button Content="{Binding CleanupMissingSubscriptionButtonText}"
-                                Command="{Binding CleanupMissingSubscriptionProfileCommand}"
-                                Margin="0,6,0,0"
-                                Padding="11,5"
-                                Background="#FFF7ED"
-                                Foreground="#9A3412"
-                                BorderBrush="#FDBA74"
-                                Cursor="Hand">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Setter Property="Background" Value="#FFF7ED"/>
-                                    <Setter Property="Foreground" Value="#9A3412"/>
-                                    <Setter Property="BorderBrush" Value="#FDBA74"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ShowMissingSubscriptionCleanupAction}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </StackPanel>
-                </Grid>
+						<TextBox Grid.Column="1"
+									Width="317"
+									Text="{Binding SubscriptionSourceUrlDisplay, Mode=OneWay}"
+									IsReadOnly="True"
+									VerticalAlignment="Center"
+									HorizontalContentAlignment="Left"
+									Margin="0,0,8,0"
+									Padding="8,5"
+									BorderBrush="#CBD5E1"/>
+
+						<Button Grid.Column="2"
+								Content="Update"
+								Command="{Binding UpdateSubscriptionCommand}"
+								MinWidth="72"
+								VerticalAlignment="Center"
+								Padding="11,5"
+								Background="#E2E8F0"
+								Foreground="#334155"
+								BorderBrush="#CBD5E1"
+								Cursor="Hand"/>
+					</Grid>
+
+                    <TextBlock Text="{Binding SubscriptionUpdateSummary}"
+                               Margin="0,8,0,0"
+                               Foreground="#B45309"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SubscriptionMissingFromSource}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <TextBlock Text="{Binding MissingSubscriptionCleanupSummary}"
+                               Margin="0,6,0,0"
+                               Foreground="#B45309"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowMissingSubscriptionCleanupAction}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <Button Content="{Binding CleanupMissingSubscriptionButtonText}"
+                            Command="{Binding CleanupMissingSubscriptionProfileCommand}"
+                            Margin="0,6,0,0"
+                            Padding="11,5"
+                            Background="#FFF7ED"
+                            Foreground="#9A3412"
+                            BorderBrush="#FDBA74"
+                            Cursor="Hand"
+                            HorizontalAlignment="Left">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowMissingSubscriptionCleanupAction}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+
             </StackPanel>
-
-            <TextBlock Text="{Binding EditHintText}"
-                       Margin="0,0,0,16"
-                       Foreground="#64748B"
-                       FontSize="11">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding ShowEditHint}" Value="True">
-                                <Setter Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
-
             <!-- Fields -->
+			
+			<TextBlock Text="Server settings"
+           Margin="0,0,0,10"
+           Foreground="#475569"
+           FontWeight="Normal"/>
+			
             <Grid IsEnabled="{Binding IsEditingEnabled}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="120"/>

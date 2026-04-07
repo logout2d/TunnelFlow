@@ -51,6 +51,7 @@ public class ProfileViewModelTests
         Assert.True(viewModel.ShowProfileSelector);
         Assert.Equal("Primary", viewModel.ActiveProfileDisplayName);
         Assert.Equal("Active profile: Primary", viewModel.ActiveProfileSummary);
+        Assert.False(viewModel.ShowActiveProfileSubscriptionState);
         Assert.Equal(primaryId, viewModel.SelectedProfile?.Id);
         Assert.False(viewModel.IsCreatingNewProfile);
         Assert.Equal("Primary", viewModel.Name);
@@ -111,6 +112,7 @@ public class ProfileViewModelTests
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.True(viewModel.ActivateCommand.CanExecute(null));
         Assert.Equal("Active profile: Primary", viewModel.ActiveProfileSummary);
+        Assert.False(viewModel.ShowActiveProfileSubscriptionState);
     }
 
     [Fact]
@@ -157,6 +159,7 @@ public class ProfileViewModelTests
         Assert.False(viewModel.SaveCommand.CanExecute(null));
         Assert.False(viewModel.ActivateCommand.CanExecute(null));
         Assert.Equal("Active profile: Primary", viewModel.ActiveProfileSummary);
+        Assert.False(viewModel.ShowActiveProfileSubscriptionState);
     }
 
     [Fact]
@@ -236,14 +239,17 @@ public class ProfileViewModelTests
 
         Assert.False(viewModel.ShowEditHint);
         Assert.Equal(string.Empty, viewModel.EditHintText);
+        Assert.Equal("VLESS Profile", viewModel.ProfileTitle);
 
         viewModel.IsServiceConnected = false;
         Assert.True(viewModel.ShowEditHint);
         Assert.Equal("Start the service to save profile changes.", viewModel.EditHintText);
+        Assert.Equal("VLESS Profile (Start the service to save profile changes.)", viewModel.ProfileTitle);
 
         viewModel.IsEditingEnabled = false;
         Assert.True(viewModel.ShowEditHint);
         Assert.Equal("Stop the tunnel to edit profile settings.", viewModel.EditHintText);
+        Assert.Equal("VLESS Profile (Stop the tunnel to edit profile settings.)", viewModel.ProfileTitle);
     }
 
     [Fact]
@@ -410,6 +416,7 @@ public class ProfileViewModelTests
         Assert.Equal(primaryId, viewModel.SelectedProfile?.Id);
         Assert.Equal("Primary", viewModel.Name);
         Assert.Equal("Active profile: Primary", viewModel.ActiveProfileSummary);
+        Assert.False(viewModel.ShowActiveProfileSubscriptionState);
         Assert.Equal("Deleted \u2713", viewModel.SaveStatus);
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.True(viewModel.DeleteCommand.CanExecute(null));
@@ -634,10 +641,12 @@ public class ProfileViewModelTests
         Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Subscription)");
         Assert.Equal(string.Empty, viewModel.ImportUrl);
         Assert.True(viewModel.HasSubscriptionSource);
-        Assert.Equal("Imported from subscription URL", viewModel.SubscriptionSourceSummary);
         Assert.Equal("Present in subscription", viewModel.SubscriptionStateText);
         Assert.Equal("https://example.com/subscription.txt", viewModel.SubscriptionSourceUrl);
         Assert.Equal(string.Empty, viewModel.SubscriptionUpdateSummary);
+        Assert.False(viewModel.ShowActiveProfileSubscriptionState);
+        Assert.Equal(string.Empty, viewModel.ActiveProfileSubscriptionStateText);
+        Assert.Equal("Active profile: None selected", viewModel.ActiveProfileSummary);
         Assert.False(viewModel.HasUnsavedChanges);
         Assert.False(viewModel.SaveCommand.CanExecute(null));
     }
@@ -841,6 +850,9 @@ public class ProfileViewModelTests
         Assert.Equal("Missing from subscription", viewModel.SubscriptionStateText);
         Assert.Equal("No longer present in the latest subscription update. Kept locally until you remove it.", viewModel.SubscriptionUpdateSummary);
         Assert.Equal("Subscription updated: 1 updated, 1 missing from source.", viewModel.ImportStatus);
+        Assert.True(viewModel.ShowActiveProfileSubscriptionState);
+        Assert.Equal("Missing from subscription", viewModel.ActiveProfileSubscriptionStateText);
+        Assert.Equal("Active profile: Beta (Missing from subscription)", viewModel.ActiveProfileSummary);
         Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Beta (Active, Subscription, Missing from source)");
         Assert.Contains(viewModel.AvailableProfiles, option => option.DisplayName == "Alpha Updated (Subscription)");
     }
