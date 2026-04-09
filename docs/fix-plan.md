@@ -7,7 +7,7 @@ Environment prepared for Codex-guided debugging and patching.
 - Primary implementation direction:
   - `docs/tunnelflow-wintun-singbox-tun-design.md`
 - Historical diagnostic/R&D reference:
-  - `docs/wfp-tcp-redirect-poc-plan.md`
+  - `docs/archive/wfp-tcp-redirect-poc-plan.md`
 
 ## Step 1
 Add repository instructions and project memory for Codex.
@@ -1133,7 +1133,7 @@ Outcome:
   - `DECISIONS.md`
   - `RISKS.md`
   - `COMPONENTS.md`
-  - `PHASE2_PLAN.md` now retained only as a short historical marker
+  - `docs/archive/PHASE2_PLAN.md` now retained only as a short historical marker
 - confirmed repo metadata state:
   - `.gitmodules` already absent
   - no `ndisapi`-specific `.gitignore` cleanup remained to do
@@ -1188,6 +1188,32 @@ Validation:
   - switching to About works
   - version is shown
   - `http://www.sample.com` is visible
+
+## Step 69
+Final pre-release repo cleanup: archive historical docs and remove stale junk.
+Status: completed
+Scope:
+- conservative cleanup only
+- preserve the active TUN-only product/release path
+- reduce root/docs noise without broad repo restructuring
+Outcome:
+- archived historical docs under `docs/archive/`:
+  - `PHASE2_PLAN.md`
+  - `SOLUTION_STRUCTURE.md`
+  - `OPUS_RELAY_ANALYSIS.md`
+  - `OPUS_SNI_SNIFFING.md`
+  - `wfp-tcp-redirect-poc-plan.md`
+- added `docs/archive/README.md` as a small archive index
+- removed the placeholder test file:
+  - `src/TunnelFlow.Tests/UnitTest1.cs`
+- removed stray local validation/service logs from the repo root
+- updated the active docs to point at archived historical material correctly
+- left active TUN-only source, docs, and runtime assets intact
+- `.gitignore` did not need changes because log/build junk was already covered
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
 
 ## Step 49
 Subscription status display cleanup: remove persistent import/update text from under the Import URL row.

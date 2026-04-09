@@ -4,7 +4,7 @@
 - Current primary design reference:
   - `docs/tunnelflow-wintun-singbox-tun-design.md`
 - Historical / diagnostic R&D reference:
-  - `docs/wfp-tcp-redirect-poc-plan.md`
+  - `docs/archive/wfp-tcp-redirect-poc-plan.md`
 
 ## About tab: simple main-navigation page for release-friendly app info
 - Scope:
@@ -62,6 +62,56 @@
       - `Version 1.0.0+5068fdbeab05b58cc25345f095bbd118ca95d141`
       - `http://www.sample.com`
 
+## Final pre-release repository cleanup
+- Scope:
+  - conservative repo cleanup only
+  - preserve the active TUN-only product path
+  - archive historical docs instead of leaving them on the active release surface
+- Archived/moved:
+  - `PHASE2_PLAN.md` -> `docs/archive/PHASE2_PLAN.md`
+  - `SOLUTION_STRUCTURE.md` -> `docs/archive/SOLUTION_STRUCTURE.md`
+  - `docs/OPUS_RELAY_ANALYSIS.md` -> `docs/archive/OPUS_RELAY_ANALYSIS.md`
+  - `docs/OPUS_SNI_SNIFFING.md` -> `docs/archive/OPUS_SNI_SNIFFING.md`
+  - `docs/wfp-tcp-redirect-poc-plan.md` -> `docs/archive/wfp-tcp-redirect-poc-plan.md`
+  - added `docs/archive/README.md` as a small archive index
+- Removed:
+  - `src/TunnelFlow.Tests/UnitTest1.cs`
+    - default placeholder xUnit test with no product coverage value
+  - stray repo-root local validation logs:
+    - `build-tests.log`
+    - `restore-diag.log`
+    - `service-full.log`
+    - `service-tun-app-validation.log`
+    - `service-tun-block-validation.log`
+    - `service-tun-dns-block-validation.log`
+    - `service-tun-policy-validation.log`
+    - `service-tun-validation.log`
+    - `service-validation.log`
+- Intentionally kept:
+  - active root docs:
+    - `README.md`
+    - `ARCHITECTURE.md`
+    - `COMPONENTS.md`
+    - `DATAFLOW.md`
+    - `DECISIONS.md`
+    - `RISKS.md`
+  - `CURSOR_RULES.md`
+    - still current engineering guidance rather than obsolete architecture history
+  - `docs/tunnelflow-wintun-singbox-tun-design.md`
+    - still the active detailed design reference
+  - `third_party/singbox/` and `third_party/wintun/`
+    - still part of the current build/runtime release path
+- Repo hygiene note:
+  - `.gitignore` already covered the removed junk with existing `*.log`, `bin/`, and `obj/` rules, so no ignore-file change was needed
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+    - passed
+  - live UI check:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - verified the app still opens successfully
+
 ## Release-hardening cleanup: remove legacy localhost-SOCKS / WinpkFilter release-path remnants
 - Scope:
   - focused release-surface cleanup only
@@ -99,13 +149,13 @@
   - `DECISIONS.md`
   - `RISKS.md`
   - `COMPONENTS.md`
-  - `PHASE2_PLAN.md`
+  - historical marker retained later as `docs/archive/PHASE2_PLAN.md`
 - Documentation decisions:
   - root docs now describe the current TUN-only product path
-  - `PHASE2_PLAN.md` is retained only as a short historical marker, not an active plan
+  - `docs/archive/PHASE2_PLAN.md` is retained only as a short historical marker, not an active plan
   - historical WinpkFilter / transparent-relay context remains only in:
     - `docs/tunnelflow-wintun-singbox-tun-design.md`
-    - `docs/wfp-tcp-redirect-poc-plan.md`
+    - `docs/archive/wfp-tcp-redirect-poc-plan.md`
     - long-form historical entries in `docs/project-memory.md` / `docs/fix-plan.md`
 - Metadata/repo surface notes:
   - `.gitmodules` is already absent
@@ -508,7 +558,7 @@
   - updated `docs/fix-plan.md`
 - Historical references intentionally kept:
   - `ARCHITECTURE.md`
-  - `docs/wfp-tcp-redirect-poc-plan.md`
+  - `docs/archive/wfp-tcp-redirect-poc-plan.md`
   - older historical sections inside `docs/project-memory.md` / `docs/fix-plan.md`
 - Reason those references were kept:
   - they are historical documentation of the abandoned WinpkFilter/capture era, not part of the active build/runtime path
@@ -2665,7 +2715,7 @@
 
 ## WFP Redirect Docs
 - Active migration design reference:
-  - `docs/wfp-tcp-redirect-poc-plan.md`
+  - `docs/archive/wfp-tcp-redirect-poc-plan.md`
 - Current repository status:
   - Phase 0 skeleton/scaffolding is now in place
   - no real WFP redirect behavior has been implemented yet

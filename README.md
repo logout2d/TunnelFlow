@@ -53,7 +53,7 @@ TunnelFlow/
 |  |- project-memory.md
 |  |- fix-plan.md
 |  |- tunnelflow-wintun-singbox-tun-design.md
-|  `- wfp-tcp-redirect-poc-plan.md  # historical R&D reference only
+|  `- archive/                     # historical/retired notes
 `- README.md
 ```
 
@@ -74,8 +74,9 @@ TunnelFlow/
 Older WinpkFilter / transparent-relay exploration is retained only as
 historical context in:
 
-- [PHASE2_PLAN.md](PHASE2_PLAN.md)
-- [docs/wfp-tcp-redirect-poc-plan.md](docs/wfp-tcp-redirect-poc-plan.md)
+- [docs/archive/PHASE2_PLAN.md](docs/archive/PHASE2_PLAN.md)
+- [docs/archive/wfp-tcp-redirect-poc-plan.md](docs/archive/wfp-tcp-redirect-poc-plan.md)
+- [docs/archive/README.md](docs/archive/README.md)
 - long-form engineering notes in [docs/project-memory.md](docs/project-memory.md)
 
 It is not part of the active release path.
