@@ -6,6 +6,85 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## Release-hardening cleanup: remove legacy localhost-SOCKS / WinpkFilter release-path remnants
+- Scope:
+  - focused release-surface cleanup only
+  - preserve the working TUN-only runtime path
+  - remove dormant localhost-SOCKS startup assumptions from active service code
+  - remove root-level docs that still described WinpkFilter / `ndisapi.net` / `TunnelFlow.Capture` as active
+- Active runtime/code changes:
+  - `SingBoxManager` no longer carries the legacy localhost-SOCKS readiness branch:
+    - removed `WaitForSocksPortAsync`
+    - removed `SelectReadinessStrategy`
+    - removed `SingBoxReadinessStrategy`
+    - startup readiness is now always logged/executed as:
+      - `mode=tun`
+      - `strategy=process-observation`
+  - `SingBoxConfigBuilder` now fails closed when called with `UseTunMode = false`:
+    - throws:
+      - `TunnelFlow release path supports only sing-box TUN mode.`
+    - builder now emits only:
+      - `tun-in`
+      - `final = local-dns`
+      - `route.final = direct`
+    - the dormant localhost SOCKS inbound branch is removed from generated config output
+- Test alignment:
+  - removed old `SingBoxManagerTests` coverage for legacy SOCKS readiness strategy selection
+  - updated `SingBoxConfigBuilderTests` so the active/default test path is TUN-only
+  - replaced the old legacy inbound assertions with:
+    - no legacy `listen_port`
+    - inbound type is `tun`
+    - `UseTunMode = false` throws
+- Root release docs rewritten to current active path:
+  - `README.md`
+  - `ARCHITECTURE.md`
+  - `CURSOR_RULES.md`
+  - `DATAFLOW.md`
+  - `DECISIONS.md`
+  - `RISKS.md`
+  - `COMPONENTS.md`
+  - `PHASE2_PLAN.md`
+- Documentation decisions:
+  - root docs now describe the current TUN-only product path
+  - `PHASE2_PLAN.md` is retained only as a short historical marker, not an active plan
+  - historical WinpkFilter / transparent-relay context remains only in:
+    - `docs/tunnelflow-wintun-singbox-tun-design.md`
+    - `docs/wfp-tcp-redirect-poc-plan.md`
+    - long-form historical entries in `docs/project-memory.md` / `docs/fix-plan.md`
+- Metadata/repo surface notes:
+  - `.gitmodules` is already absent
+  - `.gitignore` no longer contains `ndisapi`-specific ignore rules, so no additional cleanup was needed there
+  - `src/TunnelFlow.Capture` and `third_party/ndisapi.net` are already physically removed from the repo from earlier TUN-only cleanup phases
+- Focused validation repair during this step:
+  - focused `MainViewModelTests` initially failed on one stale punctuation expectation unrelated to the TUN cleanup:
+    - expected: `Stop the tunnel to edit profile settings.`
+    - actual current UI text: `Stop the tunnel to edit profile settings`
+  - updated that one stale assertion to match the current view-model text so the requested focused suite could validate cleanly
+- Runtime validation findings:
+  - `TunnelFlow.UI.exe` launches successfully
+  - in the short automation snapshot used here, the sidebar showed:
+    - `Service: Off`
+    - `Install Service`
+    - disabled `Start Tunnel` / `Stop Tunnel`
+  - direct launch of the built `TunnelFlow.Service.exe` as a normal process exited immediately in this environment and did not append fresh `service.log` lines, so a new live tunnel start could not be confirmed from this step alone
+  - `C:\ProgramData\TunnelFlow\singbox_last.json` from the existing active runtime artifact still contains:
+    - `inbounds[0].type = "tun"`
+    - `inbounds[0].tag = "tun-in"`
+    - no localhost SOCKS or mixed inbound fields
+  - existing `service.log` / `singbox_last.json` history remains consistent with the TUN-only path, but this step's fresh runtime validation is environment-blocked until the service backend is available to the UI again
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 71
+    - failed: 0
+    - skipped: 0
+  - runtime/config inspection:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - attempted direct launch of `src\TunnelFlow.Service\bin\Debug\net8.0-windows\TunnelFlow.Service.exe`
+    - inspected `C:\ProgramData\TunnelFlow\logs\service.log`
+    - inspected `C:\ProgramData\TunnelFlow\singbox_last.json`
+
 ## Profile title polish: move edit hint into the title and remove the standalone helper line
 - Scope:
   - very small Profile-only UI polish

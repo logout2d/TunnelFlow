@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using TunnelFlow.Core;
 using TunnelFlow.Core.Models;
@@ -39,7 +38,7 @@ public sealed class SingBoxManager : ISingBoxManager
         SetStatus(SingBoxStatus.Starting);
 
         // Kill any leftover sing-box processes from a previous (unclean) run before
-        // starting a fresh one; otherwise the SOCKS port stays in use.
+        // starting a fresh one; otherwise stale sing-box resources can linger.
         KillOrphanedSingBoxProcesses(config.BinaryPath);
         await Task.Delay(500, ct);
 
@@ -74,65 +73,32 @@ public sealed class SingBoxManager : ISingBoxManager
         _process.BeginErrorReadLine();
 
         _logger.LogInformation("sing-box started (pid {Pid})", _process.Id);
-        var readinessStrategy = SelectReadinessStrategy(config);
         _logger.LogInformation(
-            "sing-box startup readiness mode={Mode} strategy={Strategy}",
-            config.UseTunMode ? "tun" : "legacy",
-            readinessStrategy);
+            "sing-box startup readiness mode=tun strategy=process-observation");
 
-        switch (readinessStrategy)
+        _logger.LogInformation(
+            "sing-box readiness strategy=process-observation observationWindowMs={ObservationWindowMs}",
+            TunStartupObservationWindow.TotalMilliseconds);
+
+        var readiness = await WaitForProcessObservationAsync(
+            () => _process is null || _process.HasExited,
+            TunStartupObservationWindow,
+            TunStartupPollInterval,
+            ct);
+
+        if (!readiness.Ready)
         {
-            case SingBoxReadinessStrategy.SocksPort:
-            {
-                _logger.LogInformation(
-                    "sing-box readiness strategy=socks-port port={Port}",
-                    config.SocksPort);
-
-                bool responsive = await WaitForSocksPortAsync(config.SocksPort, ct);
-                if (responsive)
-                {
-                    _logger.LogInformation(
-                        "sing-box readiness succeeded strategy=socks-port reason=socks-port-responsive port={Port}",
-                        config.SocksPort);
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        "sing-box readiness not confirmed strategy=socks-port reason=socks-port-not-responsive port={Port}",
-                        config.SocksPort);
-                }
-
-                break;
-            }
-
-            case SingBoxReadinessStrategy.ProcessObservation:
-            {
-                _logger.LogInformation(
-                    "sing-box readiness strategy=process-observation observationWindowMs={ObservationWindowMs}",
-                    TunStartupObservationWindow.TotalMilliseconds);
-
-                var readiness = await WaitForProcessObservationAsync(
-                    () => _process is null || _process.HasExited,
-                    TunStartupObservationWindow,
-                    TunStartupPollInterval,
-                    ct);
-
-                if (!readiness.Ready)
-                {
-                    _logger.LogError(
-                        "sing-box readiness failed strategy=process-observation reason={Reason} exitCode={ExitCode}",
-                        readiness.Reason,
-                        TryGetExitCode(_process));
-                    throw new InvalidOperationException(
-                        $"sing-box startup readiness failed in TUN mode: {readiness.Reason}");
-                }
-
-                _logger.LogInformation(
-                    "sing-box readiness succeeded strategy=process-observation reason={Reason}",
-                    readiness.Reason);
-                break;
-            }
+            _logger.LogError(
+                "sing-box readiness failed strategy=process-observation reason={Reason} exitCode={ExitCode}",
+                readiness.Reason,
+                TryGetExitCode(_process));
+            throw new InvalidOperationException(
+                $"sing-box startup readiness failed in TUN mode: {readiness.Reason}");
         }
+
+        _logger.LogInformation(
+            "sing-box readiness succeeded strategy=process-observation reason={Reason}",
+            readiness.Reason);
 
         SetStatus(SingBoxStatus.Running);
     }
@@ -261,29 +227,6 @@ public sealed class SingBoxManager : ISingBoxManager
         catch { }
     }
 
-    private static async Task<bool> WaitForSocksPortAsync(int port, CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-
-        while (!cts.Token.IsCancellationRequested)
-        {
-            try
-            {
-                using var tcp = new TcpClient();
-                await tcp.ConnectAsync("127.0.0.1", port, cts.Token);
-                return true;
-            }
-            catch (OperationCanceledException) { break; }
-            catch
-            {
-                await Task.Delay(300, cts.Token).ConfigureAwait(false);
-            }
-        }
-
-        return false;
-    }
-
     internal static async Task EnsureCleanLogOutputFileAsync(string? logOutputPath, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(logOutputPath))
@@ -295,11 +238,6 @@ public sealed class SingBoxManager : ISingBoxManager
 
         await File.WriteAllTextAsync(logOutputPath, string.Empty, ct);
     }
-
-    internal static SingBoxReadinessStrategy SelectReadinessStrategy(SingBoxConfig config) =>
-        config.UseTunMode
-            ? SingBoxReadinessStrategy.ProcessObservation
-            : SingBoxReadinessStrategy.SocksPort;
 
     internal static async Task<SingBoxReadinessResult> WaitForProcessObservationAsync(
         Func<bool> hasExited,
@@ -345,12 +283,6 @@ public sealed class SingBoxManager : ISingBoxManager
             return null;
         }
     }
-}
-
-internal enum SingBoxReadinessStrategy
-{
-    SocksPort,
-    ProcessObservation
 }
 
 internal readonly record struct SingBoxReadinessResult(bool Ready, string Reason);

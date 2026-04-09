@@ -15,6 +15,9 @@ public class SingBoxConfigBuilder
 
     public string Build(VlessProfile profile, SingBoxConfig config)
     {
+        if (!config.UseTunMode)
+            throw new InvalidOperationException("TunnelFlow release path supports only sing-box TUN mode.");
+
         var tunRules = GetEnabledTunRules(config);
         var logNode = new JsonObject { ["level"] = "info" };
         if (!string.IsNullOrEmpty(config.LogOutputPath))
@@ -38,31 +41,17 @@ public class SingBoxConfigBuilder
 
     private static JsonArray BuildInbounds(SingBoxConfig config)
     {
-        if (config.UseTunMode)
-        {
-            return new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "tun",
-                    ["tag"] = "tun-in",
-                    ["interface_name"] = "TunnelFlow",
-                    ["address"] = new JsonArray("172.19.0.1/30"),
-                    ["mtu"] = 1500,
-                    ["auto_route"] = true,
-                    ["strict_route"] = true
-                }
-            };
-        }
-
         return new JsonArray
         {
             new JsonObject
             {
-                ["type"] = "socks",
-                ["tag"] = "socks-in",
-                ["listen"] = "127.0.0.1",
-                ["listen_port"] = config.SocksPort
+                ["type"] = "tun",
+                ["tag"] = "tun-in",
+                ["interface_name"] = "TunnelFlow",
+                ["address"] = new JsonArray("172.19.0.1/30"),
+                ["mtu"] = 1500,
+                ["auto_route"] = true,
+                ["strict_route"] = true
             }
         };
     }
@@ -86,11 +75,8 @@ public class SingBoxConfigBuilder
                     ["type"] = "local"
                 }
             },
-            ["final"] = config.UseTunMode ? "local-dns" : "remote-dns"
+            ["final"] = "local-dns"
         };
-
-        if (!config.UseTunMode)
-            return dns;
 
         var rules = new JsonArray();
         foreach (var rule in tunRules)
@@ -114,12 +100,9 @@ public class SingBoxConfigBuilder
             new JsonObject { ["action"] = "sniff" }
         };
 
-        if (config.UseTunMode)
+        foreach (var rule in tunRules)
         {
-            foreach (var rule in tunRules)
-            {
-                rules.Add(BuildTunRouteRule(rule));
-            }
+            rules.Add(BuildTunRouteRule(rule));
         }
 
         rules.Add(new JsonObject
@@ -131,7 +114,7 @@ public class SingBoxConfigBuilder
         return new JsonObject
         {
             ["rules"] = rules,
-            ["final"] = config.UseTunMode ? "direct" : "vless-out",
+            ["final"] = "direct",
             ["auto_detect_interface"] = true,
             ["default_domain_resolver"] = "local-dns"
         };

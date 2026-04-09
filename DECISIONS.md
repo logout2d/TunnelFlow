@@ -1,155 +1,67 @@
-# Architecture Decision Records — TunnelFlow
+# Decisions
 
----
+This file records the active architectural decisions for the current release
+path.
 
-## ADR-001: ndisapi.net (MIT) over WinpkFilter commercial SDK
-
-**Status**: Accepted (supersedes draft decision to use WinpkFilter commercial)
-
-**Context**: Need packet-level interception with per-process filtering on
-Windows 10/11. Original plan used WinpkFilter commercial SDK. License review
-found that WinpkFilter requires a commercial license for redistribution in
-open-source projects.
-
-The same author (Vadim Smirnov / wiresock) publishes ndisapi.net on GitHub
-under MIT license — a C# wrapper around the same WinpkFilter NDIS driver,
-but with open redistribution terms.
-
-Additionally, the WinpkFilter driver itself (the .sys file) is freely
-redistributable as a runtime component per NT Kernel Resources terms —
-only the SDK (managed wrappers, samples) has commercial restrictions.
-
-**Decision**: Use ndisapi.net (MIT) as the C# interface layer.
-Reference: https://github.com/wiresock/ndisapi.net
-
-**Rationale**:
-- MIT license — compatible with our Apache 2.0, no copyleft restrictions
-- Same underlying NDIS driver as WinpkFilter (same author)
-- C# native — integrates directly into TunnelFlow.Capture, no C++ interop
-- Active maintenance, NuGet package available
-- ProxiFyre (AGPL, same author) confirms the approach works for per-app SOCKS5
-
-**Tradeoffs**:
-- ndisapi.net is a lower-level API than the full WinpkFilter SDK — we
-  implement our own session tracking and process resolution on top of it
-- Driver installer must be included in distribution (separate from SDK)
-
----
-
-## ADR-002: sing-box as transport core
+## ADR-001: TUN-only release path
 
 **Status**: Accepted
 
-**Context**: Need a VLESS client with SOCKS5 inbound. Options: build own VLESS implementation, use xray-core, use sing-box.
+TunnelFlow's active product/runtime path is TUN-only:
+- Wintun for the virtual interface
+- sing-box `tun` inbound
+- service-controlled orchestration
+- process-based route and DNS generation
 
-**Decision**: sing-box.
+The retired WinpkFilter / packet-rewrite / localhost-SOCKS approach is not part
+of the active release path.
 
-**Rationale**:
-- sing-box is actively maintained, supports VLESS + all TLS variants + reality.
-- SOCKS5 inbound is a first-class feature.
-- Cross-platform Go binary — easy to bundle, no installer.
-- Config-driven via JSON — easy to generate from C# code.
-- Larger community and more recent codebase vs xray-core.
-
-**Tradeoffs**:
-- External dependency — we don't control sing-box release cycle.
-- Pin a specific version in `third_party/singbox/` and update deliberately.
-- Apache 2.0 license — compatible with our open-source distribution.
-
----
-
-## ADR-003: C# / .NET 8 + WPF for UI and Service
+## ADR-002: Service owns privileged networking lifecycle
 
 **Status**: Accepted
 
-**Context**: Need a Windows-native stack that Cursor/AI assistants know well, with good Windows Service and WinAPI interop support.
+`TunnelFlow.Service` remains the privileged orchestrator for:
+- TUN activation
+- sing-box start/stop
+- runtime state publishing
+- owner lease enforcement
+- persistent logging
 
-**Decision**: .NET 8 throughout (UI, Service, Capture wrapper). WPF for the UI.
+The UI remains an unprivileged client.
 
-**Rationale**:
-- .NET 8 has excellent P/Invoke for `GetExtendedTcpTable`, `QueryFullProcessImageName`, Named Pipes, DPAPI.
-- WPF is mature — Cursor has strong training data for it.
-- WinUI 3 is more modern but has less training data and more packaging complexity (MSIX required).
-- Single runtime target reduces complexity; .NET 8 LTS supported until 2026.
-
-**Tradeoffs**:
-- WPF uses older XAML patterns vs WinUI 3 Fluent. Acceptable for v1.
-- Can migrate UI to WinUI 3 in a future major version without touching Service or Capture.
-
----
-
-## ADR-004: Named Pipe for UI ↔ Service IPC
+## ADR-003: sing-box startup readiness uses process observation
 
 **Status**: Accepted
 
-**Context**: UI runs as normal user; Service runs elevated. Need bidirectional communication.
+The active TUN-only path confirms startup through short process-survival
+observation rather than localhost port probing.
 
-**Decision**: Named Pipe with line-delimited JSON.
+Rationale:
+- the release path no longer depends on a localhost SOCKS listener
+- process observation matches the real TUN startup model
+- it avoids carrying dormant SOCKS assumptions into the release path
 
-**Rationale**:
-- Named Pipes are the standard Windows IPC for user↔service communication.
-- Work across elevation boundaries with correct pipe security descriptor (allow Users to connect).
-- Line-delimited JSON is simple to implement, debuggable, and extensible.
-- No external dependencies (no gRPC, no HTTP server in the service).
-
-**Tradeoffs**:
-- Lower throughput than gRPC. Not a concern — message volume is low (config changes, status updates, log lines).
-- Need to handle reconnect on UI restart (Service persists, UI may open/close).
-
----
-
-## ADR-005: UDP port 443 block for tunneled processes
+## ADR-004: No fake healthy/connectivity state
 
 **Status**: Accepted
 
-**Context**: Browsers use QUIC (HTTP/3) over UDP 443 aggressively. sing-box SOCKS5 inbound does not reliably support QUIC proxying (UDP ASSOCIATE path has known limitations). If UDP 443 is redirected to SOCKS5, QUIC connections fail silently or cause hangs.
+The UI may show:
+- local runtime state
+- conservative warning evidence
 
-**Decision**: Hard-block UDP port 443 for all tunneled processes at the PolicyEngine level.
+It must not imply proven end-to-end connectivity unless that signal truly
+exists.
 
-**Rationale**:
-- Browsers (Chrome, Firefox, Edge) detect UDP 443 unreachable and fall back to TCP+TLS within 0–300ms.
-- The fallback is transparent to the user — the browser still works, just via HTTP/2 instead of HTTP/3.
-- This is industry-standard practice in transparent proxy implementations.
-
-**Tradeoffs**:
-- HTTP/3 performance benefits lost for tunneled browser sessions.
-- Must be documented in UI to avoid user confusion ("Why is HTTP/3 disabled?").
-
----
-
-## ADR-006: Fail-closed on sing-box crash
+## ADR-005: Owner lease protects against orphaned active tunnels
 
 **Status**: Accepted
 
-**Context**: If sing-box crashes during an active tunneling session, packets from tunneled apps are redirected to a dead SOCKS5 port. Two options: (a) temporarily switch tunneled apps to direct (fail-open), or (b) let them fail with connection errors while sing-box restarts (fail-closed).
+When the UI owns the active tunnel session, it must maintain a heartbeat-based
+lease. If the owner disappears long enough, the service performs the normal
+controlled stop path.
 
-**Decision**: Fail-closed (option b).
+## Historical note
 
-**Rationale**:
-- The primary use case is privacy/security — accidentally sending tunneled traffic direct is worse than a brief outage.
-- sing-box restart is fast (3s delay). App connections will retry and succeed.
-- Fail-open would require complex state management (temporarily update WinpkFilter rules, then revert).
-
-**Tradeoffs**:
-- Apps experience 3–10 seconds of connection errors during sing-box restart.
-- Acceptable given the security guarantee.
-
----
-
-## ADR-007: DPAPI for credential storage
-
-**Status**: Accepted
-
-**Context**: VLESS profiles contain sensitive credentials (UUID, server address, TLS config). Need secure storage.
-
-**Decision**: Windows DPAPI (`System.Security.Cryptography.ProtectedData`) for encrypting credential fields within `config.json`.
-
-**Rationale**:
-- DPAPI is the Windows-native, zero-dependency solution for per-user or per-machine secret storage.
-- Credentials are unreadable outside the user/machine context — no separate keystore needed.
-- Simple API: `ProtectedData.Protect` / `Unprotect`.
-
-**Tradeoffs**:
-- Config files are not portable across machines (by design — credentials are machine-bound).
-- Users need to re-enter credentials if they move to a new machine or reinstall Windows.
-- Export feature must strip DPAPI fields or re-encrypt them separately.
+Earlier ADRs centered on WinpkFilter / `ndisapi.net` / localhost SOCKS were part
+of the retired architecture exploration and are no longer active release
+constraints.

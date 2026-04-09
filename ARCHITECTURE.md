@@ -1,144 +1,82 @@
-# Architecture — TunnelFlow
+# Architecture
 
-Version 0.2 · Based on spec v0.1 + decisions from concept phase
+This file describes the **active release architecture** for TunnelFlow.
 
----
+TunnelFlow now ships a **TUN-only** runtime path:
 
-## Design principles
+- `TunnelFlow.UI` is the unprivileged desktop client
+- `TunnelFlow.Service` is the privileged orchestration layer
+- `TunnelFlow.Bootstrapper` handles elevated install/start/repair actions
+- Wintun provides the virtual interface
+- sing-box runs with a `tun` inbound and VLESS outbound
 
-1. **Strict separation of concerns** — the capture layer knows nothing about VLESS; the transport layer knows nothing about processes.
-2. **Fail closed by default** — if the service crashes or sing-box dies, tunneled apps lose connectivity (not bypass the tunnel silently).
-3. **Self-exclusion is mandatory** — TunnelFlow's own binaries and sing-box are always on the deny list. Circular interception is a crash, not a feature.
-4. **No virtual adapter** — we are a transparent per-app socksifier, not a VPN client.
+The active product path does **not** include a localhost SOCKS listener or any
+WinpkFilter/`ndisapi.net` capture layer.
 
----
+## Component overview
 
-## Component map
+### TunnelFlow.UI
+- WPF client
+- edits profiles and app rules
+- connects to the service through named-pipe IPC
+- shows runtime state, warnings, logs, and profile/subscription state
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  User space (normal process)                                │
-│                                                             │
-│  ┌──────────────┐    Named Pipe IPC    ┌─────────────────┐ │
-│  │  TunnelFlow  │◄────────────────────►│ TunnelFlow      │ │
-│  │  .UI (WPF)   │                      │ .Service        │ │
-│  └──────────────┘                      │ (Windows Svc)   │ │
-│                                        └────────┬────────┘ │
-│                                                 │           │
-│                              spawn + manage     │           │
-│                         ┌───────────────────────┤           │
-│                         │                       │           │
-│               ┌─────────▼──────┐    ┌──────────▼────────┐ │
-│               │ TunnelFlow     │    │   sing-box         │ │
-│               │ .Capture       │    │   (child process)  │ │
-│               │ (ndisapi.net   │    │                    │ │
-│               │  MIT wrapper)  │    │  SOCKS5 inbound    │ │
-│               └─────────┬──────┘    │  VLESS outbound    │ │
-│                         │           └──────────┬─────────┘ │
-└─────────────────────────┼──────────────────────┼───────────┘
-                          │                      │
-┌─────────────────────────▼──────────────────────┼───────────┐
-│  Kernel space                                  │           │
-│                                                │           │
-│  ┌──────────────────────────────────────────┐  │           │
-│  │  WinpkFilter NDIS driver (runtime, freely redistributable) ││           │
-│  │  - intercepts packets by process PID     │  │           │
-│  │  - redirects matching flows to loopback  │  │           │
-│  └──────────────────────────────────────────┘  │           │
-└────────────────────────────────────────────────┼───────────┘
-                                                 │
-                                          VLESS tunnel
-                                                 │
-                                         Remote VLESS server
-```
+### TunnelFlow.Service
+- validates TUN prerequisites
+- activates/stops Wintun through `ITunOrchestrator`
+- generates sing-box config for the active profile
+- starts/stops sing-box and observes startup by short process-survival checks
+- owns lifecycle state, runtime warning evidence, and owner lease tracking
+- persists config under `%ProgramData%\TunnelFlow\`
 
----
+### TunnelFlow.Bootstrapper
+- elevated helper for install/repair/start/restart actions
+- keeps service management out of the normal UI process
 
-## Component responsibilities
+### Wintun + sing-box
+- Wintun provides the tunnel interface
+- sing-box receives tunnel traffic through `tun-in`
+- route and DNS rules are generated from app rules
+- selected apps are proxied, direct apps stay direct, blocked apps are rejected
 
-### TunnelFlow.UI (WPF, .NET 8)
-- Renders configuration UI: app list, VLESS profiles, mode selector, log viewer.
-- Communicates with Service via Named Pipe (JSON protocol).
-- Runs as normal user process; does NOT require elevation.
-- Does NOT touch WinpkFilter or sing-box directly.
+## Active runtime flow
 
-### TunnelFlow.Service (Windows Service, .NET 8)
-- Runs elevated (LocalSystem or dedicated service account).
-- Owns lifecycle of Capture engine and sing-box process.
-- Generates sing-box JSON config from stored profiles.
-- Implements health-check watchdog for sing-box (restart on crash).
-- Exposes Named Pipe server for UI communication.
-- Persists configuration to `%ProgramData%\TunnelFlow\`.
+1. UI sends config and lifecycle commands to the service.
+2. Service validates TUN prerequisites and loads the active profile.
+3. Service activates Wintun.
+4. Service writes `singbox_last.json` and starts sing-box in TUN mode.
+5. Startup readiness is confirmed by process observation, not port probing.
+6. Service publishes structured state/status payloads back to the UI.
 
-### TunnelFlow.Capture (.NET 8 class library)
-- Wraps ndisapi.net (MIT, github.com/wiresock/ndisapi.net) for packet interception.
-- Resolves active TCP/UDP connections to process paths via `GetExtendedTcpTable` / `GetExtendedUdpTable` → `QueryFullProcessImageName`.
-- Maintains Session Registry (see COMPONENTS.md).
-- Applies Policy Engine rules: proxy / direct / block per process.
-- Redirects matching flows to `127.0.0.1:SOCKS_PORT`.
-- Hard-coded self-exclusion: own PIDs + sing-box PID + loopback + VLESS server IP.
+## Shutdown flow
 
-### TunnelFlow.Core (.NET 8 class library)
-- Shared models: `AppRule`, `VlessProfile`, `SessionEntry`, `PolicyDecision`.
-- Shared interfaces: `ICaptureEngine`, `IPolicyEngine`, `ISessionRegistry`.
-- IPC message types (Named Pipe protocol).
-- No dependencies on WinpkFilter or sing-box.
+Tunnel stop is ordered deliberately:
 
-### sing-box (child process, managed binary)
-- Bundled binary in `third_party/singbox/`.
-- Started by Service with auto-generated `config.json`.
-- Listens on `127.0.0.1:SOCKS_PORT` (SOCKS5, no auth).
-- Routes all inbound through VLESS outbound.
-- DNS policy: forward DNS queries through tunnel (production) or system resolver (MVP, documented limitation).
+1. lifecycle becomes `Stopping`
+2. sing-box is stopped first
+3. TUN orchestrator is stopped second
+4. lifecycle becomes `Stopped`
 
----
+This keeps TUN teardown aligned with the current release-hardening model.
 
-## IPC contract (Named Pipe)
+## Runtime artifacts
 
-Pipe name: `\\.\pipe\TunnelFlowService`
+TunnelFlow stores active runtime artifacts under:
 
-Transport: line-delimited JSON (newline `\n` terminated).
-
-Direction: bidirectional. UI sends commands; Service sends responses and push events.
-
-See COMPONENTS.md for full message schema.
-
----
-
-## Process isolation model
-
-| Process | Elevation | Can crash without data loss |
-|---------|-----------|---------------------------|
-| UI | No | Yes — Service keeps running |
-| Service | Yes (LocalSystem) | No — capture stops, sing-box stops |
-| Capture (in-process with Service) | Yes | No |
-| sing-box | Yes (spawned by Service) | Watchdog restarts within 3s |
-
----
-
-## Network flow summary
-
-See [DATAFLOW.md](DATAFLOW.md) for full detail.
-
-Short version:
-- **Matching app TCP** → WinpkFilter intercepts → redirect to `127.0.0.1:2080` → sing-box SOCKS5 → VLESS out.
-- **Matching app UDP** → same redirect path; Session Registry tracks UDP associations with 30s idle timeout.
-- **Matching app UDP 443** → blocked (forces QUIC→TCP fallback in browsers).
-- **Non-matching app** → WinpkFilter passes through unmodified.
-- **TunnelFlow/sing-box own traffic** → hard deny-list, always pass-through.
-
----
-
-## Configuration storage
-
-```
+```text
 %ProgramData%\TunnelFlow\
-├── config.json          # App rules, profiles, settings
-├── singbox_last.json    # Last generated sing-box config (debug)
-└── logs\
-    ├── service.log
-    └── singbox.log
+|- config.json
+|- singbox_last.json
+`- logs\
+   |- singbox.log
+   `- service.log
 ```
 
-Config is written by Service only. UI reads/writes via IPC commands.
-Credentials (VLESS UUID, server address) stored in Windows DPAPI-encrypted fields within `config.json`.
+## Historical note
+
+Older WinpkFilter / transparent-relay material is no longer the active product
+architecture. Historical design context remains in:
+
+- `docs/tunnelflow-wintun-singbox-tun-design.md`
+- `docs/wfp-tcp-redirect-poc-plan.md`
+- `docs/project-memory.md`

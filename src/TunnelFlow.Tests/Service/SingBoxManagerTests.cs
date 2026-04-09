@@ -7,26 +7,6 @@ namespace TunnelFlow.Tests.Service;
 public class SingBoxManagerTests
 {
     [Fact]
-    public void SelectReadinessStrategy_UsesSocksPort_ForLegacyMode()
-    {
-        var config = new SingBoxConfig { UseTunMode = false };
-
-        var strategy = SingBoxManager.SelectReadinessStrategy(config);
-
-        Assert.Equal(SingBoxReadinessStrategy.SocksPort, strategy);
-    }
-
-    [Fact]
-    public void SelectReadinessStrategy_UsesProcessObservation_ForTunMode()
-    {
-        var config = new SingBoxConfig { UseTunMode = true };
-
-        var strategy = SingBoxManager.SelectReadinessStrategy(config);
-
-        Assert.Equal(SingBoxReadinessStrategy.ProcessObservation, strategy);
-    }
-
-    [Fact]
     public async Task WaitForProcessObservationAsync_ReturnsFalse_WhenProcessExitsDuringWindow()
     {
         var stopwatch = Stopwatch.StartNew();

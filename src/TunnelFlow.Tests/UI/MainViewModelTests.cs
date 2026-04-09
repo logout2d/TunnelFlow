@@ -1143,7 +1143,7 @@ public class MainViewModelTests
         Assert.True(viewModel.AppRules.ShowEditHint);
         Assert.True(viewModel.Profile.ShowEditHint);
         Assert.Equal("Stop the tunnel to edit rules.", viewModel.AppRules.EditHintText);
-        Assert.Equal("Stop the tunnel to edit profile settings.", viewModel.Profile.EditHintText);
+        Assert.Equal("Stop the tunnel to edit profile settings", viewModel.Profile.EditHintText);
 
         viewModel.ApplyStatePayload(new StatePayload
         {

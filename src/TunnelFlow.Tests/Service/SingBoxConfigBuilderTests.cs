@@ -27,7 +27,7 @@ public class SingBoxConfigBuilderTests
 
     private static SingBoxConfig MakeConfig(
         int socksPort = 2080,
-        bool useTunMode = false,
+        bool useTunMode = true,
         IReadOnlyList<AppRule>? rules = null) => new()
     {
         SocksPort = socksPort,
@@ -57,21 +57,18 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
-    public void Build_ContainsSocksPort()
+    public void Build_DoesNotContainLegacySocksPort()
     {
         const int port = 3333;
         var json = _builder.Build(MakeProfile(), MakeConfig(socksPort: port));
 
         using var doc = JsonDocument.Parse(json);
-        var listenPort = doc.RootElement
-            .GetProperty("inbounds")[0]
-            .GetProperty("listen_port")
-            .GetInt32();
-        Assert.Equal(port, listenPort);
+        Assert.False(
+            doc.RootElement.GetProperty("inbounds")[0].TryGetProperty("listen_port", out _));
     }
 
     [Fact]
-    public void Build_InboundType_IsSocks()
+    public void Build_InboundType_IsTun()
     {
         var json = _builder.Build(MakeProfile(), MakeConfig());
         using var doc = JsonDocument.Parse(json);
@@ -79,19 +76,15 @@ public class SingBoxConfigBuilderTests
             .GetProperty("inbounds")[0]
             .GetProperty("type")
             .GetString();
-        Assert.Equal("socks", inboundType);
+        Assert.Equal("tun", inboundType);
     }
 
     [Fact]
-    public void Build_UseTunModeFalse_KeepsLegacySocksInbound()
+    public void Build_UseTunModeFalse_Throws()
     {
-        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: false));
-
-        using var doc = JsonDocument.Parse(json);
-        var inbound = doc.RootElement.GetProperty("inbounds")[0];
-        Assert.Equal("socks", inbound.GetProperty("type").GetString());
-        Assert.Equal("127.0.0.1", inbound.GetProperty("listen").GetString());
-        Assert.Equal(2080, inbound.GetProperty("listen_port").GetInt32());
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            _builder.Build(MakeProfile(), MakeConfig(useTunMode: false)));
+        Assert.Equal("TunnelFlow release path supports only sing-box TUN mode.", ex.Message);
     }
 
     [Fact]
@@ -299,7 +292,7 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
-    public void Build_SniffEnabled_OnSocksInbound()
+    public void Build_IncludesSniffRule_ForTunRouting()
     {
         var json = _builder.Build(MakeProfile(), MakeConfig());
 

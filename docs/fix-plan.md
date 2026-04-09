@@ -1109,6 +1109,53 @@ Validation:
 - verified the process remained running after opening the Profile tab
 - verified the title was present in the UI Automation tree and the old standalone helper line text was absent
 
+## Step 67
+Release-hardening cleanup: remove legacy localhost-SOCKS / WinpkFilter active release-path assumptions.
+Status: completed
+Scope:
+- focused release-surface cleanup only
+- no broad refactor
+- preserve the working TUN-only runtime path
+Outcome:
+- removed the dormant localhost-SOCKS readiness branch from `SingBoxManager`
+  - deleted `WaitForSocksPortAsync`
+  - deleted strategy-selection plumbing for SOCKS readiness
+  - active startup readiness is now always TUN/process-observation
+- tightened `SingBoxConfigBuilder` to the actual release path
+  - builder now throws if called with `UseTunMode = false`
+  - generated config no longer has a legacy localhost SOCKS inbound branch
+- aligned focused service tests with the TUN-only builder/readiness path
+- rewrote the root release-facing docs so they no longer present WinpkFilter / `ndisapi.net` / `TunnelFlow.Capture` / localhost SOCKS as the active architecture:
+  - `README.md`
+  - `ARCHITECTURE.md`
+  - `CURSOR_RULES.md`
+  - `DATAFLOW.md`
+  - `DECISIONS.md`
+  - `RISKS.md`
+  - `COMPONENTS.md`
+  - `PHASE2_PLAN.md` now retained only as a short historical marker
+- confirmed repo metadata state:
+  - `.gitmodules` already absent
+  - no `ndisapi`-specific `.gitignore` cleanup remained to do
+- focused validation repair:
+  - updated one stale `MainViewModelTests` punctuation expectation so the requested focused suite matched the current UI text
+- runtime/config verification:
+  - `TunnelFlow.UI.exe` launched successfully
+  - short UI Automation snapshot showed:
+    - `Service: Off`
+    - `Install Service`
+    - disabled `Start Tunnel` / `Stop Tunnel`
+  - direct launch of the built `TunnelFlow.Service.exe` as a normal process exited immediately in this environment and did not append fresh `service.log` lines
+  - existing `singbox_last.json` still showed:
+    - `tun-in`
+    - no localhost `socks` / `socks-in` / `127.0.0.1` inbound
+  - result:
+    - build/test validation is green
+    - fresh live tunnel start validation is currently blocked until the service backend is available to the UI again
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 49
 Subscription status display cleanup: remove persistent import/update text from under the Import URL row.
 Status: in progress

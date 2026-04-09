@@ -1,138 +1,73 @@
-# Risks — TunnelFlow
+# Risks
 
-Risk register with severity, probability, and mitigation plan.
+Current TUN-only risk register for TunnelFlow.
 
-Severity: **High** / Medium / Low  
-Probability: **High** / Medium / Low
+## R-001: TUN prerequisite mismatch
 
----
+**Severity**: High  
+**Probability**: Medium
 
-## R-001: Circular traffic interception (self-loop)
-
-**Severity**: High — causes infinite redirect loop, system hang  
-**Probability**: High — will happen without explicit exclusions
-
-**Description**: WinpkFilter intercepts ALL matching traffic. If sing-box.exe or TunnelFlow.Service.exe are not excluded, their outbound packets get redirected back to sing-box, creating an infinite loop.
+If Wintun runtime files are missing or unusable, the service cannot start the
+active product path.
 
 **Mitigation**:
-- Hard-coded exclusion list in `CaptureConfig.ExcludedProcessPaths`: sing-box binary path, service binary path.
-- Hard-coded exclusion for VLESS server IP in `CaptureConfig.ExcludedDestinations`.
-- Exclusions are applied before any user-defined rules — cannot be overridden by UI.
-- Integration test: start capture, verify sing-box traffic reaches remote server and does not loop.
+- explicit TUN prerequisite selection and logging
+- fail-closed start gating
+- clear service/UI status messaging
 
----
+## R-002: sing-box config/version drift
 
-## R-002: DNS leaks for tunneled applications
+**Severity**: High  
+**Probability**: Medium
 
-**Severity**: High (for privacy use case) / Low (for performance use case)  
-**Probability**: High in MVP — DNS is intentionally not intercepted
-
-**Description**: DNS queries from tunneled apps use the Windows system resolver, which bypasses the tunnel. An observer can see DNS queries even if TCP/UDP flows are hidden.
-
-**Mitigation (MVP)**:
-- Document prominently in UI: "⚠️ DNS queries are not tunneled. Your DNS provider can see which domains tunneled apps resolve."
-- Add a "DNS leak test" link in the UI pointing to an external test tool.
-
-**Mitigation (Production — Phase 3)**:
-- Intercept UDP/TCP port 53 from tunneled processes in PolicyEngine.
-- Route to local sing-box DNS inbound on `127.0.0.1:5353`.
-- See DATAFLOW.md DNS section for implementation plan.
-
----
-
-## R-003: Antivirus / EDR interference with WinpkFilter
-
-**Severity**: High — may prevent the app from working at all  
-**Probability**: Medium — consumer AV usually allows signed NDIS drivers; corporate EDR is stricter
-
-**Description**: WinpkFilter installs an NDIS intermediate driver. Security software may block driver load, flag the process as suspicious, or quarantine binaries.
+The active runtime depends on generated sing-box config matching the bundled
+binary's expected schema.
 
 **Mitigation**:
-- WinpkFilter driver is WHQL-signed — reduces AV false positives significantly.
-- Document known compatibility issues (Windows Defender = OK, common EDR list TBD).
-- Provide a diagnostic command: `TunnelFlow.exe diag driver` to check driver load status.
-- Test against: Windows Defender, Malwarebytes, Kaspersky in CI smoke tests.
+- keep the bundled sing-box version pinned
+- validate config generation with focused builder tests
+- keep generated config snapshots and logs for diagnosis
 
----
+## R-003: Rule or DNS mismatch causes apparent connectivity failure
 
-## R-004: Race condition — process exits between packet arrival and PID lookup
+**Severity**: Medium  
+**Probability**: Medium
 
-**Severity**: Medium — wrong policy may be applied to a brief window of packets  
-**Probability**: Low — only occurs at process startup/shutdown boundaries
-
-**Description**: A packet arrives, we call `GetExtendedTcpTable`, the process has exited, and a new unrelated process reused the same port. We may apply the wrong policy.
+A bad route or DNS rule can make selected apps appear broken even while the
+local tunnel started correctly.
 
 **Mitigation**:
-- Cross-check process start time from `SYSTEM_PROCESS_INFORMATION` vs connection creation time.
-- On ambiguity: apply `Direct` (never proxy unknown traffic).
-- Log the ambiguous case with all available info for post-hoc diagnosis.
-- Acceptable residual risk — the window is microseconds and the fallback is safe (Direct, not Block).
+- keep TUN policy mapping explicit and testable
+- preserve service.log and singbox.log for diagnosis
+- keep UI warning evidence conservative and honest
 
----
+## R-004: Orphaned tunnel after UI loss
 
-## R-005: WinpkFilter license for open-source distribution
+**Severity**: Medium  
+**Probability**: Low
 
-**Severity**: High — could block entire project if unresolvable  
-**Probability**: Medium — WinpkFilter has commercial SDK license; open-source redistribution terms unclear
-
-**Description**: WinpkFilter is a commercial product. Bundling its driver and managed wrapper in an open-source repository may violate the license terms.
+If the UI exits unexpectedly while the tunnel is active, the tunnel could stay
+running without an owner unless the owner lease model works correctly.
 
 **Mitigation**:
-- **RESOLVED**: Using ndisapi.net (MIT license). Driver runtime redistribution
-  confirmed permissible per NT Kernel Resources terms. See ADR-001.
+- heartbeat-based owner lease
+- conservative lease timeout
+- controlled auto-stop on lease expiry
 
----
+## R-005: Startup/shutdown lifecycle races
 
-## R-006: UDP association table memory growth
+**Severity**: Medium  
+**Probability**: Medium
 
-**Severity**: Medium — service memory leak under high UDP load  
-**Probability**: Low — only with very high-volume UDP applications (video streaming, gaming)
-
-**Description**: Every unique UDP 4-tuple creates a Session Registry entry. Under high load (e.g., gaming with many UDP flows), the table could grow large before the 30s timeout cleans entries.
-
-**Mitigation**:
-- Hard cap: `ISessionRegistry` max 10,000 entries. On cap hit: evict LRU entries.
-- Purge job runs every 10 seconds (not just on new entries).
-- Expose current session count in UI diagnostics.
-- Monitor in testing with a video streaming + gaming simulation.
-
----
-
-## R-007: sing-box version incompatibility after update
-
-**Severity**: Medium — generated config may break  
-**Probability**: Medium — sing-box config schema has changed between major versions
-
-**Description**: sing-box is bundled at a pinned version. If a user manually replaces the binary, or if we update the bundled version, the config generation template may produce invalid JSON.
+Quick start/stop/start sequences can corrupt the runtime if lifecycle state is
+implicit.
 
 **Mitigation**:
-- Pin sing-box version in `third_party/singbox/VERSION` file.
-- On startup, validate sing-box version output against expected version.
-- If mismatch: log warning, attempt to start anyway, surface error in UI if sing-box fails.
-- Keep a `SingBoxConfigBuilder` class that targets a specific sing-box API version.
+- explicit lifecycle state machine
+- fail-closed start/stop gating
+- stop sing-box before stopping TUN
 
----
+## Historical note
 
-## R-008: WPF app not receiving Named Pipe push events
-
-**Severity**: Low — UI becomes stale, but tunneling still works  
-**Probability**: Low — pipe reconnect handling is standard
-
-**Description**: If the Named Pipe connection is dropped (service restart, pipe error), the UI stops receiving push events (status, log lines, session updates).
-
-**Mitigation**:
-- UI implements automatic reconnect with exponential backoff (1s, 2s, 4s, max 30s).
-- UI shows "Reconnecting..." banner while pipe is disconnected.
-- On reconnect, immediately send `GetState` to refresh full state.
-
----
-
-## Open questions (must resolve before Phase 2)
-
-| # | Question | Impact |
-|---|----------|--------|
-| OQ-1 | ~~WinpkFilter license for open-source — see R-005~~ **RESOLVED** — using ndisapi.net (MIT). See ADR-001. | ~~Blocks entire project~~ |
-| OQ-2 | ~~Does WinpkFilter managed wrapper support .NET 8?~~ **RESOLVED** — ndisapi.net is a C# NuGet package targeting .NET Standard 2.0+, works with .NET 8 out of the box. | ~~Affects Capture project setup~~ |
-| OQ-3 | sing-box UDP ASSOCIATE over SOCKS5 — does it actually work for DNS/non-QUIC UDP? | Affects Phase 2 UDP scope |
-| OQ-4 | Windows Service installer strategy — NSIS, WiX, or self-installing exe? | Affects Phase 3 distribution |
-| OQ-5 | Code signing certificate for installer — required for SmartScreen pass | Affects Phase 4 |
+Risks specific to WinpkFilter, `ndisapi.net`, and localhost SOCKS startup are
+part of the retired architecture and are no longer active release risks.
