@@ -243,13 +243,13 @@ public class ProfileViewModelTests
 
         viewModel.IsServiceConnected = false;
         Assert.True(viewModel.ShowEditHint);
-        Assert.Equal("Start the service to save profile changes.", viewModel.EditHintText);
-        Assert.Equal("VLESS Profile (Start the service to save profile changes.)", viewModel.ProfileTitle);
+        Assert.Equal("Start the service to save profile changes", viewModel.EditHintText);
+        Assert.Equal("VLESS Profile (Start the service to save profile changes)", viewModel.ProfileTitle);
 
         viewModel.IsEditingEnabled = false;
         Assert.True(viewModel.ShowEditHint);
-        Assert.Equal("Stop the tunnel to edit profile settings.", viewModel.EditHintText);
-        Assert.Equal("VLESS Profile (Stop the tunnel to edit profile settings.)", viewModel.ProfileTitle);
+        Assert.Equal("Stop the tunnel to edit profile settings", viewModel.EditHintText);
+        Assert.Equal("VLESS Profile (Stop the tunnel to edit profile settings)", viewModel.ProfileTitle);
     }
 
     [Fact]
