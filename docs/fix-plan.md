@@ -1156,6 +1156,39 @@ Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests|FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
 
+## Step 68
+Add a simple About tab to the main navigation shell.
+Status: completed
+Scope:
+- narrow UI/navigation step only
+- no runtime/service behavior changes
+- keep the page compact and release-friendly
+Outcome:
+- added a new main navigation destination:
+  - `About`
+- wired `MainViewModel.CurrentView` switching for:
+  - `AboutViewModel`
+- added a compact `AboutView` that shows:
+  - app name `TunnelFlow`
+  - runtime assembly version
+  - icon/logo placeholder area
+  - short product description
+  - placeholder project link `http://www.sample.com`
+  - small footer text
+- used the narrowest straightforward version source:
+  - `AssemblyInformationalVersionAttribute`
+  - falling back to assembly version
+- extended focused UI navigation coverage so `MainViewModelTests` now includes About navigation
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- verified:
+  - About appears in navigation
+  - switching to About works
+  - version is shown
+  - `http://www.sample.com` is visible
+
 ## Step 49
 Subscription status display cleanup: remove persistent import/update text from under the Import URL row.
 Status: in progress

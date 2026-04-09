@@ -239,6 +239,9 @@
                     <Button Content="📄  Log"
                             Command="{Binding NavigateToLogCommand}"
                             Style="{StaticResource NavButton}"/>
+                    <Button Content="ℹ  About"
+                            Command="{Binding NavigateToAboutCommand}"
+                            Style="{StaticResource NavButton}"/>
                 </StackPanel>
 
                 <!-- Start / Stop at bottom -->

@@ -1048,6 +1048,9 @@ public class MainViewModelTests
         viewModel.NavigateToLogCommand.Execute(null);
         Assert.Same(viewModel.Log, viewModel.CurrentView);
 
+        viewModel.NavigateToAboutCommand.Execute(null);
+        Assert.Same(viewModel.About, viewModel.CurrentView);
+
         viewModel.NavigateToRulesCommand.Execute(null);
         Assert.Same(viewModel.AppRules, viewModel.CurrentView);
     }

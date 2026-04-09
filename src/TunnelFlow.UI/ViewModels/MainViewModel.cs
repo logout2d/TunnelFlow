@@ -100,6 +100,7 @@ public partial class MainViewModel : ObservableObject
     public AppRulesViewModel AppRules { get; }
     public ProfileViewModel Profile { get; }
     public LogViewModel Log { get; }
+    public AboutViewModel About { get; }
 
     public IRelayCommand StartCommand { get; }
     public IRelayCommand StopCommand { get; }
@@ -108,6 +109,7 @@ public partial class MainViewModel : ObservableObject
     public IRelayCommand NavigateToRulesCommand { get; }
     public IRelayCommand NavigateToProfileCommand { get; }
     public IRelayCommand NavigateToLogCommand { get; }
+    public IRelayCommand NavigateToAboutCommand { get; }
 
     private RelayCommand _startCmd = null!;
     private RelayCommand _stopCmd = null!;
@@ -136,6 +138,7 @@ public partial class MainViewModel : ObservableObject
         AppRules = new AppRulesViewModel(client);
         Profile = new ProfileViewModel(client);
         Log = new LogViewModel();
+        About = new AboutViewModel();
         _currentView = AppRules;
         UpdateConfigEditingState();
 
@@ -156,6 +159,7 @@ public partial class MainViewModel : ObservableObject
         NavigateToRulesCommand = new RelayCommand(() => CurrentView = AppRules);
         NavigateToProfileCommand = new RelayCommand(() => CurrentView = Profile);
         NavigateToLogCommand = new RelayCommand(() => CurrentView = Log);
+        NavigateToAboutCommand = new RelayCommand(() => CurrentView = About);
     }
 
     partial void OnIsConnectedChanged(bool value)

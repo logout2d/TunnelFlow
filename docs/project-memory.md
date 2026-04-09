@@ -6,6 +6,62 @@
 - Historical / diagnostic R&D reference:
   - `docs/wfp-tcp-redirect-poc-plan.md`
 
+## About tab: simple main-navigation page for release-friendly app info
+- Scope:
+  - narrow UI/navigation step only
+  - no runtime/service/TUN behavior changes
+  - add one small About page to the existing main shell
+- Changes made:
+  - added `AboutViewModel` and `AboutView`
+  - added `About` to the main navigation/sidebar and `CurrentView` switching
+  - added the `AboutViewModel -> AboutView` data template in `App.xaml`
+- About page content:
+  - app name:
+    - `TunnelFlow`
+  - version line:
+    - `Version <app version>`
+  - reserved icon/logo placeholder area:
+    - bordered square with `Icon`
+  - short description:
+    - `TunnelFlow provides a simple and clear interface for working with VLESS profiles and an easy way to tunnel selected applications through a virtual adapter.`
+  - project link:
+    - `http://www.sample.com`
+  - footer:
+    - `Windows desktop app for VLESS and per-app tunneling.`
+- Version source used:
+  - `AboutViewModel` reads the UI assembly metadata at runtime
+  - it prefers `AssemblyInformationalVersionAttribute`
+  - falls back to `Assembly.GetName().Version`
+  - in the current build validation run, the live UI showed:
+    - `Version 1.0.0+5068fdbeab05b58cc25345f095bbd118ca95d141`
+- UI implementation notes:
+  - kept the About page compact and consistent with the existing card-based content styling
+  - used a simple read-only one-way-bound `TextBox` for the project URL so the link is visible without adding navigation behavior/code-behind
+  - added one new nav button:
+    - `ℹ  About`
+- Test coverage:
+  - extended `MainViewModelTests.RemainingNavigationCommands_SwitchBetweenVisibleMainViews`
+  - now verifies navigation to:
+    - App Rules
+    - Profile
+    - Log
+    - About
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 33
+    - failed: 0
+    - skipped: 0
+  - real UI verification via UI Automation:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - invoked `ℹ  About`
+    - verified visible About content:
+      - `About`
+      - `TunnelFlow`
+      - `Version 1.0.0+5068fdbeab05b58cc25345f095bbd118ca95d141`
+      - `http://www.sample.com`
+
 ## Release-hardening cleanup: remove legacy localhost-SOCKS / WinpkFilter release-path remnants
 - Scope:
   - focused release-surface cleanup only

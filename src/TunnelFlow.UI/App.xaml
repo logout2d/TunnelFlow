@@ -24,6 +24,10 @@
                 <v:LogView/>
             </DataTemplate>
 
+            <DataTemplate DataType="{x:Type vm:AboutViewModel}">
+                <v:AboutView/>
+            </DataTemplate>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

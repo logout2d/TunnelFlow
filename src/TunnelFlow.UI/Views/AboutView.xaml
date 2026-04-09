@@ -1,0 +1,77 @@
+<UserControl x:Class="TunnelFlow.UI.Views.AboutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#F8FAFC">
+
+    <DockPanel Margin="24,20,24,20">
+
+        <TextBlock DockPanel.Dock="Top"
+                   Text="About"
+                   FontSize="18"
+                   FontWeight="SemiBold"
+                   Foreground="#1E293B"
+                   Margin="0,0,0,16"/>
+
+        <Border Background="White"
+                BorderBrush="#E2E8F0"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="20">
+            <StackPanel>
+                <DockPanel LastChildFill="True">
+                    <Border Width="92"
+                            Height="92"
+                            CornerRadius="14"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            Background="#F8FAFC"
+                            DockPanel.Dock="Left"
+                            Margin="0,0,18,0">
+                        <TextBlock Text="Icon"
+                                   Foreground="#94A3B8"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding AppName}"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   Foreground="#0F172A"/>
+                        <TextBlock Text="{Binding VersionText}"
+                                   Margin="0,6,0,0"
+                                   FontSize="12"
+                                   Foreground="#64748B"/>
+                    </StackPanel>
+                </DockPanel>
+
+                <TextBlock Text="{Binding DescriptionText}"
+                           Margin="0,20,0,0"
+                           FontSize="13"
+                           Foreground="#334155"
+                           TextWrapping="Wrap"/>
+
+                <StackPanel Margin="0,18,0,0">
+                    <TextBlock Text="Project"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#64748B"/>
+                    <TextBox Text="{Binding ProjectUrl, Mode=OneWay}"
+                             Margin="0,6,0,0"
+                             IsReadOnly="True"
+                             BorderBrush="#CBD5E1"
+                             Background="#F8FAFC"
+                             Foreground="#2563EB"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding FooterText}"
+                           Margin="0,18,0,0"
+                           FontSize="11"
+                           Foreground="#94A3B8"/>
+            </StackPanel>
+        </Border>
+
+    </DockPanel>
+</UserControl>
