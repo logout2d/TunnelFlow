@@ -6,8 +6,85 @@ Environment prepared for Codex-guided debugging and patching.
 ## Active design reference
 - Primary implementation direction:
   - `docs/tunnelflow-wintun-singbox-tun-design.md`
-- Historical diagnostic/R&D reference:
-  - `docs/archive/wfp-tcp-redirect-poc-plan.md`
+- Active architecture/reference docs:
+  - `docs/architecture/`
+- Active engineering workflow rules:
+  - `docs/engineering/AI_DEV_RULES.md`
+- Historical WinpkFilter / transparent-relay context remains only in older fix
+  plan and project-memory entries.
+
+## Step 71
+Documentation layout cleanup for the first-release repo surface.
+Status: completed
+Scope:
+- keep only `README.md` and `AGENTS.md` in the repo root as active top-level docs
+- move active architecture/reference docs under `docs/architecture/`
+- move AI/dev workflow rules out of the repo root
+Outcome:
+- moved:
+  - `ARCHITECTURE.md` -> `docs/architecture/ARCHITECTURE.md`
+  - `COMPONENTS.md` -> `docs/architecture/COMPONENTS.md`
+  - `DATAFLOW.md` -> `docs/architecture/DATAFLOW.md`
+  - `DECISIONS.md` -> `docs/architecture/DECISIONS.md`
+  - `RISKS.md` -> `docs/architecture/RISKS.md`
+  - `CURSOR_RULES.md` -> `docs/engineering/AI_DEV_RULES.md`
+- `README.md` now points at the moved architecture/reference docs and the engineering rules file
+- `AGENTS.md` now matches the current TUN-only release path and no longer instructs work against the retired packet-capture / local-relay / SOCKS architecture
+- root docs after cleanup are:
+  - `README.md`
+  - `AGENTS.md`
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+
+## Step 72
+About tab polish: make the project link clickable.
+Status: completed
+Scope:
+- very small About-page UI polish only
+- keep the About page layout unchanged
+- no runtime/service behavior changes
+Outcome:
+- replaced the non-clickable About URL display with a standard WPF `Hyperlink`
+- kept the existing placeholder URL:
+  - `http://www.sample.com`
+- added a narrow `RequestNavigate` handler in `AboutView.xaml.cs`
+- added a small automation/accessibility name on the hyperlink:
+  - `Project link`
+- the handler opens the URL with the default Windows browser through:
+  - `ProcessStartInfo`
+  - `UseShellExecute = true`
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- verified:
+  - About navigation still opens
+  - browser handoff was not fully proven by UI automation in this environment because the WPF hyperlink was not exposed as a directly invokable element
+
+## Step 73
+About tab crash fix: simplify the hyperlink to a constant target.
+Status: completed
+Scope:
+- very small About-page runtime-crash fix only
+- keep the existing `RequestNavigate` handler
+- no broader About-page redesign
+Outcome:
+- removed the fragile hyperlink bindings/automation adornment from `AboutView.xaml`
+- set the hyperlink target directly to:
+  - `http://www.sample.com`
+- set the visible link text directly to:
+  - `http://www.sample.com`
+- kept the existing `RequestNavigate` handler in `AboutView.xaml.cs`
+- About no longer crashes when opened in the live app
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- verified:
+  - About opens without crashing
+  - the live About page exposes `http://www.sample.com` as a `Hyperlink`
+  - invoking the hyperlink through UI Automation no longer crashes the app
 
 ## Step 1
 Add repository instructions and project memory for Codex.
@@ -1127,12 +1204,12 @@ Outcome:
 - aligned focused service tests with the TUN-only builder/readiness path
 - rewrote the root release-facing docs so they no longer present WinpkFilter / `ndisapi.net` / `TunnelFlow.Capture` / localhost SOCKS as the active architecture:
   - `README.md`
-  - `ARCHITECTURE.md`
-  - `CURSOR_RULES.md`
-  - `DATAFLOW.md`
-  - `DECISIONS.md`
-  - `RISKS.md`
-  - `COMPONENTS.md`
+  - `docs/architecture/ARCHITECTURE.md`
+  - `docs/engineering/AI_DEV_RULES.md`
+  - `docs/architecture/DATAFLOW.md`
+  - `docs/architecture/DECISIONS.md`
+  - `docs/architecture/RISKS.md`
+  - `docs/architecture/COMPONENTS.md`
   - `docs/archive/PHASE2_PLAN.md` now retained only as a short historical marker
 - confirmed repo metadata state:
   - `.gitmodules` already absent
@@ -1213,6 +1290,48 @@ Outcome:
 Validation:
 - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
 - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+
+## Step 70
+First-release readiness and packaging pass.
+Status: completed with one manual-verification blocker remaining
+Scope:
+- release readiness and packaging only
+- no feature work
+- preserve the active TUN-only runtime path
+Outcome:
+- hardened the build output into a more realistic first-release folder by staging into the UI output:
+  - `TunnelFlow.Service` output
+  - `TunnelFlow.Bootstrapper` output
+  - `sing-box.exe`
+  - `libcronet.dll`
+  - `wintun.dll`
+- `WindowsServiceControlManager` now passes explicit `--service-exe` to bootstrapper install/repair so release install is less dependent on path discovery
+- cleaned the staged output by removing `appsettings.Development.json`
+- audited the install/runtime path assumptions for:
+  - bootstrapper lookup
+  - service exe lookup
+  - sing-box lookup
+  - Wintun lookup
+  - ProgramData config/log paths
+Release-readiness result:
+- package/runtime contents are now much clearer and closer to a first-release folder
+- remaining blocker is elevated lifecycle verification:
+  - install / uninstall / reinstall could not be fully proven in this environment
+  - direct bootstrapper launch from the automation shell returned `0xc0000142`
+  - `TunnelFlow` service is not currently installed here
+Next recommended step before shipping:
+- perform one real admin-path manual validation on a clean Windows machine:
+  - extract release folder
+  - launch UI
+  - install service
+  - start tunnel
+  - uninstall / reinstall
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+- inspected staged output folder contents
+- `sc.exe qc TunnelFlow`
 - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
 
 ## Step 49

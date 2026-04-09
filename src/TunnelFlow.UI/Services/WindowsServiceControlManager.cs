@@ -17,13 +17,13 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         Task.Run(IsServiceInstalledCore, cancellationToken);
 
     public Task InstallAsync(CancellationToken cancellationToken) =>
-        InvokeBootstrapperAsync("install", cancellationToken);
+        InvokeBootstrapperAsync("install", ResolveServiceExecutablePath(), cancellationToken);
 
     public Task RepairAsync(CancellationToken cancellationToken) =>
-        InvokeBootstrapperAsync("repair", cancellationToken);
+        InvokeBootstrapperAsync("repair", ResolveServiceExecutablePath(), cancellationToken);
 
     public Task UninstallAsync(CancellationToken cancellationToken) =>
-        InvokeBootstrapperAsync("uninstall", cancellationToken);
+        InvokeBootstrapperAsync("uninstall", serviceExecutablePath: null, cancellationToken);
 
     public Task StartAsync(CancellationToken cancellationToken) =>
         InvokeBootstrapperOrFallbackAsync("start-service", StartCore, cancellationToken);
@@ -39,7 +39,7 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         var bootstrapperPath = ResolveBootstrapperExecutablePath();
         if (bootstrapperPath is not null)
         {
-            return InvokeBootstrapperAsync(bootstrapperPath, verb, cancellationToken);
+            return InvokeBootstrapperAsync(bootstrapperPath, verb, serviceExecutablePath: null, cancellationToken);
         }
 
         return Task.Run(fallbackAction, cancellationToken);
@@ -93,7 +93,10 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         }
     }
 
-    private static Task InvokeBootstrapperAsync(string verb, CancellationToken cancellationToken)
+    private static Task InvokeBootstrapperAsync(
+        string verb,
+        string? serviceExecutablePath,
+        CancellationToken cancellationToken)
     {
         var bootstrapperPath = ResolveBootstrapperExecutablePath();
         if (bootstrapperPath is null)
@@ -102,12 +105,13 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
                 "TunnelFlow.Bootstrapper.exe was not found. Build or deploy the bootstrapper, or use the existing service recovery path.");
         }
 
-        return InvokeBootstrapperAsync(bootstrapperPath, verb, cancellationToken);
+        return InvokeBootstrapperAsync(bootstrapperPath, verb, serviceExecutablePath, cancellationToken);
     }
 
     private static async Task InvokeBootstrapperAsync(
         string bootstrapperPath,
         string verb,
+        string? serviceExecutablePath,
         CancellationToken cancellationToken)
     {
         try
@@ -115,7 +119,7 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = bootstrapperPath,
-                Arguments = verb,
+                Arguments = BuildBootstrapperArguments(verb, serviceExecutablePath),
                 UseShellExecute = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = Path.GetDirectoryName(bootstrapperPath) ?? AppContext.BaseDirectory
@@ -213,6 +217,37 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         return candidates.FirstOrDefault(File.Exists);
     }
 
+    private static string? ResolveServiceExecutablePath()
+    {
+        var candidates = new List<string>();
+
+        AddCandidate(candidates, Path.Combine(AppContext.BaseDirectory, "TunnelFlow.Service.exe"));
+
+        var repoRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+        if (repoRoot is not null)
+        {
+            AddCandidate(candidates, Path.Combine(
+                repoRoot,
+                "src",
+                "TunnelFlow.Service",
+                "bin",
+                "Debug",
+                "net8.0-windows",
+                "TunnelFlow.Service.exe"));
+
+            AddCandidate(candidates, Path.Combine(
+                repoRoot,
+                "src",
+                "TunnelFlow.Service",
+                "bin",
+                "Release",
+                "net8.0-windows",
+                "TunnelFlow.Service.exe"));
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
     private static string? FindRepositoryRoot(string startDirectory)
     {
         var current = new DirectoryInfo(startDirectory);
@@ -236,6 +271,18 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
         {
             candidates.Add(fullPath);
         }
+    }
+
+    private static string BuildBootstrapperArguments(string verb, string? serviceExecutablePath)
+    {
+        if (string.IsNullOrWhiteSpace(serviceExecutablePath) ||
+            (!string.Equals(verb, "install", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(verb, "repair", StringComparison.OrdinalIgnoreCase)))
+        {
+            return verb;
+        }
+
+        return $"{verb} --service-exe \"{serviceExecutablePath}\"";
     }
 
     private static bool RequiresElevation(Exception exception)

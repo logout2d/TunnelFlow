@@ -50,10 +50,11 @@ TunnelFlow/
 |  |- singbox/                  # pinned sing-box binary
 |  `- wintun/                   # Wintun runtime assets
 |- docs/
+|  |- architecture/               # active architecture/reference docs
+|  |- engineering/                # AI/dev workflow rules
 |  |- project-memory.md
 |  |- fix-plan.md
-|  |- tunnelflow-wintun-singbox-tun-design.md
-|  `- archive/                     # historical/retired notes
+|  `- tunnelflow-wintun-singbox-tun-design.md
 `- README.md
 ```
 
@@ -61,12 +62,12 @@ TunnelFlow/
 
 | Document | Purpose |
 |----------|---------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Active TUN-only system overview |
-| [COMPONENTS.md](COMPONENTS.md) | Active components and contracts |
-| [DATAFLOW.md](DATAFLOW.md) | Current startup, runtime, and shutdown flow |
-| [DECISIONS.md](DECISIONS.md) | Active architectural decisions |
-| [RISKS.md](RISKS.md) | Current TUN-only risk register |
-| [CURSOR_RULES.md](CURSOR_RULES.md) | Current engineering guardrails for AI/dev work |
+| [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | Active TUN-only system overview |
+| [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md) | Active components and contracts |
+| [docs/architecture/DATAFLOW.md](docs/architecture/DATAFLOW.md) | Current startup, runtime, and shutdown flow |
+| [docs/architecture/DECISIONS.md](docs/architecture/DECISIONS.md) | Active architectural decisions |
+| [docs/architecture/RISKS.md](docs/architecture/RISKS.md) | Current TUN-only risk register |
+| [docs/engineering/AI_DEV_RULES.md](docs/engineering/AI_DEV_RULES.md) | Current engineering guardrails for AI/dev work |
 | [docs/tunnelflow-wintun-singbox-tun-design.md](docs/tunnelflow-wintun-singbox-tun-design.md) | Detailed pivot/design reference |
 
 ## Historical note
@@ -74,10 +75,8 @@ TunnelFlow/
 Older WinpkFilter / transparent-relay exploration is retained only as
 historical context in:
 
-- [docs/archive/PHASE2_PLAN.md](docs/archive/PHASE2_PLAN.md)
-- [docs/archive/wfp-tcp-redirect-poc-plan.md](docs/archive/wfp-tcp-redirect-poc-plan.md)
-- [docs/archive/README.md](docs/archive/README.md)
 - long-form engineering notes in [docs/project-memory.md](docs/project-memory.md)
+- implementation history recorded in [docs/fix-plan.md](docs/fix-plan.md)
 
 It is not part of the active release path.
 

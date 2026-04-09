@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TunnelFlow.Core\TunnelFlow.Core.csproj" />
+    <ProjectReference Include="..\TunnelFlow.Service\TunnelFlow.Service.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,5 +18,37 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <Target Name="CopyReleaseCompanions" AfterTargets="Build">
+    <PropertyGroup>
+      <ServiceOutputDir>$(MSBuildProjectDirectory)\..\TunnelFlow.Service\bin\$(Configuration)\net8.0-windows\</ServiceOutputDir>
+      <BootstrapperOutputDir>$(MSBuildProjectDirectory)\..\TunnelFlow.Bootstrapper\bin\$(Configuration)\net8.0-windows\</BootstrapperOutputDir>
+      <RepoRoot>$(MSBuildProjectDirectory)\..\..</RepoRoot>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ServicePackageFiles Include="$(ServiceOutputDir)**\*"
+                           Exclude="$(ServiceOutputDir)**\*.pdb;$(ServiceOutputDir)**\appsettings.Development.json" />
+      <BootstrapperPackageFiles Include="$(BootstrapperOutputDir)**\*"
+                                Exclude="$(BootstrapperOutputDir)**\*.pdb" />
+      <RuntimeAssetFiles Include="$(RepoRoot)\third_party\singbox\sing-box.exe" />
+      <RuntimeAssetFiles Include="$(RepoRoot)\third_party\singbox\libcronet.dll" />
+      <RuntimeAssetFiles Include="$(RepoRoot)\third_party\wintun\bin\amd64\wintun.dll" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(ServicePackageFiles)"
+          DestinationFiles="@(ServicePackageFiles->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(BootstrapperPackageFiles)"
+          DestinationFiles="@(BootstrapperPackageFiles->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(RuntimeAssetFiles)"
+          DestinationFiles="@(RuntimeAssetFiles->'$(OutDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Delete Files="$(OutDir)appsettings.Development.json" />
+  </Target>
 
 </Project>

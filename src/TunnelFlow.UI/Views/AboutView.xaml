@@ -58,12 +58,13 @@
                                FontSize="11"
                                FontWeight="SemiBold"
                                Foreground="#64748B"/>
-                    <TextBox Text="{Binding ProjectUrl, Mode=OneWay}"
-                             Margin="0,6,0,0"
-                             IsReadOnly="True"
-                             BorderBrush="#CBD5E1"
-                             Background="#F8FAFC"
-                             Foreground="#2563EB"/>
+                    <TextBlock Margin="0,6,0,0"
+                               Foreground="#2563EB">
+                        <Hyperlink NavigateUri="http://www.sample.com"
+                                   RequestNavigate="ProjectLink_RequestNavigate">
+                            http://www.sample.com
+                        </Hyperlink>
+                    </TextBlock>
                 </StackPanel>
 
                 <TextBlock Text="{Binding FooterText}"

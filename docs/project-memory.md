@@ -1,10 +1,139 @@
 # TunnelFlow project memory
 
 ## Active Architecture Docs
+- Active architecture/reference docs now live under:
+  - `docs/architecture/`
+- Active engineering/AI workflow rules now live at:
+  - `docs/engineering/AI_DEV_RULES.md`
 - Current primary design reference:
   - `docs/tunnelflow-wintun-singbox-tun-design.md`
-- Historical / diagnostic R&D reference:
-  - `docs/archive/wfp-tcp-redirect-poc-plan.md`
+- Historical WinpkFilter / transparent-relay work is retained only as historical
+  context in this project-memory log and in `docs/fix-plan.md`.
+
+## Documentation layout cleanup
+- Scope:
+  - focused docs-surface cleanup only
+  - keep only `README.md` and `AGENTS.md` in the repo root as active top-level docs
+  - move active architecture/reference docs under `docs/architecture/`
+  - move AI/dev guardrails out of the repo root
+- Files moved:
+  - `ARCHITECTURE.md` -> `docs/architecture/ARCHITECTURE.md`
+  - `COMPONENTS.md` -> `docs/architecture/COMPONENTS.md`
+  - `DATAFLOW.md` -> `docs/architecture/DATAFLOW.md`
+  - `DECISIONS.md` -> `docs/architecture/DECISIONS.md`
+  - `RISKS.md` -> `docs/architecture/RISKS.md`
+  - `CURSOR_RULES.md` -> `docs/engineering/AI_DEV_RULES.md`
+- Root docs after cleanup:
+  - `README.md`
+  - `AGENTS.md`
+- `AGENTS.md` corrections made:
+  - replaced the retired packet-capture / local-relay / SOCKS architecture guidance with the active TUN-only release path
+  - clarified that retired paths must not be reintroduced:
+    - localhost SOCKS readiness
+    - WinpkFilter / `ndisapi.net`
+    - `TunnelFlow.Capture`
+  - retained the existing workflow/testing/reporting structure
+  - added explicit honest-runtime-state guidance consistent with the current release path
+- `README.md` updated to point to:
+  - `docs/architecture/*.md`
+  - `docs/engineering/AI_DEV_RULES.md`
+- Validation:
+  - pending below in this step entry after build/test
+
+## First-release readiness and packaging audit
+- Scope:
+  - focused release-readiness and packaging audit only
+  - preserve the active TUN-only runtime path
+  - tighten the first-release package shape without broad installer work
+- Narrow packaging hardening applied:
+  - `TunnelFlow.UI.csproj` now stages the first-release companions into the UI output folder after build:
+    - `TunnelFlow.Service` output
+    - `TunnelFlow.Bootstrapper` output
+    - `sing-box.exe`
+    - `libcronet.dll`
+    - `wintun.dll`
+  - `WindowsServiceControlManager` now passes an explicit `--service-exe <path>` to bootstrapper `install` / `repair`
+    - first candidate is the staged sibling `TunnelFlow.Service.exe`
+    - repo-output fallback remains for dev
+  - removed `appsettings.Development.json` from the staged UI output so the release folder stays cleaner
+- Runtime/package inventory confirmed in the staged UI output:
+  - required executables:
+    - `TunnelFlow.UI.exe`
+    - `TunnelFlow.Service.exe`
+    - `TunnelFlow.Bootstrapper.exe`
+    - `sing-box.exe`
+  - required native/runtime companions:
+    - `wintun.dll`
+    - `libcronet.dll`
+    - generated `.deps.json` / `.runtimeconfig.json`
+    - copied .NET dependency dlls and `runtimes/`
+  - required service config file shipped in folder:
+    - `appsettings.json`
+  - created at runtime under `%ProgramData%\TunnelFlow\` rather than packaged:
+    - `config.json`
+    - `singbox_last.json`
+    - `logs\service.log`
+    - `logs\singbox.log`
+- Install/runtime path findings:
+  - UI resolves bootstrapper from:
+    - `AppContext.BaseDirectory\TunnelFlow.Bootstrapper.exe`
+    - then repo build outputs as a dev fallback
+  - install/repair now resolve service exe from:
+    - `AppContext.BaseDirectory\TunnelFlow.Service.exe`
+    - then repo build outputs as a dev fallback
+  - bootstrapper does not copy files into `Program Files`
+    - it registers the service using the service exe path it is given
+    - first release therefore currently assumes:
+      - extract/copy the release folder to its intended final location first
+      - then run install/repair from that location
+  - service resolves sing-box from:
+    - `AppContext.BaseDirectory\sing-box.exe`
+    - then repo-relative `third_party\singbox\sing-box.exe`
+  - service resolves Wintun from:
+    - `AppContext.BaseDirectory\wintun.dll`
+    - then repo-relative `third_party\wintun\...`
+  - current staged release path now satisfies the preferred local-path lookup for:
+    - bootstrapper
+    - service
+    - sing-box
+    - Wintun
+- Release-readiness classification:
+  - release blocker:
+    - elevated install/uninstall/reinstall flow is not fully validated end-to-end in this environment
+    - read-only service query showed `TunnelFlow` is not currently installed
+    - direct bootstrapper launch from the automation shell returned `0xc0000142`, so the actual UAC/elevated path still needs a real manual verification on a target Windows machine
+  - should fix before release:
+    - document the first-release install model clearly as:
+      - extract folder
+      - run `TunnelFlow.UI.exe`
+      - use Install/Repair Service from the UI
+    - decide whether the product ships as:
+      - manual extracted folder
+      - or a later proper installer/update flow
+  - can wait:
+    - legacy-named config fields like `SocksPort` remain in persisted config models even though the active runtime path is TUN-only
+    - `BootstrapperPaths.DefaultInstallRoot` / `DefaultSingBoxDirectory` are currently more design scaffolding than enforced install logic
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+    - passed: 133
+    - failed: 0
+    - skipped: 0
+  - staged output inspection confirmed UI output now contains:
+    - `TunnelFlow.Bootstrapper.exe`
+    - `TunnelFlow.Service.exe`
+    - `sing-box.exe`
+    - `wintun.dll`
+    - `libcronet.dll`
+  - read-only install/runtime audit:
+    - `sc.exe qc TunnelFlow`
+      - returned `1060` (service not installed in this environment)
+    - direct bootstrapper launch from the automation shell returned:
+      - `0xc0000142`
+  - smoke check:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - app started successfully
 
 ## About tab: simple main-navigation page for release-friendly app info
 - Scope:
@@ -36,7 +165,7 @@
     - `Version 1.0.0+5068fdbeab05b58cc25345f095bbd118ca95d141`
 - UI implementation notes:
   - kept the About page compact and consistent with the existing card-based content styling
-  - used a simple read-only one-way-bound `TextBox` for the project URL so the link is visible without adding navigation behavior/code-behind
+  - first pass kept the project URL as a simple non-clickable display to avoid extra About-page behavior/code-behind
   - added one new nav button:
     - `ℹ  About`
 - Test coverage:
@@ -61,6 +190,73 @@
       - `TunnelFlow`
       - `Version 1.0.0+5068fdbeab05b58cc25345f095bbd118ca95d141`
       - `http://www.sample.com`
+
+## About tab polish: clickable project link
+- Scope:
+  - very small About-page UI polish only
+  - keep the current layout/content unchanged except for the project link behavior
+- Changes made:
+  - replaced the About page project URL display with a standard WPF `Hyperlink`
+  - kept the displayed text and source bound to the existing `ProjectUrl` property:
+    - `http://www.sample.com`
+  - added a narrow `RequestNavigate` handler in `AboutView.xaml.cs`
+  - added `AutomationProperties.Name="Project link"` on the hyperlink to make the element friendlier for accessibility/automation without changing the layout
+  - the handler opens the URL with:
+    - `ProcessStartInfo.FileName = e.Uri.AbsoluteUri`
+    - `UseShellExecute = true`
+  - this uses the default Windows browser without adding broader MVVM/command plumbing
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 33
+    - failed: 0
+    - skipped: 0
+  - live UI verification via UI Automation:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - found and invoked the `About` navigation button successfully
+    - WPF UI Automation did not expose the hyperlink as a directly invokable named element in this environment, so end-to-end browser handoff was not fully proven through UI automation here
+  - implementation-level verification:
+    - the link now uses the standard WPF `Hyperlink` + `RequestNavigate` path
+    - the handler launches the URL through `ProcessStartInfo` with `UseShellExecute = true`
+
+## About tab crash fix: simplify the hyperlink to a constant target
+- Scope:
+  - very small About-page runtime-crash fix only
+  - keep the existing `RequestNavigate` handler
+  - simplify the XAML instead of broadening the About-page logic
+- Root cause direction:
+  - the About tab crashed in the live WPF render path after the clickable-link change
+  - removing only the `NavigateUri` binding was not enough by itself
+  - the fully safe shape was to remove live binding from the hyperlink entirely and keep:
+    - constant `NavigateUri`
+    - constant visible link text
+    - existing `RequestNavigate` handler
+- Exact XAML simplification applied:
+  - removed:
+    - `NavigateUri="{Binding ProjectUrl}"`
+    - `AutomationProperties.Name="Project link"`
+    - `<Run Text="{Binding ProjectUrl}"/>`
+  - replaced with:
+    - `NavigateUri="http://www.sample.com"`
+    - inline hyperlink text:
+      - `http://www.sample.com`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 33
+    - failed: 0
+    - skipped: 0
+  - live UI verification via UI Automation:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - opened `About`
+    - verified:
+      - `About opened successfully; process still running.`
+    - inspected the live About page automation tree and confirmed:
+      - `ControlType.Hyperlink | http://www.sample.com`
+    - invoked the hyperlink through UI Automation without crashing the app
+    - browser-process detection remained inconclusive because Windows may reuse an existing browser process instead of spawning a new one
 
 ## Final pre-release repository cleanup
 - Scope:
@@ -90,12 +286,12 @@
 - Intentionally kept:
   - active root docs:
     - `README.md`
-    - `ARCHITECTURE.md`
-    - `COMPONENTS.md`
-    - `DATAFLOW.md`
-    - `DECISIONS.md`
-    - `RISKS.md`
-  - `CURSOR_RULES.md`
+  - `docs/architecture/ARCHITECTURE.md`
+  - `docs/architecture/COMPONENTS.md`
+  - `docs/architecture/DATAFLOW.md`
+  - `docs/architecture/DECISIONS.md`
+  - `docs/architecture/RISKS.md`
+  - `docs/engineering/AI_DEV_RULES.md`
     - still current engineering guidance rather than obsolete architecture history
   - `docs/tunnelflow-wintun-singbox-tun-design.md`
     - still the active detailed design reference
@@ -143,12 +339,12 @@
     - `UseTunMode = false` throws
 - Root release docs rewritten to current active path:
   - `README.md`
-  - `ARCHITECTURE.md`
-  - `CURSOR_RULES.md`
-  - `DATAFLOW.md`
-  - `DECISIONS.md`
-  - `RISKS.md`
-  - `COMPONENTS.md`
+  - `docs/architecture/ARCHITECTURE.md`
+  - `docs/engineering/AI_DEV_RULES.md`
+  - `docs/architecture/DATAFLOW.md`
+  - `docs/architecture/DECISIONS.md`
+  - `docs/architecture/RISKS.md`
+  - `docs/architecture/COMPONENTS.md`
   - historical marker retained later as `docs/archive/PHASE2_PLAN.md`
 - Documentation decisions:
   - root docs now describe the current TUN-only product path
@@ -557,7 +753,7 @@
   - updated `docs/project-memory.md`
   - updated `docs/fix-plan.md`
 - Historical references intentionally kept:
-  - `ARCHITECTURE.md`
+  - `docs/architecture/ARCHITECTURE.md`
   - `docs/archive/wfp-tcp-redirect-poc-plan.md`
   - older historical sections inside `docs/project-memory.md` / `docs/fix-plan.md`
 - Reason those references were kept:

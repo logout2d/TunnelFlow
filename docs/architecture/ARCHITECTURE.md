@@ -78,5 +78,5 @@ Older WinpkFilter / transparent-relay material is no longer the active product
 architecture. Historical design context remains in:
 
 - `docs/tunnelflow-wintun-singbox-tun-design.md`
-- `docs/archive/wfp-tcp-redirect-poc-plan.md`
 - `docs/project-memory.md`
+- `docs/fix-plan.md`
