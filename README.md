@@ -140,16 +140,28 @@ If TunnelFlow is useful to you and you want to support continued work, you can
 use the placeholders below until final payment details are published.
 
 - Wallet address BTC: bc1quha9k5dauxp5r4k9hdg9lymhnjktu0fwhxre82
-- QR placeholder:
-![Donation QR placeholder](assets/donations/qr-btc.png)
+  <details>
+  <summary>Show BTC QR</summary>
+
+  ![Donation QR placeholder](assets/donations/qr-btc.png)
+
+  </details>
 
 - Wallet address USDT (ERC20): 0x8a3e373c37b7FA4c783a44d42804f72Cc4e73b11
-- QR placeholder:
-![Donation QR placeholder](assets/donations/qr-usdt-erc20.png)
+  <details>
+  <summary>Show USDT (ERC20) QR</summary>
+
+  ![Donation QR placeholder](assets/donations/qr-usdt-erc20.png)
+
+  </details>
 
 - Wallet address TON: UQDTP7B-iZKdb1sGfXPUeRXCYr6wgGGPuJ1cBClhfYRJHHIe
-- QR placeholder:
-![Donation QR placeholder](assets/donations/qr-ton.png)
+  <details>
+  <summary>Show TON QR</summary>
+
+  ![Donation QR placeholder](assets/donations/qr-ton.png)
+
+  </details>
 
 ## License
 
