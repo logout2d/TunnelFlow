@@ -119,7 +119,23 @@ public class ConfigStoreTests : IDisposable
         Assert.Null(config.ActiveProfileId);
         Assert.Equal(2080, config.SocksPort);
         Assert.False(config.StartCaptureOnServiceStart);
-        Assert.False(config.UseTunMode);
+        Assert.True(config.UseTunMode);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MissingUseTunModeField_DefaultsToTunMode()
+    {
+        await File.WriteAllTextAsync(_configPath, """
+        {
+          "rules": [],
+          "profiles": [],
+          "activeProfileId": null
+        }
+        """);
+
+        var config = await _store.LoadAsync();
+
+        Assert.True(config.UseTunMode);
     }
 
     [Fact]

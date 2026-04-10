@@ -1,5 +1,56 @@
 # TunnelFlow project memory
 
+## First-release readiness patch: TUN defaults + About metadata
+- Scope:
+  - narrow first-release readiness patch only
+  - no runtime architecture changes beyond making fresh/default config align with
+    the active TUN-only product path
+  - About page cleanup only for release metadata/link wiring
+- TUN-default changes:
+  - `TunnelFlowConfig.UseTunMode` now defaults to `true`
+  - `ConfigStore` now treats missing persisted `useTunMode` as `true`
+  - `LocalConfigSnapshotLoader` now treats missing persisted `useTunMode` as
+    `true`
+  - `LocalConfigSnapshot.Empty.UseTunMode` now defaults to `true`
+- Result:
+  - fresh installs / empty config now align with the shipped TUN-only path
+  - older config files that do not contain `useTunMode` no longer silently fall
+    back to `false`
+  - no legacy fallback mode was added
+- About release-readiness changes:
+  - added a central root `Directory.Build.props` version definition for the first
+    public release:
+    - `Version = 0.1.0`
+    - `InformationalVersion = 0.1.0`
+    - `AssemblyVersion = 0.1.0.0`
+    - `FileVersion = 0.1.0.0`
+    - `IncludeSourceRevisionInInformationalVersion = false`
+  - `AboutViewModel` now uses a single placeholder project URL value:
+    - `https://example.com/tunnelflow`
+  - removed the old hardcoded `sample.com` strings from the About XAML
+  - the About project link is now driven from the view-model text and opened from
+    code-behind using that single view-model URL value
+  - kept the About layout otherwise unchanged
+- Tests added/updated:
+  - `ConfigStoreTests`
+    - missing file default now expects `UseTunMode = true`
+    - added missing-`useTunMode` compatibility test
+  - `LocalConfigSnapshotLoaderTests`
+    - added missing file default test
+    - added missing-`useTunMode` compatibility test
+  - added `AboutViewModelTests`
+    - asserts `Version 0.1.0`
+    - asserts the placeholder project URL
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 9
+    - failed: 0
+    - skipped: 0
+  - repo-local string audit:
+    - no remaining `sample.com` strings found under `src/TunnelFlow.UI`
+
 ## README public landing-page pass
 - Scope:
   - README-only product/documentation polish

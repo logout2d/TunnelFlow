@@ -43,7 +43,7 @@ public class ConfigStore
                 ActiveProfileId = persisted.ActiveProfileId,
                 SocksPort = persisted.SocksPort,
                 StartCaptureOnServiceStart = persisted.StartCaptureOnServiceStart,
-                UseTunMode = persisted.UseTunMode
+                UseTunMode = persisted.UseTunMode ?? true
             };
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException)
@@ -143,7 +143,7 @@ public class ConfigStore
         public bool StartCaptureOnServiceStart { get; set; }
 
         [JsonPropertyName("useTunMode")]
-        public bool UseTunMode { get; set; }
+        public bool? UseTunMode { get; set; }
     }
 
     private class PersistedVlessProfile

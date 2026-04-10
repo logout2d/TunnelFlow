@@ -74,4 +74,31 @@ public sealed class LocalConfigSnapshotLoaderTests : IDisposable
         Assert.Equal("Offline Profile", snapshot.Profiles[0].Name);
         Assert.Equal("11111111-1111-1111-1111-111111111111", snapshot.Profiles[0].UserId);
     }
+
+    [Fact]
+    public async Task LoadAsync_MissingFile_DefaultsToTunMode()
+    {
+        var loader = new LocalConfigSnapshotLoader(_configPath);
+
+        var snapshot = await loader.LoadAsync();
+
+        Assert.True(snapshot.UseTunMode);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MissingUseTunModeField_DefaultsToTunMode()
+    {
+        await File.WriteAllTextAsync(_configPath, """
+        {
+          "rules": [],
+          "profiles": [],
+          "activeProfileId": null
+        }
+        """);
+
+        var loader = new LocalConfigSnapshotLoader(_configPath);
+        var snapshot = await loader.LoadAsync();
+
+        Assert.True(snapshot.UseTunMode);
+    }
 }

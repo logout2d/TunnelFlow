@@ -47,7 +47,7 @@ public sealed class LocalConfigSnapshotLoader
                 Rules = persisted.Rules,
                 Profiles = persisted.Profiles.Select(ToVlessProfile).ToList(),
                 ActiveProfileId = persisted.ActiveProfileId,
-                UseTunMode = persisted.UseTunMode
+                UseTunMode = persisted.UseTunMode ?? true
             };
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException)
@@ -94,7 +94,7 @@ public sealed class LocalConfigSnapshotLoader
         public Guid? ActiveProfileId { get; set; }
 
         [JsonPropertyName("useTunMode")]
-        public bool UseTunMode { get; set; }
+        public bool? UseTunMode { get; set; }
     }
 
     private sealed class PersistedVlessProfile
@@ -150,7 +150,7 @@ public sealed record LocalConfigSnapshot
         Rules = Array.Empty<AppRule>(),
         Profiles = Array.Empty<VlessProfile>(),
         ActiveProfileId = null,
-        UseTunMode = false
+        UseTunMode = true
     };
 
     public IReadOnlyList<AppRule> Rules { get; init; } = Array.Empty<AppRule>();
@@ -159,5 +159,5 @@ public sealed record LocalConfigSnapshot
 
     public Guid? ActiveProfileId { get; init; }
 
-    public bool UseTunMode { get; init; }
+    public bool UseTunMode { get; init; } = true;
 }

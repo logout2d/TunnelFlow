@@ -56,12 +56,12 @@
                                FontWeight="SemiBold"
                                Foreground="#64748B"/>
                     <TextBlock Margin="0,6,0,0"
-                               Foreground="#2563EB">
-                        <Hyperlink NavigateUri="http://www.sample.com"
-                                   RequestNavigate="ProjectLink_RequestNavigate">
-                            http://www.sample.com
-                        </Hyperlink>
-                    </TextBlock>
+                               Text="{Binding ProjectUrl}"
+                               Foreground="#2563EB"
+                               Cursor="Hand"
+                               TextDecorations="Underline"
+                               TextWrapping="Wrap"
+                               MouseLeftButtonUp="ProjectLink_MouseLeftButtonUp"/>
                 </StackPanel>
 
                 <TextBlock Text="{Binding FooterText}"

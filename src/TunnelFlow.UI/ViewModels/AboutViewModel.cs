@@ -6,6 +6,7 @@ namespace TunnelFlow.UI.ViewModels;
 public partial class AboutViewModel : ObservableObject
 {
     private static readonly Assembly UiAssembly = typeof(AboutViewModel).Assembly;
+    private const string PlaceholderProjectUrl = "https://example.com/tunnelflow";
 
     public string AppName => "TunnelFlow";
 
@@ -14,7 +15,7 @@ public partial class AboutViewModel : ObservableObject
     public string DescriptionText =>
         "TunnelFlow provides a simple and clear interface for working with VLESS profiles and an easy way to tunnel selected applications through a virtual adapter.";
 
-    public string ProjectUrl => "http://www.sample.com";
+    public string ProjectUrl => PlaceholderProjectUrl;
 
     public string FooterText => "Windows desktop app for VLESS and per-app tunneling.";
 

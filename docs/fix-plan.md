@@ -3,6 +3,39 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 76
+First-release readiness patch: make fresh/default config TUN-first and tighten About metadata/link wiring.
+Status: completed
+Scope:
+- narrow release-readiness fix only
+- no broad refactor
+- preserve the active TUN-only runtime path
+Outcome:
+- fresh/default config is now TUN-first:
+  - `TunnelFlowConfig.UseTunMode` defaults to `true`
+  - `ConfigStore` treats missing persisted `useTunMode` as `true`
+  - `LocalConfigSnapshotLoader` treats missing persisted `useTunMode` as `true`
+  - `LocalConfigSnapshot.Empty.UseTunMode` now defaults to `true`
+- added a small central release version source in `Directory.Build.props`:
+  - `Version = 0.1.0`
+  - `InformationalVersion = 0.1.0`
+  - `AssemblyVersion = 0.1.0.0`
+  - `FileVersion = 0.1.0.0`
+  - disabled source-revision suffixing in informational version
+- About page cleanup:
+  - removed hardcoded `sample.com` strings from active About UI
+  - `AboutViewModel.ProjectUrl` now supplies a single placeholder URL:
+    - `https://example.com/tunnelflow`
+  - About link display is now bound to the view-model value
+  - click handling opens that single view-model URL from code-behind
+- focused tests updated/added for:
+  - config defaults
+  - missing `useTunMode` compatibility
+  - About version/url metadata
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 75
 Finish `README.md` as a stronger public GitHub landing page and add donation placeholders.
 Status: completed
