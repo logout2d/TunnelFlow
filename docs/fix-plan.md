@@ -3,6 +3,35 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 75
+Finish `README.md` as a stronger public GitHub landing page and add donation placeholders.
+Status: completed
+Scope:
+- README polish only
+- keep the active TUN-only release path accurate
+- no runtime/service/app behavior changes
+Outcome:
+- strengthened the public-facing README introduction and product positioning
+- expanded the features section around:
+  - simple VLESS profile workflow
+  - per-application tunneling
+  - TUN-only runtime path
+  - service-managed lifecycle
+- replaced the older release-path section with a clearer `How It Works` section
+- refreshed:
+  - requirements
+  - repository layout
+  - active documentation
+  - historical note
+- added a support / donations section with placeholders:
+  - `YOUR_WALLET_LINK`
+  - `YOUR_WALLET_ADDRESS`
+  - `assets/donations/wallet-qr.png`
+Validation:
+- inspect final `README.md` for markdown cleanliness and readability
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+
 ## Active design reference
 - Primary implementation direction:
   - `docs/tunnelflow-wintun-singbox-tun-design.md`

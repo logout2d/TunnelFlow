@@ -1,5 +1,32 @@
 # TunnelFlow project memory
 
+## README public landing-page pass
+- Scope:
+  - README-only product/documentation polish
+  - keep the active TUN-only release narrative accurate
+  - no runtime or service code changes
+- README improvements made:
+  - strengthened the public-facing product introduction
+  - expanded the features section around:
+    - simple VLESS profile workflow
+    - per-application tunneling
+    - TUN-only runtime path
+    - service-managed lifecycle
+  - rewrote the runtime overview into a clearer `How It Works` section
+  - refreshed the repository layout and active documentation sections
+  - kept the historical note explicit so retired WinpkFilter / SOCKS paths are
+    not presented as active
+  - added a support / donations section with placeholders only:
+    - wallet link placeholder:
+      - `YOUR_WALLET_LINK`
+    - wallet address placeholder:
+      - `YOUR_WALLET_ADDRESS`
+    - QR image placeholder:
+      - `assets/donations/wallet-qr.png`
+- Validation:
+  - README manually inspected for markdown cleanliness and section flow
+  - build/test validation recorded below after command execution
+
 ## Active Architecture Docs
 - Active architecture/reference docs now live under:
   - `docs/architecture/`
