@@ -86,6 +86,28 @@ Validation:
   - the live About page exposes `http://www.sample.com` as a `Hyperlink`
   - invoking the hyperlink through UI Automation no longer crashes the app
 
+## Step 74
+Wire the finished app icons into the UI project.
+Status: completed
+Scope:
+- narrow icon-asset wiring only
+- no runtime/service changes
+- keep the About layout unchanged except for replacing the placeholder box with the real PNG
+Outcome:
+- wired `assets/icons/TunnelFlow.ico` as:
+  - the UI project application icon
+  - the main window icon
+- wired `assets/icons/TunnelFlow.png` into the About page
+- added the icon assets to `TunnelFlow.UI.csproj` as linked WPF resources
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+- launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+- verified:
+  - the running main window exposed an icon handle
+  - the About page exposed an `Image` control
+  - the app remained running
+
 ## Step 1
 Add repository instructions and project memory for Codex.
 Status: in progress

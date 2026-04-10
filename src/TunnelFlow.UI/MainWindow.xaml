@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:TunnelFlow.UI.Converters"
         Title="TunnelFlow" Height="860" Width="780"
+        Icon="/assets/icons/TunnelFlow.ico"
         MinHeight="720" MinWidth="720"
         WindowStartupLocation="CenterScreen"
         Background="#F8FAFC">

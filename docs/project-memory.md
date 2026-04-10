@@ -258,6 +258,40 @@
     - invoked the hyperlink through UI Automation without crashing the app
     - browser-process detection remained inconclusive because Windows may reuse an existing browser process instead of spawning a new one
 
+## App icon wiring for first release
+- Scope:
+  - narrow UI asset-wiring step only
+  - no runtime/service logic changes
+  - use the finished icon assets consistently across app, window, and About page
+- Asset paths used:
+  - `assets/icons/TunnelFlow.ico`
+  - `assets/icons/TunnelFlow.png`
+- Wiring added:
+  - `TunnelFlow.UI.csproj`
+    - `ApplicationIcon` now points to:
+      - `..\..\assets\icons\TunnelFlow.ico`
+    - added linked WPF `Resource` items for:
+      - `assets/icons/TunnelFlow.ico`
+      - `assets/icons/TunnelFlow.png`
+  - `MainWindow.xaml`
+    - `Icon="/assets/icons/TunnelFlow.ico"`
+  - `AboutView.xaml`
+    - replaced the old placeholder box contents with:
+      - `Image Source="/assets/icons/TunnelFlow.png"`
+    - kept the surrounding About layout unchanged
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --logger "console;verbosity=minimal"`
+    - passed: 133
+    - failed: 0
+    - skipped: 0
+  - live app verification:
+    - launched `src\TunnelFlow.UI\bin\Debug\net8.0-windows\TunnelFlow.UI.exe`
+    - confirmed the running main window exposed a non-zero icon handle
+    - opened `About`
+    - confirmed the live About page exposed an `Image` control and the app remained running
+
 ## Final pre-release repository cleanup
 - Scope:
   - conservative repo cleanup only

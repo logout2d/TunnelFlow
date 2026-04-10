@@ -27,12 +27,9 @@
                             Background="#F8FAFC"
                             DockPanel.Dock="Left"
                             Margin="0,0,18,0">
-                        <TextBlock Text="Icon"
-                                   Foreground="#94A3B8"
-                                   FontSize="12"
-                                   FontWeight="SemiBold"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                        <Image Source="/assets/icons/TunnelFlow.png"
+                               Stretch="Uniform"
+                               Margin="10"/>
                     </Border>
 
                     <StackPanel VerticalAlignment="Center">
