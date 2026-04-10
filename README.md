@@ -86,33 +86,6 @@ The active product path does **not** use:
   - provided separately for the standard package
 - bundled Wintun runtime files
 
-## Repository Layout
-
-```text
-TunnelFlow/
-|- src/
-|  |- TunnelFlow.Bootstrapper/  # elevated lifecycle/install helper
-|  |- TunnelFlow.Core/          # shared models, IPC contracts, enums
-|  |- TunnelFlow.Service/       # Windows service, TUN orchestration, sing-box control
-|  |- TunnelFlow.UI/            # WPF desktop client
-|  `- TunnelFlow.Tests/         # unit and focused integration tests
-|- third_party/
-|  |- singbox/                  # pinned sing-box binary
-|  `- wintun/                   # Wintun runtime assets
-|- assets/
-|  |- icons/                    # app/window/About icons
-|  `- donations/                # donation visuals such as QR images
-|- docs/
-|  |- architecture/             # active architecture/reference docs
-|  |- engineering/              # engineering workflow rules
-|  |- archive/                  # historical notes kept out of the active surface
-|  |- project-memory.md
-|  |- fix-plan.md
-|  `- tunnelflow-wintun-singbox-tun-design.md
-|- AGENTS.md
-`- README.md
-```
-
 ## Active Documentation
 
 | Document | Purpose |
@@ -130,7 +103,6 @@ TunnelFlow/
 Older WinpkFilter / transparent-relay exploration is retained only as historical
 context in:
 
-- [docs/archive/README.md](docs/archive/README.md)
 - long-form engineering notes in [docs/project-memory.md](docs/project-memory.md)
 - implementation history recorded in [docs/fix-plan.md](docs/fix-plan.md)
 
