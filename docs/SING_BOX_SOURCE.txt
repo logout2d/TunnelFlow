@@ -1,0 +1,20 @@
+sing-box source reference template
+=================================
+
+This release package may include sing-box as a separate third-party component.
+
+Fill these fields for any release that bundles sing-box:
+
+- Exact bundled sing-box version:
+  YOUR_SING_BOX_VERSION
+
+- Upstream project URL:
+  YOUR_UPSTREAM_PROJECT_URL
+
+- Exact source URL / release / tag / archive for the bundled version:
+  YOUR_EXACT_SOURCE_REFERENCE
+
+Note:
+- If a modified build of sing-box is distributed, the source reference above
+  must point to that modified build or its exact source package, not only to the
+  generic upstream project page.

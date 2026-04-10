@@ -3,6 +3,34 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 77
+Prepare dual-release docs/assets and switch About to the repository URL.
+Status: completed
+Scope:
+- narrow release-preparation patch only
+- no runtime/service architecture changes
+- preserve the active TUN-only release narrative
+Outcome:
+- `README.md`
+  - added a concise `Downloads` section for:
+    - `TunnelFlow-win-x64-v0.1.0.zip`
+    - `TunnelFlow-win-x64-with-core-v0.1.0.zip`
+  - added a short package-choice explanation
+  - added a short note that bundled third-party components remain under their own licenses
+- added release-facing text/docs:
+  - `QUICK_START.txt`
+  - `docs/SING_BOX_SOURCE.txt`
+  - `docs/release-notes-v0.1.0.md`
+- About cleanup:
+  - `AboutViewModel.ProjectUrl` now points to:
+    - `https://github.com/logout2d/TunnelFlow`
+  - active About path no longer uses the earlier placeholder repository URL
+- focused test update:
+  - `AboutViewModelTests` now expects the repository URL
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 76
 First-release readiness patch: make fresh/default config TUN-first and tighten About metadata/link wiring.
 Status: completed

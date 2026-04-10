@@ -1,0 +1,20 @@
+TunnelFlow Quick Start
+======================
+
+Package types
+- TunnelFlow-win-x64-v0.1.0.zip
+  Standard package without a bundled sing-box.exe
+- TunnelFlow-win-x64-with-core-v0.1.0.zip
+  Convenience package with a bundled sing-box.exe
+
+Getting started
+1. Extract the package to a normal working folder.
+2. If you use the standard package, provide a compatible sing-box executable separately.
+3. Start TunnelFlow.
+4. Install or repair the service/bootstrapper path if prompted.
+5. Add or import a VLESS profile, choose application rules, and start the tunnel.
+
+Notes
+- TunnelFlow uses a TUN-only runtime path.
+- Administrative privileges may be required for service/bootstrapper and tunnel-related actions.
+- Bundled third-party components remain under their own licenses.

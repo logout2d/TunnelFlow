@@ -1,5 +1,52 @@
 # TunnelFlow project memory
 
+## Dual-release preparation docs and About URL cleanup
+- Scope:
+  - narrow release-preparation patch only
+  - no runtime/service behavior changes
+  - preserve the active TUN-only product narrative
+- README updates:
+  - added a concise `Downloads` section for the two Windows x64 release variants:
+    - `TunnelFlow-win-x64-v0.1.0.zip`
+    - `TunnelFlow-win-x64-with-core-v0.1.0.zip`
+  - added a short `Which package should I choose?` note
+  - clarified that bundled third-party components remain under their own
+    licenses
+- New release-facing text files:
+  - `QUICK_START.txt`
+    - short archive-friendly getting-started steps
+    - mentions:
+      - both package types
+      - TUN-only runtime path
+      - admin privileges may be required
+      - standard package needs a separately provided compatible `sing-box.exe`
+      - bundled third-party components remain under their own licenses
+  - `docs/SING_BOX_SOURCE.txt`
+    - source-reference template for releases that bundle sing-box
+    - includes placeholders for:
+      - exact sing-box version
+      - upstream project URL
+      - exact source URL / tag / archive
+    - includes an explicit note for modified builds
+  - `docs/release-notes-v0.1.0.md`
+    - concise public-facing release-notes draft
+    - includes highlights, download options, and third-party license note
+- About cleanup:
+  - active About project URL now uses:
+    - `https://github.com/logout2d/TunnelFlow`
+  - `AboutViewModel.ProjectUrl` remains the single source of truth for the
+    active About path
+  - focused About view-model test updated accordingly
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - repo-local active-UI string audit:
+    - no remaining `example.com/tunnelflow` string under `src/TunnelFlow.UI`
+
 ## First-release readiness patch: TUN defaults + About metadata
 - Scope:
   - narrow first-release readiness patch only

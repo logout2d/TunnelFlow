@@ -20,6 +20,24 @@ TunnelFlow is meant to keep the workflow simple:
 - keep the runtime service-managed and consistent
 - avoid retired localhost-SOCKS or packet-capture release assumptions
 
+## Downloads
+
+- `TunnelFlow-win-x64-v0.1.0.zip`
+  - Main Windows x64 package without a bundled `sing-box.exe`
+- `TunnelFlow-win-x64-with-core-v0.1.0.zip`
+  - Convenience Windows x64 package with a bundled `sing-box.exe` for easier
+    first-time setup
+
+### Which package should I choose?
+
+- Choose the standard package if you already manage your own compatible
+  `sing-box.exe`.
+- Choose the with-core package if you want a simpler first setup with the
+  sing-box core already included.
+
+Bundled third-party components remain separate components under their own
+licenses.
+
 ## Features
 
 - Simple VLESS profile workflow for creating, editing, selecting, and activating
@@ -121,11 +139,17 @@ It is not part of the active release path.
 If TunnelFlow is useful to you and you want to support continued work, you can
 use the placeholders below until final payment details are published.
 
-- Donation link: [Donation link placeholder](https://example.com/donate)
-- Wallet address: `YOUR_WALLET_ADDRESS`
+- Wallet address BTC: bc1quha9k5dauxp5r4k9hdg9lymhnjktu0fwhxre82
 - QR placeholder:
+![Donation QR placeholder](assets/donations/qr-btc.png)
 
-![Donation QR placeholder](assets/donations/wallet-qr.png)
+- Wallet address USDT (ERC20): 0x8a3e373c37b7FA4c783a44d42804f72Cc4e73b11
+- QR placeholder:
+![Donation QR placeholder](assets/donations/qr-usdt-erc20.png)
+
+- Wallet address TON: UQDTP7B-iZKdb1sGfXPUeRXCYr6wgGGPuJ1cBClhfYRJHHIe
+- QR placeholder:
+![Donation QR placeholder](assets/donations/qr-ton.png)
 
 ## License
 
