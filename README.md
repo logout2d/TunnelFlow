@@ -81,7 +81,9 @@ The active product path does **not** use:
 - Windows 10 / 11 x64
 - .NET 8 runtime
 - Administrator privileges for service/bootstrapper actions
-- bundled `sing-box.exe`
+- a compatible `sing-box.exe`
+  - bundled in the with-core package
+  - provided separately for the standard package
 - bundled Wintun runtime files
 
 ## Repository Layout
@@ -137,13 +139,13 @@ It is not part of the active release path.
 ## Support / Donations
 
 If TunnelFlow is useful to you and you want to support continued work, you can
-use the placeholders below until final payment details are published.
+use the options below.
 
 - Wallet address BTC: bc1quha9k5dauxp5r4k9hdg9lymhnjktu0fwhxre82
   <details>
   <summary>Show BTC QR</summary>
 
-  ![Donation QR placeholder](assets/donations/qr-btc.png)
+  ![BTC donation QR](assets/donations/qr-btc.png)
 
   </details>
 
@@ -151,7 +153,7 @@ use the placeholders below until final payment details are published.
   <details>
   <summary>Show USDT (ERC20) QR</summary>
 
-  ![Donation QR placeholder](assets/donations/qr-usdt-erc20.png)
+  ![USDT (ERC20) donation QR](assets/donations/qr-usdt-erc20.png)
 
   </details>
 
@@ -159,7 +161,7 @@ use the placeholders below until final payment details are published.
   <details>
   <summary>Show TON QR</summary>
 
-  ![Donation QR placeholder](assets/donations/qr-ton.png)
+  ![TON donation QR](assets/donations/qr-ton.png)
 
   </details>
 
