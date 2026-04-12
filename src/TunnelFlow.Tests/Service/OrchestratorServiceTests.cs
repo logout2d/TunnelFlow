@@ -434,6 +434,32 @@ public class OrchestratorServiceTests
     }
 
     [Fact]
+    public async Task StartCaptureAsync_WhenSingBoxStartupFails_CleansUpAndLeavesStoppedState()
+    {
+        var order = new List<string>();
+        var singBox = new FakeSingBoxManager(order)
+        {
+            StartException = new InvalidOperationException("startup-fatal-tun-log-line")
+        };
+        var tun = new FakeTunOrchestrator(order);
+        using var harness = await CreateHarnessAsync(singBox, tun);
+
+        await harness.Service.StartCaptureAsync("owner-1");
+
+        var state = await harness.PipeServer.GetStateHandler!();
+
+        Assert.Equal(
+            ["tun:start", "singbox:start", "singbox:stop", "tun:stop"],
+            order);
+        Assert.Equal(TunnelLifecycleState.Stopped, state.LifecycleState);
+        Assert.False(state.CaptureRunning);
+        Assert.Equal(SingBoxStatus.Stopped, state.SingBoxStatus);
+        Assert.Null(state.ActiveOwnerSessionId);
+        Assert.Equal(1, singBox.StartCalls);
+        Assert.Equal(1, singBox.StopCalls);
+    }
+
+    [Fact]
     public async Task OwnerHeartbeat_KeepsOwnerLeaseAlive()
     {
         var singBox = new FakeSingBoxManager([]);
@@ -616,6 +642,8 @@ public class OrchestratorServiceTests
 
         public TaskCompletionSource<bool>? BlockStop { get; init; }
 
+        public Exception? StartException { get; init; }
+
         public int StartCalls { get; private set; }
 
         public int StopCalls { get; private set; }
@@ -638,6 +666,11 @@ public class OrchestratorServiceTests
             if (BlockStart is not null)
             {
                 await BlockStart.Task.WaitAsync(ct);
+            }
+
+            if (StartException is not null)
+            {
+                throw StartException;
             }
 
             SetStatus(SingBoxStatus.Running);

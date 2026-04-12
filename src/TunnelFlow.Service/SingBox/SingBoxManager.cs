@@ -7,16 +7,17 @@ namespace TunnelFlow.Service.SingBox;
 
 public sealed class SingBoxManager : ISingBoxManager
 {
-    internal static readonly TimeSpan TunStartupObservationWindow = TimeSpan.FromSeconds(2);
+    internal static readonly TimeSpan TunStartupObservationWindow = TimeSpan.FromSeconds(8);
     internal static readonly TimeSpan TunStartupPollInterval = TimeSpan.FromMilliseconds(200);
 
     private readonly SingBoxConfigBuilder _configBuilder;
     private readonly ILogger<SingBoxManager> _logger;
+    private readonly object _stateGate = new();
 
     private Process? _process;
     private CancellationTokenSource _watchdogCts = new();
-    private int _restartAttempts;
     private SingBoxStatus _status = SingBoxStatus.Stopped;
+    private SingBoxStartupTracker? _startupTracker;
 
     private VlessProfile? _lastProfile;
     private SingBoxConfig? _lastConfig;
@@ -32,6 +33,8 @@ public sealed class SingBoxManager : ISingBoxManager
 
     public async Task StartAsync(VlessProfile profile, SingBoxConfig config, CancellationToken ct)
     {
+        ResetWatchdogIfNeeded();
+
         _lastProfile = profile;
         _lastConfig = config;
 
@@ -49,6 +52,9 @@ public sealed class SingBoxManager : ISingBoxManager
 
         await File.WriteAllTextAsync(config.ConfigOutputPath, configJson, ct);
         await EnsureCleanLogOutputFileAsync(config.LogOutputPath, ct);
+
+        var startupTracker = new SingBoxStartupTracker();
+        SetStartupTracker(startupTracker);
 
         _process = new Process
         {
@@ -68,20 +74,28 @@ public sealed class SingBoxManager : ISingBoxManager
         _process.ErrorDataReceived += (_, e) => ForwardLog(e.Data);
         _process.Exited += OnProcessExited;
 
-        _process.Start();
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
+        try
+        {
+            _process.Start();
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
+        }
+        catch
+        {
+            ClearStartupTracker(startupTracker);
+            CleanupProcess();
+            throw;
+        }
 
         _logger.LogInformation("sing-box started (pid {Pid})", _process.Id);
         _logger.LogInformation(
-            "sing-box startup readiness mode=tun strategy=process-observation");
+            "sing-box startup readiness mode=tun strategy=process-observation-plus-startup-fatal-log-detection startupWindowMs={StartupWindowMs} pollIntervalMs={PollIntervalMs}",
+            TunStartupObservationWindow.TotalMilliseconds,
+            TunStartupPollInterval.TotalMilliseconds);
 
-        _logger.LogInformation(
-            "sing-box readiness strategy=process-observation observationWindowMs={ObservationWindowMs}",
-            TunStartupObservationWindow.TotalMilliseconds);
-
-        var readiness = await WaitForProcessObservationAsync(
+        var readiness = await WaitForTunStartupReadinessAsync(
             () => _process is null || _process.HasExited,
+            startupTracker.GetFailure,
             TunStartupObservationWindow,
             TunStartupPollInterval,
             ct);
@@ -89,15 +103,16 @@ public sealed class SingBoxManager : ISingBoxManager
         if (!readiness.Ready)
         {
             _logger.LogError(
-                "sing-box readiness failed strategy=process-observation reason={Reason} exitCode={ExitCode}",
+                "sing-box readiness failed strategy=process-observation-plus-startup-fatal-log-detection reason={Reason} exitCode={ExitCode}",
                 readiness.Reason,
                 TryGetExitCode(_process));
             throw new InvalidOperationException(
                 $"sing-box startup readiness failed in TUN mode: {readiness.Reason}");
         }
 
+        ClearStartupTracker(startupTracker);
         _logger.LogInformation(
-            "sing-box readiness succeeded strategy=process-observation reason={Reason}",
+            "sing-box readiness succeeded strategy=process-observation-plus-startup-fatal-log-detection reason={Reason}",
             readiness.Reason);
 
         SetStatus(SingBoxStatus.Running);
@@ -106,6 +121,7 @@ public sealed class SingBoxManager : ISingBoxManager
     public async Task StopAsync(CancellationToken ct)
     {
         _watchdogCts.Cancel();
+        SetStartupTracker(null);
 
         if (_process is { HasExited: false })
         {
@@ -120,7 +136,6 @@ public sealed class SingBoxManager : ISingBoxManager
         }
 
         CleanupProcess();
-        _restartAttempts = 0;
         SetStatus(SingBoxStatus.Stopped);
     }
 
@@ -151,6 +166,19 @@ public sealed class SingBoxManager : ISingBoxManager
     private void ForwardLog(string? line)
     {
         if (line is null) return;
+
+        if (TryMatchTunStartupFatalLine(line, out var matchedPattern))
+        {
+            var startupTracker = GetStartupTracker();
+            if (startupTracker?.TryFail("startup-fatal-tun-log-line") == true)
+            {
+                _logger.LogWarning(
+                    "sing-box detected startup-fatal TUN log line matchedPattern={MatchedPattern} line={Line}",
+                    matchedPattern,
+                    line);
+            }
+        }
+
         _logger.LogDebug("[sing-box] {Line}", line);
         LogLine?.Invoke(this, line);
     }
@@ -160,43 +188,30 @@ public sealed class SingBoxManager : ISingBoxManager
         _ = HandleExitAsync();
     }
 
-    private async Task HandleExitAsync()
+    private Task HandleExitAsync()
     {
         if (_watchdogCts.IsCancellationRequested)
-            return;
+            return Task.CompletedTask;
 
-        var config = _lastConfig;
-        if (config is null) return;
-
-        if (_restartAttempts >= config.MaxRestartAttempts)
+        var exitCode = TryGetExitCode(_process);
+        var startupTracker = GetStartupTracker();
+        if (startupTracker is not null)
         {
-            _logger.LogCritical(
-                "sing-box exceeded max restart attempts ({Max}). Fail-closed.",
-                config.MaxRestartAttempts);
-            SetStatus(SingBoxStatus.Crashed);
-            return;
+            if (startupTracker.TryFail("process-exited-during-startup-window"))
+            {
+                _logger.LogError(
+                    "sing-box exited unexpectedly during TUN startup exitCode={ExitCode}; startup readiness will fail and cleanup will be required",
+                    exitCode);
+            }
+
+            return Task.CompletedTask;
         }
 
-        _restartAttempts++;
-        _logger.LogWarning(
-            "sing-box exited unexpectedly. Restart attempt {Attempt}/{Max} in {Delay} s",
-            _restartAttempts, config.MaxRestartAttempts, config.RestartDelay.TotalSeconds);
-
-        SetStatus(SingBoxStatus.Restarting);
-
-        await Task.Delay(config.RestartDelay);
-
-        if (_watchdogCts.IsCancellationRequested) return;
-
-        try
-        {
-            await StartAsync(_lastProfile!, config, _watchdogCts.Token);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to restart sing-box");
-            SetStatus(SingBoxStatus.Crashed);
-        }
+        _logger.LogError(
+            "sing-box exited unexpectedly after TUN startup stabilized exitCode={ExitCode}; auto-restart is disabled so the orchestrator can fail closed and clean up TUN state",
+            exitCode);
+        SetStatus(SingBoxStatus.Crashed);
+        return Task.CompletedTask;
     }
 
     private void CleanupProcess()
@@ -239,8 +254,9 @@ public sealed class SingBoxManager : ISingBoxManager
         await File.WriteAllTextAsync(logOutputPath, string.Empty, ct);
     }
 
-    internal static async Task<SingBoxReadinessResult> WaitForProcessObservationAsync(
+    internal static async Task<SingBoxReadinessResult> WaitForTunStartupReadinessAsync(
         Func<bool> hasExited,
+        Func<SingBoxReadinessResult?> getStartupFailure,
         TimeSpan observationWindow,
         TimeSpan pollInterval,
         CancellationToken ct)
@@ -253,6 +269,10 @@ public sealed class SingBoxManager : ISingBoxManager
 
         while (!cts.Token.IsCancellationRequested)
         {
+            var startupFailure = getStartupFailure();
+            if (startupFailure is not null)
+                return startupFailure.Value;
+
             try
             {
                 await Task.Delay(pollInterval, cts.Token).ConfigureAwait(false);
@@ -264,9 +284,49 @@ public sealed class SingBoxManager : ISingBoxManager
 
             if (hasExited())
                 return new SingBoxReadinessResult(false, "process-exited-during-startup-window");
+
+            startupFailure = getStartupFailure();
+            if (startupFailure is not null)
+                return startupFailure.Value;
         }
 
-        return new SingBoxReadinessResult(true, "process-stable-during-startup-window");
+        return new SingBoxReadinessResult(true, "startup-window-passed-without-fatal-tun-signals");
+    }
+
+    internal static bool TryMatchTunStartupFatalLine(string line, out string matchedPattern)
+    {
+        matchedPattern = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        var normalized = line.ToLowerInvariant();
+        if (normalized.Contains("fatal", StringComparison.Ordinal))
+        {
+            matchedPattern = "FATAL";
+            return true;
+        }
+
+        if (normalized.Contains("open interface take too much time to finish", StringComparison.Ordinal))
+        {
+            matchedPattern = "open interface take too much time to finish";
+            return true;
+        }
+
+        if (normalized.Contains("configure tun interface", StringComparison.Ordinal) ||
+            normalized.Contains("configurate tun interface", StringComparison.Ordinal))
+        {
+            matchedPattern = "configure tun interface";
+            return true;
+        }
+
+        if (normalized.Contains("cannot create a file when that file already exist", StringComparison.Ordinal))
+        {
+            matchedPattern = "Cannot create a file when that file already exist";
+            return true;
+        }
+
+        return false;
     }
 
     private static int? TryGetExitCode(Process? process)
@@ -283,6 +343,68 @@ public sealed class SingBoxManager : ISingBoxManager
             return null;
         }
     }
+
+    private void ResetWatchdogIfNeeded()
+    {
+        if (!_watchdogCts.IsCancellationRequested)
+            return;
+
+        _watchdogCts.Dispose();
+        _watchdogCts = new CancellationTokenSource();
+    }
+
+    private SingBoxStartupTracker? GetStartupTracker()
+    {
+        lock (_stateGate)
+        {
+            return _startupTracker;
+        }
+    }
+
+    private void SetStartupTracker(SingBoxStartupTracker? startupTracker)
+    {
+        lock (_stateGate)
+        {
+            _startupTracker = startupTracker;
+        }
+    }
+
+    private void ClearStartupTracker(SingBoxStartupTracker startupTracker)
+    {
+        lock (_stateGate)
+        {
+            if (ReferenceEquals(_startupTracker, startupTracker))
+            {
+                _startupTracker = null;
+            }
+        }
+    }
 }
 
 internal readonly record struct SingBoxReadinessResult(bool Ready, string Reason);
+
+internal sealed class SingBoxStartupTracker
+{
+    private readonly object _gate = new();
+    private SingBoxReadinessResult? _failure;
+
+    public SingBoxReadinessResult? GetFailure()
+    {
+        lock (_gate)
+        {
+            return _failure;
+        }
+    }
+
+    public bool TryFail(string reason)
+    {
+        lock (_gate)
+        {
+            if (_failure is not null)
+                return false;
+
+            _failure = new SingBoxReadinessResult(false, reason);
+            return true;
+        }
+    }
+}

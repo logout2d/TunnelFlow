@@ -3,6 +3,40 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 78
+Harden TUN startup readiness and fail closed on sing-box startup/crash instability.
+Status: completed
+Scope:
+- narrow service-side reliability patch only
+- preserve the active TUN-only release path
+- do not reintroduce legacy SOCKS / relay / capture behavior
+Outcome:
+- `SingBoxManager` TUN startup readiness is now more conservative:
+  - startup window increased from `2s` to `8s`
+  - readiness no longer relies on short process survival alone
+  - startup now fails during the startup window when known fatal TUN lines are observed:
+    - `FATAL`
+    - `open interface take too much time to finish`
+    - `configure tun interface`
+    - `configurate tun interface`
+    - `Cannot create a file when that file already exist`
+  - `Running` is reported only after the full startup window passes without early exit or fatal TUN evidence
+- sing-box unexpected-exit handling is now fail-closed:
+  - exit during startup fails readiness instead of auto-restarting
+  - exit after startup stabilization now reports `Crashed`
+  - local auto-restart from `SingBoxManager` is disabled so `OrchestratorService` can perform conservative cleanup
+- `OrchestratorService` startup-failure handling now logs and performs explicit cleanup for:
+  - best-effort sing-box stop
+  - TUN stop when TUN activation already happened
+  - owner-lease clearing on failed start
+- focused tests were updated for:
+  - stronger startup readiness gating
+  - known fatal TUN startup lines
+  - failed startup cleanup leaving the service in `Stopped`
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxManagerTests|FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+
 ## Step 77
 Prepare dual-release docs/assets and switch About to the repository URL.
 Status: completed

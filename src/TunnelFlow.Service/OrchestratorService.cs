@@ -247,18 +247,28 @@ public sealed class OrchestratorService : BackgroundService
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "StartCaptureAsync failed; beginning fail-closed startup cleanup");
+            _pipeServer.PushLogLine("service", "Warning",
+                "Startup failed; beginning fail-closed cleanup.");
+
             try
             {
                 await SafeStopSingBoxAsync();
                 if (_tunModeActive)
                 {
+                    _logger.LogInformation(
+                        "Startup failure cleanup: stopping TUN after sing-box startup failure");
+                    _pipeServer.PushLogLine(
+                        "service",
+                        "Info",
+                        "Startup failure cleanup: stopping TUN.");
                     await _tunOrchestrator.StopAsync(_stoppingToken);
                     _tunModeActive = false;
                 }
             }
             catch { }
             SetLifecycleState(TunnelLifecycleState.Stopped);
-            _logger.LogError(ex, "StartCaptureAsync failed");
+            ClearTunnelOwner("startup-failed");
             _pipeServer.PushLogLine("service", "Error",
                 $"StartCaptureAsync failed: {ex.GetType().Name}: {ex.Message}");
             PushCurrentStatus();
@@ -340,7 +350,12 @@ public sealed class OrchestratorService : BackgroundService
                     break;
 
                 case SingBoxStatus.Crashed:
-                    _logger.LogCritical("sing-box permanently crashed - stopping capture (fail-closed)");
+                    _logger.LogCritical(
+                        "sing-box unexpectedly exited after startup stabilization - stopping capture for fail-closed cleanup");
+                    _pipeServer.PushLogLine(
+                        "service",
+                        "Warning",
+                        "sing-box exited unexpectedly after startup; stopping tunnel for cleanup.");
                     _ = StopCaptureAsync();
                     break;
             }

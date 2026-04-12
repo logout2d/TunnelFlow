@@ -1,5 +1,64 @@
 # TunnelFlow project memory
 
+## TUN startup/readiness reliability hardening
+- Scope:
+  - narrow service-side reliability patch only
+  - preserve the active TUN-only runtime path
+  - no legacy SOCKS / relay / capture-path reintroduction
+- Root cause confirmed in this step:
+  - TUN startup readiness was still too optimistic
+  - startup success was based on a short sing-box process-survival window
+  - unexpected sing-box exit handling was too local to `SingBoxManager` and could try to restart without conservative TUN cleanup
+- Changes made:
+  - `SingBoxManager` TUN readiness is now more conservative:
+    - startup window increased from `2s` to `8s`
+    - readiness now uses:
+      - process observation
+      - startup-fatal TUN log-line detection
+    - startup now fails if any of these are seen during the startup window:
+      - `FATAL`
+      - `open interface take too much time to finish`
+      - `configure tun interface`
+      - `configurate tun interface`
+      - `Cannot create a file when that file already exist`
+    - `SingBoxStatus.Running` is no longer reported before that startup window passes safely
+  - unexpected sing-box exit handling is now fail-closed:
+    - exit during startup marks readiness failure and does not auto-restart
+    - exit after startup stabilization now reports `Crashed`
+    - local sing-box auto-restart is disabled so the orchestrator can do conservative cleanup
+  - `OrchestratorService` now logs and performs explicit fail-closed cleanup on startup failure:
+    - stop sing-box best-effort
+    - stop TUN if it was activated
+    - clear any owner lease acquired in the failed start path
+  - watchdog CTS lifecycle was also tightened:
+    - a fresh watchdog CTS is recreated on a new start after a prior stop
+- Focused tests added/updated:
+  - `SingBoxManagerTests`
+    - startup readiness fails on early exit
+    - startup readiness fails on detected fatal TUN line
+    - startup readiness succeeds only when the full window passes cleanly
+    - known fatal TUN startup lines are matched explicitly
+  - `OrchestratorServiceTests`
+    - startup failure after TUN activation now cleans up sing-box + TUN and leaves the service in `Stopped`
+- Exact files changed in this step:
+  - `src/TunnelFlow.Service/SingBox/SingBoxManager.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxManagerTests.cs`
+  - `src/TunnelFlow.Tests/Service/OrchestratorServiceTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxManagerTests|FullyQualifiedName~TunnelFlow.Tests.Service.OrchestratorServiceTests" --logger "console;verbosity=minimal"`
+    - passed: 47
+    - failed: 0
+    - skipped: 0
+- Open question:
+  - this patch intentionally stays with conservative negative-evidence startup gating rather than introducing a broader positive TUN-interface readiness probe
+
 ## Dual-release preparation docs and About URL cleanup
 - Scope:
   - narrow release-preparation patch only
