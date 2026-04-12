@@ -3,6 +3,36 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 79
+Gate tunnel action buttons during async transitions and persist the UI log to an app-local file.
+Status: completed
+Scope:
+- narrow UI/runtime polish only
+- preserve the current service-based TUN-only architecture
+- no broad logging or command-framework redesign
+Outcome:
+- `MainViewModel` now uses `IsTunnelActionPending` to gate async tunnel actions immediately
+- `StartCommand` and `StopCommand` can now execute only when:
+  - the service is connected
+  - no tunnel action is already pending
+  - the lifecycle state matches the requested action
+- start/stop requests set the pending flag before awaiting IPC and clear it in `finally`
+  - this prevents duplicate start/stop clicks while the async request is still in flight
+  - failed startup clears the pending flag and re-enables Start
+- `LogViewModel` now keeps the current in-memory UI log behavior and also writes each UI-visible line to:
+  - `logs\ui.log` under `AppContext.BaseDirectory`
+- file writing stays best-effort:
+  - creates the `logs` directory if needed
+  - appends lines
+  - never crashes the UI if the sink fails
+- focused tests were added for:
+  - pending start gating
+  - failed-start pending reset
+  - UI log file append behavior and sink-failure safety
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests|FullyQualifiedName~TunnelFlow.Tests.UI.LogViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 78
 Harden TUN startup readiness and fail closed on sing-box startup/crash instability.
 Status: completed

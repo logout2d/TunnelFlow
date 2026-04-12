@@ -1,5 +1,61 @@
 # TunnelFlow project memory
 
+## UI tunnel-action gating and persistent UI log file
+- Scope:
+  - narrow UI/runtime polish only
+  - preserve the active service-based TUN-only architecture
+  - no service-model redesign or broader logging refactor
+- Changes made:
+  - `MainViewModel` now uses an explicit local transition flag:
+    - `IsTunnelActionPending`
+  - tunnel action command gating is now more conservative:
+    - `StartCommand` requires:
+      - connected service
+      - no pending tunnel action
+      - `CaptureRunning = false`
+      - `LifecycleState = Stopped`
+    - `StopCommand` requires:
+      - connected service
+      - no pending tunnel action
+      - `CaptureRunning = true`
+      - `LifecycleState = Running`
+  - start/stop requests now set the pending flag immediately before awaiting IPC and clear it in `finally`
+    - this prevents duplicate clicks while the async request is still in flight
+    - if start fails, the flag clears and Start becomes available again
+    - if lifecycle state transitions to `Starting` / `Running` / `Stopping`, normal service-driven state still controls button availability
+  - UI log output is now also persisted to a simple app-local file sink:
+    - default path:
+      - `AppContext.BaseDirectory\logs\ui.log`
+    - implementation remains best-effort:
+      - create `logs\` when needed
+      - append one UI-visible line per entry
+      - sink failures never break the in-memory UI log
+- Focused tests added:
+  - `MainViewModelTests`
+    - start command becomes unavailable immediately while a start request is pending
+    - failed start clears the pending flag and re-enables Start
+  - `LogViewModelTests`
+    - appends UI-visible lines to `logs\ui.log`
+    - sink failures do not break the in-memory log list
+- Exact files changed in this step:
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/LogViewModel.cs`
+  - `src/TunnelFlow.UI/Services/IUiLogSink.cs`
+  - `src/TunnelFlow.UI/Services/UiFileLogSink.cs`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `src/TunnelFlow.Tests/UI/LogViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests|FullyQualifiedName~TunnelFlow.Tests.UI.LogViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 37
+    - failed: 0
+    - skipped: 0
+
 ## TUN startup/readiness reliability hardening
 - Scope:
   - narrow service-side reliability patch only

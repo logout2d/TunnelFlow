@@ -70,6 +70,89 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task StartCommand_WhenStartRequestIsPending_BecomesUnavailableImmediately()
+    {
+        using var client = new ServiceClient();
+        var startRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var startReply = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sendCalls = 0;
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                sendCalls++;
+                Assert.Equal("StartCapture", type);
+                startRequested.TrySetResult();
+                return startReply.Task;
+            })
+        {
+            IsConnected = true
+        };
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        Assert.True(viewModel.StartCommand.CanExecute(null));
+        Assert.False(viewModel.StopCommand.CanExecute(null));
+
+        viewModel.StartCommand.Execute(null);
+        await startRequested.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.True(viewModel.IsTunnelActionPending);
+        Assert.False(viewModel.StartCommand.CanExecute(null));
+        Assert.False(viewModel.StopCommand.CanExecute(null));
+        Assert.Equal(1, sendCalls);
+
+        startReply.SetResult(null);
+        await Task.Delay(20);
+
+        Assert.False(viewModel.IsTunnelActionPending);
+    }
+
+    [Fact]
+    public async Task StartCommand_WhenStartRequestFails_ClearsPendingFlag_AndReEnablesStart()
+    {
+        using var client = new ServiceClient();
+        var startRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                Assert.Equal("StartCapture", type);
+                startRequested.TrySetResult();
+                return Task.FromException<JsonElement?>(new InvalidOperationException("Service unavailable"));
+            })
+        {
+            IsConnected = true
+        };
+
+        viewModel.ApplyStatusPayload(new StatusPayload
+        {
+            CaptureRunning = false,
+            LifecycleState = TunnelLifecycleState.Stopped,
+            SingBoxStatus = SingBoxStatus.Stopped,
+            SelectedMode = TunnelStatusMode.Tun,
+            SingBoxRunning = false,
+            TunnelInterfaceUp = false
+        });
+
+        viewModel.StartCommand.Execute(null);
+        await startRequested.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        await Task.Delay(20);
+
+        Assert.False(viewModel.IsTunnelActionPending);
+        Assert.True(viewModel.StartCommand.CanExecute(null));
+        Assert.Contains(viewModel.Log.Lines, line => line.Message.Contains("Start capture failed: Service unavailable"));
+    }
+
+    [Fact]
     public void ApplyStatusPayload_UpdatesTunOrientedStatusSummary()
     {
         using var client = new ServiceClient();

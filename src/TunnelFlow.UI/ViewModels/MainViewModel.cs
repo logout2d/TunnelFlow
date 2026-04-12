@@ -51,6 +51,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isServiceInstalled = true;
     [ObservableProperty] private object _currentView;
     [ObservableProperty] private ServiceActionKind _pendingServiceAction;
+    [ObservableProperty] private bool _isTunnelActionPending;
 
     private bool IsTunnelActive => CaptureRunning || SingBoxRunning;
 
@@ -142,8 +143,8 @@ public partial class MainViewModel : ObservableObject
         _currentView = AppRules;
         UpdateConfigEditingState();
 
-        _startCmd = new RelayCommand(async () => await StartAsync(), () => !CaptureRunning && IsConnected);
-        _stopCmd = new RelayCommand(async () => await StopAsync(), () => CaptureRunning && IsConnected);
+        _startCmd = new RelayCommand(async () => await StartAsync(), CanExecuteStartTunnelAction);
+        _stopCmd = new RelayCommand(async () => await StopAsync(), CanExecuteStopTunnelAction);
         _manageServiceCmd = new RelayCommand(
             async () => await RequestServiceActionAsync(),
             CanExecuteManageServiceAction);
@@ -241,6 +242,12 @@ public partial class MainViewModel : ObservableObject
         _uninstallServiceCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ServiceActionLabel));
         OnPropertyChanged(nameof(UninstallServiceLabel));
+    }
+
+    partial void OnIsTunnelActionPendingChanged(bool value)
+    {
+        _startCmd.NotifyCanExecuteChanged();
+        _stopCmd.NotifyCanExecuteChanged();
     }
 
     partial void OnIsServiceInstalledChanged(bool value)
@@ -347,6 +354,12 @@ public partial class MainViewModel : ObservableObject
 
     private async Task StartAsync()
     {
+        if (!CanExecuteStartTunnelAction())
+        {
+            return;
+        }
+
+        IsTunnelActionPending = true;
         try
         {
             await _sendCommandAsync(
@@ -359,10 +372,20 @@ public partial class MainViewModel : ObservableObject
         {
             Log.AddLine("ui", "Error", $"Start capture failed: {ex.Message}");
         }
+        finally
+        {
+            IsTunnelActionPending = false;
+        }
     }
 
     private async Task StopAsync()
     {
+        if (!CanExecuteStopTunnelAction())
+        {
+            return;
+        }
+
+        IsTunnelActionPending = true;
         try
         {
             await _sendCommandAsync("StopCapture", null, CancellationToken.None);
@@ -371,6 +394,10 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             Log.AddLine("ui", "Error", $"Stop capture failed: {ex.Message}");
+        }
+        finally
+        {
+            IsTunnelActionPending = false;
         }
     }
 
@@ -806,6 +833,18 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanExecuteUninstallServiceAction() =>
         IsServiceInstalled && !IsTunnelActive && PendingServiceAction == ServiceActionKind.None;
+
+    private bool CanExecuteStartTunnelAction() =>
+        IsConnected &&
+        !IsTunnelActionPending &&
+        !CaptureRunning &&
+        LifecycleState == TunnelLifecycleState.Stopped;
+
+    private bool CanExecuteStopTunnelAction() =>
+        IsConnected &&
+        !IsTunnelActionPending &&
+        CaptureRunning &&
+        LifecycleState == TunnelLifecycleState.Running;
 
     private async Task ShutdownForApplicationExitCoreAsync()
     {
