@@ -1,5 +1,46 @@
 # TunnelFlow project memory
 
+## App Rules local draft + explicit apply after service reconnect
+- Scope:
+  - small UX/state-management patch only
+  - preserve the current Windows service-based TUN-only architecture
+  - no broad sync framework or service-model redesign
+- Changes made:
+  - `AppRulesViewModel` now distinguishes between:
+    - service-synced rules
+    - local pending App Rules draft changes
+  - local rule edits made while the service is unavailable are now kept as a
+    draft instead of being silently replaced on the next service refresh
+  - later service-side rule loads now update the cached service snapshot but do
+    not overwrite visible App Rules when a local draft is pending
+  - added a narrow explicit sync path:
+    - `Apply Pending Rules`
+    - available only when the service is connected, local draft changes exist,
+      and the current service rule snapshot has loaded
+  - pending state now stays visible and honest:
+    - disconnected: draft is local-only and waiting for service availability
+    - connected: draft differs from the service until explicitly applied
+  - failed apply keeps the draft pending instead of implying the service saved
+    it
+  - `MainViewModel` now recomputes visible rule counts from the currently shown
+    App Rules so the summary remains aligned with the active draft the user sees
+  - the App Rules view now shows a small pending-status banner with the explicit
+    apply action when appropriate
+- Exact files changed in this step:
+  - `src/TunnelFlow.UI/ViewModels/AppRulesViewModel.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.UI/Views/AppRulesView.xaml`
+  - `src/TunnelFlow.Tests/UI/MainViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+  - result:
+    - `38` passed
+    - `0` failed
+    - `0` skipped
+
 ## Portable packaging script + single-file publish
 - Scope:
   - small build/packaging patch only

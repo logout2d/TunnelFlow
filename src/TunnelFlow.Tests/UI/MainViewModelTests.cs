@@ -292,6 +292,170 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task AppRules_WhenEditedOffline_PreserveLocalDraftWhenServiceRulesLoad()
+    {
+        using var client = new ServiceClient();
+        var viewModel = new MainViewModel(client)
+        {
+            IsConnected = false
+        };
+        var ruleId = Guid.NewGuid();
+
+        viewModel.ApplyOfflineConfigSnapshot(new LocalConfigSnapshot
+        {
+            Rules =
+            [
+                new AppRule
+                {
+                    Id = ruleId,
+                    ExePath = @"C:\Apps\Floorp.exe",
+                    DisplayName = "Floorp",
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = true
+                }
+            ]
+        });
+
+        viewModel.AppRules.Rules[0].IsEnabled = false;
+        await Task.Delay(20);
+
+        Assert.True(viewModel.AppRules.HasPendingLocalChanges);
+        Assert.Equal(0, viewModel.ProxyRuleCount);
+        Assert.True(viewModel.AppRules.ShowPendingRulesStatus);
+        Assert.False(viewModel.AppRules.ShowApplyPendingRulesAction);
+
+        viewModel.IsConnected = true;
+        viewModel.AppRules.LoadServiceRules(
+        [
+            new AppRule
+            {
+                Id = ruleId,
+                ExePath = @"C:\Apps\Floorp.exe",
+                DisplayName = "Floorp",
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            }
+        ]);
+
+        Assert.False(viewModel.AppRules.Rules[0].IsEnabled);
+        Assert.True(viewModel.AppRules.HasPendingLocalChanges);
+        Assert.True(viewModel.AppRules.ShowApplyPendingRulesAction);
+        Assert.Equal(0, viewModel.ProxyRuleCount);
+    }
+
+    [Fact]
+    public async Task AppRules_WhenPendingRulesAreAppliedSuccessfully_ClearsPendingStateOnlyAfterExplicitApply()
+    {
+        using var client = new ServiceClient();
+        var sentCommands = new List<string>();
+        var ruleId = Guid.NewGuid();
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) =>
+            {
+                sentCommands.Add(type);
+                return Task.FromResult<JsonElement?>(null);
+            })
+        {
+            IsConnected = false
+        };
+
+        viewModel.ApplyOfflineConfigSnapshot(new LocalConfigSnapshot
+        {
+            Rules =
+            [
+                new AppRule
+                {
+                    Id = ruleId,
+                    ExePath = @"C:\Apps\Floorp.exe",
+                    DisplayName = "Floorp",
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = true
+                }
+            ]
+        });
+
+        viewModel.AppRules.Rules[0].IsEnabled = false;
+        await Task.Delay(20);
+
+        Assert.True(viewModel.AppRules.HasPendingLocalChanges);
+        Assert.Empty(sentCommands);
+
+        viewModel.IsConnected = true;
+        viewModel.AppRules.LoadServiceRules(
+        [
+            new AppRule
+            {
+                Id = ruleId,
+                ExePath = @"C:\Apps\Floorp.exe",
+                DisplayName = "Floorp",
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            }
+        ]);
+
+        Assert.True(viewModel.AppRules.HasPendingLocalChanges);
+
+        await viewModel.AppRules.ApplyPendingRulesAsync();
+
+        Assert.False(viewModel.AppRules.HasPendingLocalChanges);
+        Assert.Contains("UpsertRule", sentCommands);
+        Assert.DoesNotContain("DeleteRule", sentCommands);
+        Assert.False(viewModel.AppRules.ShowPendingRulesStatus);
+    }
+
+    [Fact]
+    public async Task AppRules_WhenApplyingPendingRulesFails_KeepsPendingDraft()
+    {
+        using var client = new ServiceClient();
+        var ruleId = Guid.NewGuid();
+        var viewModel = new MainViewModel(
+            client,
+            sendCommandAsync: (type, _, _) => Task.FromException<JsonElement?>(new InvalidOperationException($"{type} failed")))
+        {
+            IsConnected = false
+        };
+
+        viewModel.ApplyOfflineConfigSnapshot(new LocalConfigSnapshot
+        {
+            Rules =
+            [
+                new AppRule
+                {
+                    Id = ruleId,
+                    ExePath = @"C:\Apps\Floorp.exe",
+                    DisplayName = "Floorp",
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = true
+                }
+            ]
+        });
+
+        viewModel.AppRules.Rules[0].IsEnabled = false;
+        await Task.Delay(20);
+
+        viewModel.IsConnected = true;
+        viewModel.AppRules.LoadServiceRules(
+        [
+            new AppRule
+            {
+                Id = ruleId,
+                ExePath = @"C:\Apps\Floorp.exe",
+                DisplayName = "Floorp",
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            }
+        ]);
+
+        await viewModel.AppRules.ApplyPendingRulesAsync();
+
+        Assert.True(viewModel.AppRules.HasPendingLocalChanges);
+        Assert.True(viewModel.AppRules.ShowPendingRulesStatus);
+        Assert.False(viewModel.AppRules.IsApplyingPendingRules);
+        Assert.True(viewModel.AppRules.ShowApplyPendingRulesAction);
+    }
+
+    [Fact]
     public void ApplyStatePayload_WhenConnectionProblemExists_ShowsFriendlyWarning()
     {
         using var client = new ServiceClient();

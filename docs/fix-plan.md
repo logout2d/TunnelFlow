@@ -3,6 +3,32 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 84
+Preserve App Rules local drafts before service availability and require explicit
+apply after reconnect instead of silently overwriting visible edits.
+Status: completed
+Scope:
+- small UX/state-management patch only
+- preserve the current Windows service-based TUN-only architecture
+- no service-model redesign and no broad settings-sync framework
+Outcome:
+- `AppRulesViewModel` now keeps local rule edits as a draft when the service is
+  unavailable or when a prior local draft is already pending
+- service-side rule refresh no longer silently replaces visible App Rules when a
+  local draft is pending
+- App Rules now exposes honest pending state in the UI:
+  - pending local changes indicator
+  - explicit `Apply Pending Rules` action when the service is connected and the
+    current service rule snapshot has loaded
+- pending state clears only after an explicit successful apply
+- failed apply leaves the local draft pending instead of pretending the service
+  saved it
+- `MainViewModel` now treats displayed App Rules as the source for visible rule
+  counts so the summary stays aligned with what the user is currently seeing
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.MainViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 83
 Add single-file managed publish settings and a whitelist-based portable packaging
 script for standard and with-core ZIP releases.

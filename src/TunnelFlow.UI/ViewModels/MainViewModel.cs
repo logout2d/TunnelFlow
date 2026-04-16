@@ -136,7 +136,8 @@ public partial class MainViewModel : ObservableObject
         _disposeClient = disposeClient ?? _client.Dispose;
         _ownerHeartbeatInterval = ownerHeartbeatInterval ?? TimeSpan.FromSeconds(5);
 
-        AppRules = new AppRulesViewModel(client);
+        AppRules = new AppRulesViewModel(client, _sendCommandAsync);
+        AppRules.RulesChanged += (_, _) => UpdateRuleCountsFromDisplayedRules();
         Profile = new ProfileViewModel(client);
         Log = new LogViewModel();
         About = new AboutViewModel();
@@ -333,7 +334,7 @@ public partial class MainViewModel : ObservableObject
             await DispatchAsync(() =>
             {
                 ApplyStatePayload(state);
-                AppRules.LoadRules(state.Rules);
+                AppRules.LoadServiceRules(state.Rules);
                 Profile.LoadProfile(state.Profiles, state.ActiveProfileId);
                 IsConnected = true;
                 ConnectionStatus = "Connected";
@@ -446,16 +447,13 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        AppRules.LoadRules(snapshot.Rules);
+        AppRules.LoadPersistedRules(snapshot.Rules);
         Profile.LoadProfile(snapshot.Profiles, snapshot.ActiveProfileId);
 
         SelectedMode = snapshot.UseTunMode ? TunnelStatusMode.Tun : TunnelStatusMode.Legacy;
         ActiveProfileName = ResolveActiveProfileName(snapshot.Profiles, snapshot.ActiveProfileId);
 
-        var enabledRules = snapshot.Rules.Where(rule => rule.IsEnabled).ToList();
-        ProxyRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Proxy);
-        DirectRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Direct);
-        BlockRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Block);
+        UpdateRuleCountsFromDisplayedRules();
 
         ApplyServiceUnavailableRuntimeState();
     }
@@ -744,9 +742,18 @@ public partial class MainViewModel : ObservableObject
 
     private void UpdateConfigEditingState()
     {
+        AppRules.IsServiceConnected = IsConnected;
         AppRules.IsEditingEnabled = !IsTunnelActive;
         Profile.IsEditingEnabled = !IsTunnelActive;
         Profile.IsServiceConnected = IsConnected;
+    }
+
+    private void UpdateRuleCountsFromDisplayedRules()
+    {
+        var enabledRules = AppRules.GetRulesSnapshot().Where(rule => rule.IsEnabled).ToList();
+        ProxyRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Proxy);
+        DirectRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Direct);
+        BlockRuleCount = enabledRules.Count(rule => rule.Mode == RuleMode.Block);
     }
 
     private void UpdateOwnerHeartbeatLoop()
