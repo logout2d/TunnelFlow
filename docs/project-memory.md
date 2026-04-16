@@ -1,5 +1,35 @@
 # TunnelFlow project memory
 
+## Portable release decisions: app-local runtime state clarification
+- Scope:
+  - documentation-only patch
+  - no source-code changes
+  - preserve the current service-based TUN-only architecture
+- Decision update made:
+  - `docs/release-optimization-decisions.md` now explicitly defines portable
+    runtime state, not only portable archive shape
+  - portable runtime state is now documented as app-local for the portable
+    release direction:
+    - config under `config/`
+    - logs under `logs/`
+    - `ui.log`, `service.log`, and `singbox.log` under `logs/`
+  - the document now explicitly states that portable does not remove the
+    Windows service model
+  - the document now explicitly states that installer-based setup remains
+    postponed
+  - the next implementation target is now clearly recorded as:
+    - centralized path resolver usage across UI / Service / Bootstrapper
+    - migration away from scattered ProgramData-style state toward app-local
+      portable paths
+    - preservation of the current TUN-only architecture
+- Exact files changed in this step:
+  - `docs/release-optimization-decisions.md`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - docs-only review
+  - no build or test run was needed in this step
+
 ## UI tunnel-action gating and persistent UI log file
 - Scope:
   - narrow UI/runtime polish only

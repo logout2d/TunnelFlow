@@ -3,6 +3,34 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 80
+Clarify portable release decisions for app-local runtime state and service-model
+compatibility.
+Status: completed
+Scope:
+- documentation-only patch
+- no source-code changes
+- preserve the current service-based TUN-only architecture
+Outcome:
+- `docs/release-optimization-decisions.md` now explicitly defines portable
+  runtime state alongside portable archive layout
+- portable runtime state is now documented as app-local:
+  - config under `config/`
+  - logs under `logs/`
+  - `ui.log`, `service.log`, and `singbox.log` under `logs/`
+- the document now explicitly states that portable does not remove the Windows
+  service model
+- the document now explicitly states that installer-based setup remains
+  postponed
+- the next implementation target is now documented as:
+  - centralized path resolver usage across UI / Service / Bootstrapper
+  - migration away from scattered ProgramData-style state toward app-local
+    portable paths
+  - preservation of the current TUN-only architecture
+Validation:
+- docs-only review
+- no build or test run was needed in this step
+
 ## Step 79
 Gate tunnel action buttons during async transitions and persist the UI log to an app-local file.
 Status: completed
