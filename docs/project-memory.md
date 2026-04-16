@@ -1,5 +1,79 @@
 # TunnelFlow project memory
 
+## Portable packaging script + single-file publish
+- Scope:
+  - small build/packaging patch only
+  - preserve the current Windows service-based TUN-only architecture
+  - no installer packaging and no runtime-model redesign
+- Changes made:
+  - enabled conservative packaging-only single-file publish settings for:
+    - `TunnelFlow.UI`
+    - `TunnelFlow.Service`
+    - `TunnelFlow.Bootstrapper`
+  - publish settings are now gated behind:
+    - `PortableReleasePublish=true`
+  - packaging publish settings used:
+    - `PublishSingleFile=true`
+    - `SelfContained=false`
+    - `RuntimeIdentifier=win-x64`
+    - `PublishTrimmed=false`
+    - `PublishReadyToRun=false`
+  - added a dedicated PowerShell packaging script:
+    - `scripts/package-portable.ps1`
+  - the script now:
+    - publishes UI / Service / Bootstrapper separately
+    - assembles final portable release folders from an explicit whitelist
+    - creates both:
+      - standard package
+      - with-core package
+    - creates matching ZIP archives
+  - final staged layout now follows the documented portable direction:
+    - root `TunnelFlow.exe`
+    - `config/appsettings.json`
+    - `system/TunnelFlow.Service.exe`
+    - `system/TunnelFlow.Bootstrapper.exe`
+    - `core/wintun.dll`
+    - `core/sing-box.exe` for with-core
+    - `licenses/`
+    - `QUICK_START.txt`
+  - package differences stay controlled:
+    - standard:
+      - no bundled `sing-box.exe`
+      - no `SING_BOX_SOURCE.txt`
+    - with-core:
+      - includes `core/sing-box.exe`
+      - includes `core/libcronet.dll` as the required sing-box companion
+      - includes `licenses/SING_BOX_SOURCE.txt`
+  - user packages are no longer shaped as raw publish-output copies:
+    - publish folders may still contain `.pdb` and extra files
+    - final package folders/ZIPs include only the whitelisted files
+  - narrow compatibility follow-up:
+    - `TunnelFlow.Service` now explicitly loads optional `config/appsettings.json`
+      through `RuntimePaths`, so the packaged layout is consistent with the
+      service host configuration path
+  - UI local build staging remains available outside the packaging flow:
+    - `TunnelFlow.UI.csproj` no longer relies on build-only project references
+      to Service / Bootstrapper
+    - non-packaging builds now invoke a small explicit companion build step
+- Exact files changed in this step:
+  - `src/TunnelFlow.UI/TunnelFlow.UI.csproj`
+  - `src/TunnelFlow.Service/TunnelFlow.Service.csproj`
+  - `src/TunnelFlow.Bootstrapper/TunnelFlow.Bootstrapper.csproj`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `scripts/package-portable.ps1`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - exact command used:
+    - `powershell -ExecutionPolicy Bypass -File scripts\package-portable.ps1 -OutputRoot artifacts\portable-validation4`
+  - packaging script executed successfully and produced:
+    - `artifacts\portable-validation4\stage\TunnelFlow-win-x64-v0.1.0`
+    - `artifacts\portable-validation4\stage\TunnelFlow-win-x64-with-core-v0.1.0`
+    - `artifacts\portable-validation4\zip\TunnelFlow-win-x64-v0.1.0.zip`
+    - `artifacts\portable-validation4\zip\TunnelFlow-win-x64-with-core-v0.1.0.zip`
+  - packaging validation in this environment required one elevated run because
+    sandboxed temp-file cleanup during publish/delete was restricted locally
+
 ## App-local runtime-state migration via RuntimePaths
 - Scope:
   - narrow runtime-state migration only

@@ -2,8 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TunnelFlow.Core\TunnelFlow.Core.csproj" />
-    <ProjectReference Include="..\TunnelFlow.Service\TunnelFlow.Service.csproj" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,12 +18,26 @@
     <ApplicationIcon>..\..\assets\icons\TunnelFlow.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(PortableReleasePublish)' == 'true'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
+
   <ItemGroup>
     <Resource Include="..\..\assets\icons\TunnelFlow.ico" Link="assets\icons\TunnelFlow.ico" />
     <Resource Include="..\..\assets\icons\TunnelFlow.png" Link="assets\icons\TunnelFlow.png" />
   </ItemGroup>
 
-  <Target Name="CopyReleaseCompanions" AfterTargets="Build">
+  <Target Name="BuildReleaseCompanions" BeforeTargets="CopyReleaseCompanions" Condition="'$(PortableReleasePublish)' != 'true'">
+    <MSBuild Projects="..\TunnelFlow.Service\TunnelFlow.Service.csproj;..\TunnelFlow.Bootstrapper\TunnelFlow.Bootstrapper.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+  </Target>
+
+  <Target Name="CopyReleaseCompanions" AfterTargets="Build" Condition="'$(PortableReleasePublish)' != 'true'">
     <PropertyGroup>
       <ServiceOutputDir>$(MSBuildProjectDirectory)\..\TunnelFlow.Service\bin\$(Configuration)\net8.0-windows\</ServiceOutputDir>
       <BootstrapperOutputDir>$(MSBuildProjectDirectory)\..\TunnelFlow.Bootstrapper\bin\$(Configuration)\net8.0-windows\</BootstrapperOutputDir>

@@ -10,6 +10,8 @@ var builder = Host.CreateApplicationBuilder(args);
 var runtimePaths = RuntimePaths.Current;
 var serviceLogPath = runtimePaths.ServiceLogPath;
 
+builder.Configuration.AddJsonFile(runtimePaths.AppSettingsPath, optional: true, reloadOnChange: false);
+
 builder.Services.AddWindowsService(options =>
     options.ServiceName = "TunnelFlow");
 

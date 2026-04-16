@@ -3,6 +3,57 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 83
+Add single-file managed publish settings and a whitelist-based portable packaging
+script for standard and with-core ZIP releases.
+Status: completed
+Scope:
+- small build/packaging patch only
+- preserve the current Windows service-based TUN-only architecture
+- no installer packaging and no runtime-model redesign
+Outcome:
+- enabled conservative packaging-only single-file publish settings for:
+  - `TunnelFlow.UI`
+  - `TunnelFlow.Service`
+  - `TunnelFlow.Bootstrapper`
+- publish settings are gated behind:
+  - `PortableReleasePublish=true`
+- added dedicated packaging script:
+  - `scripts/package-portable.ps1`
+- packaging now publishes managed components separately and assembles final
+  portable release folders from an explicit whitelist instead of shipping raw
+  publish output
+- final package layouts are standardized for both:
+  - standard package
+  - with-core package
+- staged package layout now follows the documented portable direction:
+  - root `TunnelFlow.exe`
+  - `config/appsettings.json`
+  - `system/TunnelFlow.Service.exe`
+  - `system/TunnelFlow.Bootstrapper.exe`
+  - `core/wintun.dll`
+  - `core/sing-box.exe` in with-core
+  - `licenses/`
+  - `QUICK_START.txt`
+- package differences remain narrow and controlled:
+  - standard package excludes bundled `sing-box.exe`
+  - with-core package includes `sing-box.exe`, `libcronet.dll`, and
+    `licenses/SING_BOX_SOURCE.txt`
+- service packaged configuration now aligns with portable layout expectations:
+  - `TunnelFlow.Service` explicitly loads optional `config/appsettings.json`
+    via `RuntimePaths`
+- UI local build companion staging remains available outside packaging:
+  - build-only project references to Service / Bootstrapper were replaced with
+    a small explicit companion build step for non-packaging builds
+Validation:
+- `powershell -ExecutionPolicy Bypass -File scripts\package-portable.ps1 -OutputRoot artifacts\portable-validation4`
+- verified staged outputs:
+  - `artifacts\portable-validation4\stage\TunnelFlow-win-x64-v0.1.0`
+  - `artifacts\portable-validation4\stage\TunnelFlow-win-x64-with-core-v0.1.0`
+- verified ZIP outputs:
+  - `artifacts\portable-validation4\zip\TunnelFlow-win-x64-v0.1.0.zip`
+  - `artifacts\portable-validation4\zip\TunnelFlow-win-x64-with-core-v0.1.0.zip`
+
 ## Step 82
 Migrate runtime state toward app-local portable paths using `RuntimePaths`.
 Status: completed
