@@ -22,9 +22,9 @@ TunnelFlow is meant to keep the workflow simple:
 
 ## Downloads
 
-- `TunnelFlow-win-x64-v0.1.0.zip`
+- `TunnelFlow-win-x64-v0.2.0.zip`
   - Main Windows x64 package without a bundled `sing-box.exe`
-- `TunnelFlow-win-x64-with-core-v0.1.0.zip`
+- `TunnelFlow-win-x64-with-core-v0.2.0.zip`
   - Convenience Windows x64 package with a bundled `sing-box.exe` for easier
     first-time setup
 

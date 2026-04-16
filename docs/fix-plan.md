@@ -3,6 +3,32 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 85
+Bump the effective product and release version from `0.1.0` to `0.2.0`.
+Status: completed
+Scope:
+- small release-version patch only
+- no runtime, packaging-flow, or architecture redesign
+Outcome:
+- updated the shared version source in `Directory.Build.props`:
+  - `Version=0.2.0`
+  - `InformationalVersion=0.2.0`
+  - `AssemblyVersion=0.2.0.0`
+  - `FileVersion=0.2.0.0`
+- kept About/version display aligned through the existing assembly metadata flow
+- updated version-specific release text:
+  - `README.md` package names now use `v0.2.0`
+  - release notes draft moved forward to `docs/release-notes-v0.2.0.md`
+  - the older `docs/release-notes-v0.1.0.md` now remains only as a historical
+    pointer to the newer draft
+- no packaging-script logic change was needed because
+  `scripts/package-portable.ps1` already derives the version from
+  `Directory.Build.props`
+- updated the focused version assertion in `AboutViewModelTests`
+Validation:
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --filter "FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+- `powershell -ExecutionPolicy Bypass -File scripts\package-portable.ps1 -OutputRoot artifacts\portable-version-020`
+
 ## Step 84
 Preserve App Rules local drafts before service availability and require explicit
 apply after reconnect instead of silently overwriting visible edits.

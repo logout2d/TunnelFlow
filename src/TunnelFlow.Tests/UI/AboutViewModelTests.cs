@@ -9,7 +9,7 @@ public sealed class AboutViewModelTests
     {
         var viewModel = new AboutViewModel();
 
-        Assert.Equal("Version 0.1.0", viewModel.VersionText);
+        Assert.Equal("Version 0.2.0", viewModel.VersionText);
         Assert.Equal("https://github.com/logout2d/TunnelFlow", viewModel.ProjectUrl);
     }
 }

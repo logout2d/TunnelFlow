@@ -1,5 +1,37 @@
 # TunnelFlow project memory
 
+## Release version bump to 0.2.0
+- Scope:
+  - small release-version patch only
+  - no runtime, packaging-flow, or architecture redesign
+- Changes made:
+  - updated the shared version source in `Directory.Build.props`:
+    - `Version = 0.2.0`
+    - `InformationalVersion = 0.2.0`
+    - `AssemblyVersion = 0.2.0.0`
+    - `FileVersion = 0.2.0.0`
+  - kept About/version display on the existing metadata path by updating the
+    focused `AboutViewModelTests` assertion instead of adding new version logic
+  - updated version-specific release text:
+    - `README.md` download package names now use `v0.2.0`
+    - added `docs/release-notes-v0.2.0.md` as the active release-note draft
+    - kept `docs/release-notes-v0.1.0.md` only as a historical pointer to the
+      newer draft name
+  - no packaging-script logic change was required because
+    `scripts/package-portable.ps1` already reads the version from
+    `Directory.Build.props`
+- Exact files changed in this step:
+  - `Directory.Build.props`
+  - `README.md`
+  - `docs/release-notes-v0.1.0.md`
+  - `docs/release-notes-v0.2.0.md`
+  - `src/TunnelFlow.Tests/UI/AboutViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --filter "FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+  - `powershell -ExecutionPolicy Bypass -File scripts\package-portable.ps1 -OutputRoot artifacts\portable-version-020`
+
 ## App Rules local draft + explicit apply after service reconnect
 - Scope:
   - small UX/state-management patch only
