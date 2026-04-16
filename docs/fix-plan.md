@@ -3,6 +3,24 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 86
+Audit and clean up stale current-release `0.1.0` references after the `0.2.0`
+version bump.
+Status: completed
+Scope:
+- very small version-audit cleanup only
+- preserve legitimate historical `0.1.0` references
+- do not touch runtime or packaging architecture
+Outcome:
+- audited remaining `0.1.0` and `v0.1.0` references outside intentional
+  historical/tracking files
+- updated the current-release package names in `QUICK_START.txt` to `0.2.0`
+- left intentional historical references unchanged, including:
+  - `docs/release-notes-v0.1.0.md`
+  - historical implementation notes in tracking docs
+Validation:
+- filtered repo search for `0.1.0` / `v0.1.0` outside historical/tracking files
+
 ## Step 85
 Bump the effective product and release version from `0.1.0` to `0.2.0`.
 Status: completed

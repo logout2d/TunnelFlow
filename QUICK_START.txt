@@ -2,9 +2,9 @@ TunnelFlow Quick Start
 ======================
 
 Package types
-- TunnelFlow-win-x64-v0.1.0.zip
+- TunnelFlow-win-x64-v0.2.0.zip
   Standard package without a bundled sing-box.exe
-- TunnelFlow-win-x64-with-core-v0.1.0.zip
+- TunnelFlow-win-x64-with-core-v0.2.0.zip
   Convenience package with a bundled sing-box.exe
 
 Getting started

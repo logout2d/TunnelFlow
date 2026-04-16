@@ -1,5 +1,23 @@
 # TunnelFlow project memory
 
+## Version-audit cleanup for stale current-release 0.1.0 references
+- Scope:
+  - very small version-audit cleanup only
+  - preserve legitimate historical references to `0.1.0`
+- Changes made:
+  - audited remaining `0.1.0` / `v0.1.0` references outside intentional
+    historical/tracking files
+  - updated `QUICK_START.txt` package names from `v0.1.0` to `v0.2.0`
+  - left historical references unchanged where they are intentionally about the
+    previous release
+- Exact files changed in this step:
+  - `QUICK_START.txt`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - filtered repo search for `0.1.0` / `v0.1.0` outside historical/tracking
+    files
+
 ## Release version bump to 0.2.0
 - Scope:
   - small release-version patch only
