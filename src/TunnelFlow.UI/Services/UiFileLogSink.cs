@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using TunnelFlow.Core;
 
 namespace TunnelFlow.UI.Services;
 
@@ -10,10 +11,7 @@ internal sealed class UiFileLogSink : IUiLogSink
 
     public UiFileLogSink(string? baseDirectory = null)
     {
-        var root = string.IsNullOrWhiteSpace(baseDirectory)
-            ? AppContext.BaseDirectory
-            : baseDirectory;
-        _logFilePath = Path.Combine(root, "logs", "ui.log");
+        _logFilePath = RuntimePaths.Create(baseDirectory).UiLogPath;
     }
 
     public void WriteLine(string line)

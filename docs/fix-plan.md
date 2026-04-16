@@ -3,6 +3,46 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 81
+Introduce a centralized runtime path resolver and migrate the main path
+consumers to it.
+Status: completed
+Scope:
+- small, reviewable refactor only
+- preserve the current service-based TUN-only architecture
+- do not perform the full portable runtime-state migration yet
+Outcome:
+- added shared `RuntimePaths` in `TunnelFlow.Core`
+- centralized path definitions for:
+  - current config path
+  - current logs root
+  - `service.log`
+  - `singbox.log`
+  - `ui.log`
+  - portable-layout `config/`, `system/`, and `core/` paths
+  - service/bootstrapper/sing-box/wintun executable paths and candidates
+- migrated the main path consumers away from duplicated path construction:
+  - `ConfigStore`
+  - `LocalConfigSnapshotLoader`
+  - service `Program`
+  - `OrchestratorService`
+  - `WintunPathResolver`
+  - `UiFileLogSink`
+  - `WindowsServiceControlManager`
+  - `BootstrapperPaths`
+- preserved current behavior where practical:
+  - service config/log state still uses the current ProgramData-backed location
+  - UI `ui.log` remains app-local under the current base directory
+  - this step centralizes path access first so the later portable migration can
+    change locations with minimal churn
+- focused tests added for:
+  - shared path expectations and candidate ordering
+  - default config consumers using the shared path source
+  - `WintunPathResolver` preferring the portable `core/` layout when present
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Core.RuntimePathsTests|FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.Service.WintunPathResolverTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.UI.LogViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 80
 Clarify portable release decisions for app-local runtime state and service-model
 compatibility.

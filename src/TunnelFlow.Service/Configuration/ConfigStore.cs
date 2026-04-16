@@ -2,15 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TunnelFlow.Core;
 using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.Service.Configuration;
 
 public class ConfigStore
 {
-    private static readonly string DefaultConfigPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "TunnelFlow", "config.json");
+    private static readonly string DefaultConfigPath = RuntimePaths.Current.CurrentConfigPath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

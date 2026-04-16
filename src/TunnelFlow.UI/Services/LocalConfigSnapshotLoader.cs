@@ -3,16 +3,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.IO;
+using TunnelFlow.Core;
 using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.UI.Services;
 
 public sealed class LocalConfigSnapshotLoader
 {
-    public static readonly string DefaultConfigPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "TunnelFlow",
-        "config.json");
+    public static readonly string DefaultConfigPath = RuntimePaths.Current.CurrentConfigPath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

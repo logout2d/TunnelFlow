@@ -1,5 +1,72 @@
 # TunnelFlow project memory
 
+## Centralized runtime path resolver
+- Scope:
+  - small, reviewable refactor only
+  - preserve the current service-based TUN-only architecture
+  - do not perform the full app-local portable migration yet
+- Changes made:
+  - added shared `RuntimePaths` in `TunnelFlow.Core` as a single source of truth
+    for runtime path construction
+  - `RuntimePaths` now defines/exposes paths for:
+    - current config path and current logs root
+    - `service.log`
+    - `singbox.log`
+    - `ui.log`
+    - portable-layout `config/`, `system/`, and `core/` roots
+    - service executable path
+    - bootstrapper executable path
+    - sing-box executable path
+    - `wintun.dll` path
+    - candidate resolution lists for service/bootstrapper/sing-box/wintun
+  - migrated main consumers to use the shared path source instead of duplicated
+    path construction:
+    - `ConfigStore`
+    - `LocalConfigSnapshotLoader`
+    - service `Program`
+    - `OrchestratorService`
+    - `WintunPathResolver`
+    - `UiFileLogSink`
+    - `WindowsServiceControlManager`
+    - `BootstrapperPaths`
+  - preserved current effective behavior where practical:
+    - current service config/log state still targets the existing ProgramData
+      root in this step
+    - UI `ui.log` still targets the app-local base-directory `logs/` path
+    - this step centralizes path construction first so the later portable
+      migration can change locations with less churn
+- Focused tests added/updated:
+  - added `RuntimePathsTests`
+    - validates expected current and portable-layout paths
+    - validates candidate ordering for service/bootstrapper/sing-box/wintun
+    - validates default config consumers use the shared config path
+  - added `WintunPathResolverTests`
+    - validates resolver prefers the portable `core/` layout when present
+- Exact files changed in this step:
+  - `src/TunnelFlow.Core/RuntimePaths.cs`
+  - `src/TunnelFlow.Service/Configuration/ConfigStore.cs`
+  - `src/TunnelFlow.Service/Program.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/Tun/WintunPathResolver.cs`
+  - `src/TunnelFlow.UI/Services/LocalConfigSnapshotLoader.cs`
+  - `src/TunnelFlow.UI/Services/UiFileLogSink.cs`
+  - `src/TunnelFlow.UI/Services/WindowsServiceControlManager.cs`
+  - `src/TunnelFlow.Bootstrapper/BootstrapperPaths.cs`
+  - `src/TunnelFlow.Bootstrapper/TunnelFlow.Bootstrapper.csproj`
+  - `src/TunnelFlow.Tests/Core/RuntimePathsTests.cs`
+  - `src/TunnelFlow.Tests/Service/WintunPathResolverTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Core.RuntimePathsTests|FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.Service.WintunPathResolverTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.UI.LogViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 14
+    - failed: 0
+    - skipped: 0
+
 ## Portable release decisions: app-local runtime state clarification
 - Scope:
   - documentation-only patch

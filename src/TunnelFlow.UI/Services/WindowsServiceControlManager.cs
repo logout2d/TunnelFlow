@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
+using TunnelFlow.Core;
 
 namespace TunnelFlow.UI.Services;
 
@@ -188,89 +189,14 @@ public sealed class WindowsServiceControlManager : IServiceControlManager
 
     private static string? ResolveBootstrapperExecutablePath()
     {
-        var candidates = new List<string>();
-
-        AddCandidate(candidates, Path.Combine(AppContext.BaseDirectory, "TunnelFlow.Bootstrapper.exe"));
-
-        var repoRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-        if (repoRoot is not null)
-        {
-            AddCandidate(candidates, Path.Combine(
-                repoRoot,
-                "src",
-                "TunnelFlow.Bootstrapper",
-                "bin",
-                "Debug",
-                "net8.0-windows",
-                "TunnelFlow.Bootstrapper.exe"));
-
-            AddCandidate(candidates, Path.Combine(
-                repoRoot,
-                "src",
-                "TunnelFlow.Bootstrapper",
-                "bin",
-                "Release",
-                "net8.0-windows",
-                "TunnelFlow.Bootstrapper.exe"));
-        }
-
+        var candidates = RuntimePaths.Current.GetBootstrapperExecutableCandidates();
         return candidates.FirstOrDefault(File.Exists);
     }
 
     private static string? ResolveServiceExecutablePath()
     {
-        var candidates = new List<string>();
-
-        AddCandidate(candidates, Path.Combine(AppContext.BaseDirectory, "TunnelFlow.Service.exe"));
-
-        var repoRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-        if (repoRoot is not null)
-        {
-            AddCandidate(candidates, Path.Combine(
-                repoRoot,
-                "src",
-                "TunnelFlow.Service",
-                "bin",
-                "Debug",
-                "net8.0-windows",
-                "TunnelFlow.Service.exe"));
-
-            AddCandidate(candidates, Path.Combine(
-                repoRoot,
-                "src",
-                "TunnelFlow.Service",
-                "bin",
-                "Release",
-                "net8.0-windows",
-                "TunnelFlow.Service.exe"));
-        }
-
+        var candidates = RuntimePaths.Current.GetServiceExecutableCandidates();
         return candidates.FirstOrDefault(File.Exists);
-    }
-
-    private static string? FindRepositoryRoot(string startDirectory)
-    {
-        var current = new DirectoryInfo(startDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "TunnelFlow.sln")))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        return null;
-    }
-
-    private static void AddCandidate(List<string> candidates, string path)
-    {
-        var fullPath = Path.GetFullPath(path);
-        if (!candidates.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
-        {
-            candidates.Add(fullPath);
-        }
     }
 
     private static string BuildBootstrapperArguments(string verb, string? serviceExecutablePath)

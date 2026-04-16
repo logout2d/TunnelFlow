@@ -35,8 +35,7 @@ public sealed class OrchestratorService : BackgroundService
     internal static readonly TimeSpan OwnerHeartbeatInterval = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan OwnerLeaseTimeout = TimeSpan.FromSeconds(15);
 
-    private static readonly string DataDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TunnelFlow");
+    private static readonly string DataDir = RuntimePaths.DefaultDataRoot;
 
     public OrchestratorService(
         ISingBoxManager singBoxManager,
@@ -167,7 +166,8 @@ public sealed class OrchestratorService : BackgroundService
                 return;
             }
 
-            var logDir = Path.Combine(DataDir, "logs");
+            var runtimePaths = RuntimePaths.Current;
+            var logDir = runtimePaths.CurrentLogsRoot;
             Directory.CreateDirectory(logDir);
 
             try
@@ -230,8 +230,8 @@ public sealed class OrchestratorService : BackgroundService
                 UseTunMode = true,
                 Rules = config.Rules,
                 BinaryPath = singBoxExe,
-                ConfigOutputPath = Path.Combine(DataDir, "singbox_last.json"),
-                LogOutputPath = Path.Combine(logDir, "singbox.log"),
+                ConfigOutputPath = runtimePaths.SingBoxConfigPath,
+                LogOutputPath = runtimePaths.SingBoxLogPath,
                 RestartDelay = TimeSpan.FromSeconds(3),
                 MaxRestartAttempts = 5
             };
@@ -504,13 +504,9 @@ public sealed class OrchestratorService : BackgroundService
 
     private static string ResolveSingBoxPath()
     {
-        var candidate = Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..",
-                "third_party", "singbox", "sing-box.exe"));
-        if (File.Exists(candidate))
-            return candidate;
-
-        return Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
+        var runtimePaths = RuntimePaths.Current;
+        var candidates = runtimePaths.GetSingBoxExecutableCandidates();
+        return candidates.FirstOrDefault(File.Exists) ?? candidates[0];
     }
 
     internal static string? GetTunOnlyStartBlockReason(TunModeSelectionResult selection)

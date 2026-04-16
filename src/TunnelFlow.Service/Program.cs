@@ -7,12 +7,8 @@ using TunnelFlow.Service.SingBox;
 using TunnelFlow.Service.Tun;
 
 var builder = Host.CreateApplicationBuilder(args);
-
-var serviceLogPath = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-    "TunnelFlow",
-    "logs",
-    "service.log");
+var runtimePaths = RuntimePaths.Current;
+var serviceLogPath = runtimePaths.ServiceLogPath;
 
 builder.Services.AddWindowsService(options =>
     options.ServiceName = "TunnelFlow");
