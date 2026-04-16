@@ -10,6 +10,7 @@ namespace TunnelFlow.Service.Configuration;
 public class ConfigStore
 {
     private static readonly string DefaultConfigPath = RuntimePaths.Current.CurrentConfigPath;
+    private static readonly string LegacyConfigPath = RuntimePaths.Current.LegacyConfigPath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,19 +20,27 @@ public class ConfigStore
     };
 
     private readonly string _configPath;
+    private readonly string? _legacyConfigPath;
 
-    public ConfigStore() : this(DefaultConfigPath) { }
+    public ConfigStore() : this(DefaultConfigPath, LegacyConfigPath) { }
 
-    public ConfigStore(string configPath) => _configPath = configPath;
+    public ConfigStore(string configPath) : this(configPath, legacyConfigPath: null) { }
+
+    public ConfigStore(string configPath, string? legacyConfigPath)
+    {
+        _configPath = configPath;
+        _legacyConfigPath = legacyConfigPath;
+    }
 
     public async Task<TunnelFlowConfig> LoadAsync()
     {
-        if (!File.Exists(_configPath))
+        var configPath = ResolveReadConfigPath();
+        if (!File.Exists(configPath))
             return new TunnelFlowConfig();
 
         try
         {
-            var json = await File.ReadAllTextAsync(_configPath);
+            var json = await File.ReadAllTextAsync(configPath);
             var persisted = JsonSerializer.Deserialize<PersistedConfig>(json, JsonOptions)
                             ?? new PersistedConfig();
 
@@ -47,7 +56,7 @@ public class ConfigStore
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException)
         {
-            throw new InvalidOperationException($"Failed to load config from {_configPath}", ex);
+            throw new InvalidOperationException($"Failed to load config from {configPath}", ex);
         }
     }
 
@@ -71,6 +80,21 @@ public class ConfigStore
 
         await File.WriteAllTextAsync(tmpPath, json);
         File.Move(tmpPath, _configPath, overwrite: true);
+    }
+
+    private string ResolveReadConfigPath()
+    {
+        if (File.Exists(_configPath))
+        {
+            return _configPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_legacyConfigPath) && File.Exists(_legacyConfigPath))
+        {
+            return _legacyConfigPath;
+        }
+
+        return _configPath;
     }
 
     public static string EncryptField(string plaintext)

@@ -39,6 +39,36 @@ public class LogViewModelTests
     }
 
     [Fact]
+    public void AddLine_WhenBaseDirectoryIsSystemSubfolder_WritesToSharedPortableLogsRoot()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "TunnelFlow-UiLogTests", Guid.NewGuid().ToString("N"));
+        var systemDir = Path.Combine(tempDir, "system");
+        Directory.CreateDirectory(systemDir);
+
+        try
+        {
+            var sink = new UiFileLogSink(systemDir);
+            var viewModel = new LogViewModel(sink);
+
+            viewModel.AddLine("ui", "Info", "Hello shared root");
+
+            var logPath = Path.Combine(tempDir, "logs", "ui.log");
+            Assert.True(File.Exists(logPath));
+            Assert.DoesNotContain(Path.Combine(systemDir, "logs", "ui.log"), Directory.GetFiles(tempDir, "ui.log", SearchOption.AllDirectories));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    [Fact]
     public void AddLine_WhenLogSinkThrows_StillKeepsInMemoryUiLog()
     {
         var viewModel = new LogViewModel(new ThrowingUiLogSink());

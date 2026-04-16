@@ -125,7 +125,7 @@ internal static class Program
         }
 
         Console.WriteLine($"Uninstalling {BootstrapperPaths.ServiceName} service.");
-        Console.WriteLine($"Program data will be preserved at: {BootstrapperPaths.DefaultDataRoot}");
+        Console.WriteLine($"Runtime state will be preserved at: {BootstrapperPaths.DefaultDataRoot}");
 
         var stopResult = StopInstalledService();
         if (stopResult != BootstrapperExitCode.Success)
@@ -149,7 +149,7 @@ internal static class Program
         }
 
         Console.WriteLine($"{BootstrapperPaths.ServiceName} service unregistered.");
-        Console.WriteLine("ProgramData and user configuration were left untouched.");
+        Console.WriteLine("App-local runtime state and user configuration were left untouched.");
         return BootstrapperExitCode.Success;
     }
 

@@ -11,6 +11,7 @@ namespace TunnelFlow.UI.Services;
 public sealed class LocalConfigSnapshotLoader
 {
     public static readonly string DefaultConfigPath = RuntimePaths.Current.CurrentConfigPath;
+    public static readonly string LegacyConfigPath = RuntimePaths.Current.LegacyConfigPath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,24 +20,32 @@ public sealed class LocalConfigSnapshotLoader
     };
 
     private readonly string _configPath;
+    private readonly string? _legacyConfigPath;
 
     public LocalConfigSnapshotLoader(string? configPath = null)
+        : this(configPath, legacyConfigPath: null)
+    {
+    }
+
+    public LocalConfigSnapshotLoader(string? configPath, string? legacyConfigPath)
     {
         _configPath = string.IsNullOrWhiteSpace(configPath) ? DefaultConfigPath : configPath;
+        _legacyConfigPath = string.IsNullOrWhiteSpace(configPath) ? LegacyConfigPath : legacyConfigPath;
     }
 
     public string ConfigPath => _configPath;
 
     public async Task<LocalConfigSnapshot> LoadAsync(CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(_configPath))
+        var configPath = ResolveReadConfigPath();
+        if (!File.Exists(configPath))
         {
             return LocalConfigSnapshot.Empty;
         }
 
         try
         {
-            var json = await File.ReadAllTextAsync(_configPath, cancellationToken);
+            var json = await File.ReadAllTextAsync(configPath, cancellationToken);
             var persisted = JsonSerializer.Deserialize<PersistedConfig>(json, JsonOptions)
                             ?? new PersistedConfig();
 
@@ -50,8 +59,23 @@ public sealed class LocalConfigSnapshotLoader
         }
         catch (Exception ex) when (ex is JsonException or CryptographicException)
         {
-            throw new InvalidOperationException($"Failed to load local config from {_configPath}", ex);
+            throw new InvalidOperationException($"Failed to load local config from {configPath}", ex);
         }
+    }
+
+    private string ResolveReadConfigPath()
+    {
+        if (File.Exists(_configPath))
+        {
+            return _configPath;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_legacyConfigPath) && File.Exists(_legacyConfigPath))
+        {
+            return _legacyConfigPath;
+        }
+
+        return _configPath;
     }
 
     private static VlessProfile ToVlessProfile(PersistedVlessProfile profile) => new()

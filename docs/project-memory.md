@@ -1,5 +1,76 @@
 # TunnelFlow project memory
 
+## App-local runtime-state migration via RuntimePaths
+- Scope:
+  - narrow runtime-state migration only
+  - preserve the existing Windows service-based TUN-only architecture
+  - no packaging-script or installer changes
+- Changes made:
+  - `RuntimePaths` now resolves a stable shared runtime root for:
+    - current flat/dev layout
+    - future structured portable layout with `system/`
+  - root resolution rules added:
+    - when running from `system/`, runtime root resolves to the parent package root
+    - when running from repo build outputs, runtime root normalizes to the UI
+      output root so UI and Service do not drift into separate config/log roots
+  - real runtime state now targets app-local portable paths:
+    - config:
+      - `config/config.json`
+    - logs:
+      - `logs/service.log`
+      - `logs/singbox.log`
+      - `logs/ui.log`
+    - generated sing-box config:
+      - `config/singbox_last.json`
+  - compatibility fallback was added for existing config:
+    - if app-local `config/config.json` is missing and the legacy ProgramData
+      config exists, config reads fall back to the legacy file
+    - saves continue writing to the new app-local config path
+  - migrated main consumers to the new shared app-local behavior:
+    - `ConfigStore`
+    - `LocalConfigSnapshotLoader`
+    - service logging in `Program`
+    - sing-box runtime/config paths in `OrchestratorService`
+    - `UiFileLogSink`
+  - narrow bootstrapper wording/path follow-up:
+    - uninstall messaging now refers to preserved runtime state instead of
+      specifically saying ProgramData
+- Focused tests added/updated:
+  - `RuntimePathsTests`
+    - app-local config/log path expectations
+    - stable runtime root for future `system/` layout
+    - default config consumers aligned with the shared path source
+  - `ConfigStoreTests`
+    - fallback to legacy config when the new app-local config is absent
+  - `LocalConfigSnapshotLoaderTests`
+    - fallback to legacy config when the new app-local config is absent
+  - `LogViewModelTests`
+    - `ui.log` stays on the shared portable logs root even when base directory
+      is a `system/` subfolder
+- Exact files changed in this step:
+  - `src/TunnelFlow.Core/RuntimePaths.cs`
+  - `src/TunnelFlow.Service/Configuration/ConfigStore.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.UI/Services/LocalConfigSnapshotLoader.cs`
+  - `src/TunnelFlow.UI/Services/UiFileLogSink.cs`
+  - `src/TunnelFlow.Bootstrapper/BootstrapperPaths.cs`
+  - `src/TunnelFlow.Bootstrapper/Program.cs`
+  - `src/TunnelFlow.Tests/Core/RuntimePathsTests.cs`
+  - `src/TunnelFlow.Tests/Service/ConfigStoreTests.cs`
+  - `src/TunnelFlow.Tests/UI/LocalConfigSnapshotLoaderTests.cs`
+  - `src/TunnelFlow.Tests/UI/LogViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Exact validation results:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Core.RuntimePathsTests|FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.Service.WintunPathResolverTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.UI.LogViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 18
+    - failed: 0
+    - skipped: 0
+
 ## Centralized runtime path resolver
 - Scope:
   - small, reviewable refactor only

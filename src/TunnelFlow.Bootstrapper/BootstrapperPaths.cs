@@ -17,7 +17,7 @@ internal static class BootstrapperPaths
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), ProductName);
 
     public static string DefaultDataRoot =>
-        RuntimePaths.DefaultDataRoot;
+        RuntimePaths.Current.RuntimeRoot;
 
     public static string DefaultConfigPath => RuntimePaths.Current.CurrentConfigPath;
 

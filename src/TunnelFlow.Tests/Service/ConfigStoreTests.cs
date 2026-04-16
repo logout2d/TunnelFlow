@@ -139,6 +139,32 @@ public class ConfigStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsync_WhenAppLocalConfigMissing_FallsBackToLegacyConfigPath()
+    {
+        var appLocalConfigPath = Path.Combine(_tempDir, "config", "config.json");
+        var legacyConfigPath = Path.Combine(_tempDir, "legacy", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(legacyConfigPath)!);
+
+        await File.WriteAllTextAsync(legacyConfigPath, """
+        {
+          "rules": [],
+          "profiles": [],
+          "activeProfileId": null,
+          "socksPort": 4040,
+          "startCaptureOnServiceStart": true,
+          "useTunMode": true
+        }
+        """);
+
+        var store = new ConfigStore(appLocalConfigPath, legacyConfigPath);
+        var config = await store.LoadAsync();
+
+        Assert.Equal(4040, config.SocksPort);
+        Assert.True(config.StartCaptureOnServiceStart);
+        Assert.True(config.UseTunMode);
+    }
+
+    [Fact]
     public void EncryptField_Then_DecryptField_Roundtrip()
     {
         const string plaintext = "my-secret-uuid";

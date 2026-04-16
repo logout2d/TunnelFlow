@@ -35,8 +35,6 @@ public sealed class OrchestratorService : BackgroundService
     internal static readonly TimeSpan OwnerHeartbeatInterval = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan OwnerLeaseTimeout = TimeSpan.FromSeconds(15);
 
-    private static readonly string DataDir = RuntimePaths.DefaultDataRoot;
-
     public OrchestratorService(
         ISingBoxManager singBoxManager,
         ITunOrchestrator tunOrchestrator,
@@ -123,8 +121,6 @@ public sealed class OrchestratorService : BackgroundService
                 return;
             }
 
-            Directory.CreateDirectory(DataDir);
-
             var singBoxExe = ResolveSingBoxPath();
             var tunModeSelection = TunModeSelector.Select(
                 config.UseTunMode,
@@ -167,8 +163,8 @@ public sealed class OrchestratorService : BackgroundService
             }
 
             var runtimePaths = RuntimePaths.Current;
-            var logDir = runtimePaths.CurrentLogsRoot;
-            Directory.CreateDirectory(logDir);
+            Directory.CreateDirectory(runtimePaths.ConfigRoot);
+            Directory.CreateDirectory(runtimePaths.CurrentLogsRoot);
 
             try
             {

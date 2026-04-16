@@ -3,6 +3,44 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 82
+Migrate runtime state toward app-local portable paths using `RuntimePaths`.
+Status: completed
+Scope:
+- narrow runtime-state migration only
+- preserve the existing Windows service-based TUN-only architecture
+- no packaging-script or installer changes
+Outcome:
+- `RuntimePaths` now resolves a stable shared runtime root for:
+  - current flat/dev layout
+  - future structured portable layout with `system/`
+- real runtime state now targets app-local portable paths:
+  - `config/config.json`
+  - `logs/service.log`
+  - `logs/singbox.log`
+  - `logs/ui.log`
+  - `config/singbox_last.json`
+- compatibility fallback added for existing config:
+  - if the new app-local config is missing and the legacy ProgramData config
+    exists, reads fall back to the legacy config
+  - writes continue to the new app-local config path
+- updated main path consumers to the new shared app-local behavior:
+  - `ConfigStore`
+  - `LocalConfigSnapshotLoader`
+  - service logging in `Program`
+  - sing-box runtime/config paths in `OrchestratorService`
+  - `UiFileLogSink`
+- narrow bootstrapper follow-up:
+  - uninstall messaging now refers to preserved runtime state rather than
+    ProgramData specifically
+- focused tests updated for:
+  - stable shared runtime root logic
+  - legacy-config fallback
+  - shared portable `logs/ui.log` behavior
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Core.RuntimePathsTests|FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.Service.WintunPathResolverTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.UI.LogViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 81
 Introduce a centralized runtime path resolver and migrate the main path
 consumers to it.

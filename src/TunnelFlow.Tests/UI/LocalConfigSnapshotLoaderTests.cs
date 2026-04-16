@@ -101,4 +101,26 @@ public sealed class LocalConfigSnapshotLoaderTests : IDisposable
 
         Assert.True(snapshot.UseTunMode);
     }
+
+    [Fact]
+    public async Task LoadAsync_WhenAppLocalConfigMissing_FallsBackToLegacyConfigPath()
+    {
+        var appLocalConfigPath = Path.Combine(_tempDir, "config", "config.json");
+        var legacyConfigPath = Path.Combine(_tempDir, "legacy", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(legacyConfigPath)!);
+
+        await File.WriteAllTextAsync(legacyConfigPath, """
+        {
+          "rules": [],
+          "profiles": [],
+          "activeProfileId": null,
+          "useTunMode": true
+        }
+        """);
+
+        var loader = new LocalConfigSnapshotLoader(appLocalConfigPath, legacyConfigPath);
+        var snapshot = await loader.LoadAsync();
+
+        Assert.True(snapshot.UseTunMode);
+    }
 }

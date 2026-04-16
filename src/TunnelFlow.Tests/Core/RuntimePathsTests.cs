@@ -8,22 +8,38 @@ namespace TunnelFlow.Tests.Core;
 public class RuntimePathsTests
 {
     [Fact]
-    public void Create_ReturnsExpectedCurrentAndPortablePaths()
+    public void Create_WhenUsingFlatPortableLayout_ReturnsAppLocalRuntimeStatePaths()
     {
         var runtimePaths = RuntimePaths.Create(
             baseDirectory: @"D:\Apps\TunnelFlow",
-            dataRoot: @"C:\ProgramData\TunnelFlow");
+            legacyDataRoot: @"C:\ProgramData\TunnelFlow");
 
-        Assert.Equal(Path.Combine(@"C:\ProgramData\TunnelFlow", "config.json"), runtimePaths.CurrentConfigPath);
-        Assert.Equal(Path.Combine(@"C:\ProgramData\TunnelFlow", "logs"), runtimePaths.CurrentLogsRoot);
-        Assert.Equal(Path.Combine(@"C:\ProgramData\TunnelFlow", "logs", "service.log"), runtimePaths.ServiceLogPath);
-        Assert.Equal(Path.Combine(@"C:\ProgramData\TunnelFlow", "logs", "singbox.log"), runtimePaths.SingBoxLogPath);
+        Assert.Equal(@"D:\Apps\TunnelFlow", runtimePaths.RuntimeRoot);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "config", "config.json"), runtimePaths.CurrentConfigPath);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "logs"), runtimePaths.CurrentLogsRoot);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "logs", "service.log"), runtimePaths.ServiceLogPath);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "logs", "singbox.log"), runtimePaths.SingBoxLogPath);
         Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "logs", "ui.log"), runtimePaths.UiLogPath);
         Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "config", "appsettings.json"), runtimePaths.AppSettingsPath);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "config", "singbox_last.json"), runtimePaths.SingBoxConfigPath);
         Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "system", "TunnelFlow.Service.exe"), runtimePaths.ServiceExecutablePath);
         Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "system", "TunnelFlow.Bootstrapper.exe"), runtimePaths.BootstrapperExecutablePath);
         Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "core", "sing-box.exe"), runtimePaths.SingBoxExecutablePath);
         Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "core", "wintun.dll"), runtimePaths.WintunDllPath);
+        Assert.Equal(Path.Combine(@"C:\ProgramData\TunnelFlow", "config.json"), runtimePaths.LegacyConfigPath);
+    }
+
+    [Fact]
+    public void Create_WhenUsingFutureSystemLayout_UsesParentPortableRoot()
+    {
+        var runtimePaths = RuntimePaths.Create(
+            baseDirectory: @"D:\Apps\TunnelFlow\system",
+            legacyDataRoot: @"C:\ProgramData\TunnelFlow");
+
+        Assert.Equal(@"D:\Apps\TunnelFlow", runtimePaths.RuntimeRoot);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "config", "config.json"), runtimePaths.CurrentConfigPath);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "logs", "service.log"), runtimePaths.ServiceLogPath);
+        Assert.Equal(Path.Combine(@"D:\Apps\TunnelFlow", "logs", "ui.log"), runtimePaths.UiLogPath);
     }
 
     [Fact]
@@ -31,7 +47,7 @@ public class RuntimePathsTests
     {
         var runtimePaths = RuntimePaths.Create(
             baseDirectory: @"D:\Apps\TunnelFlow",
-            dataRoot: @"C:\ProgramData\TunnelFlow");
+            legacyDataRoot: @"C:\ProgramData\TunnelFlow");
 
         Assert.Equal(
             [
@@ -74,5 +90,6 @@ public class RuntimePathsTests
             RuntimePaths.Current.CurrentConfigPath,
             Assert.IsType<string>(configPathField!.GetValue(configStore)));
         Assert.Equal(RuntimePaths.Current.CurrentConfigPath, LocalConfigSnapshotLoader.DefaultConfigPath);
+        Assert.Equal(RuntimePaths.Current.LegacyConfigPath, LocalConfigSnapshotLoader.LegacyConfigPath);
     }
 }
