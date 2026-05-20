@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using TunnelFlow.Core.Configuration;
 using TunnelFlow.Core.Models;
 using TunnelFlow.Service.Configuration;
 
@@ -108,6 +112,32 @@ public class ConfigStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_StoresProtectedUserIdWithVersionedMachineScopeFormat()
+    {
+        var config = new TunnelFlowConfig
+        {
+            Profiles =
+            [
+                new VlessProfile
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Secret",
+                    ServerAddress = "vpn.example.com",
+                    ServerPort = 443,
+                    UserId = "shared-config-secret",
+                    Network = "tcp",
+                    Security = "tls"
+                }
+            ]
+        };
+
+        await _store.SaveAsync(config);
+
+        var encryptedUserId = await ReadEncryptedUserIdAsync(_configPath);
+        Assert.StartsWith(ProtectedConfigField.MachineDpapiV1Prefix, encryptedUserId);
+    }
+
+    [Fact]
     public async Task LoadAsync_MissingFile_ReturnsDefaultConfig()
     {
         var nonExistentStore = new ConfigStore(Path.Combine(_tempDir, "does-not-exist.json"));
@@ -165,6 +195,48 @@ public class ConfigStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsync_LegacyMachineScopedProtectedUserId_Loads()
+    {
+        const string userId = "legacy-machine-secret";
+        await WriteSingleProfileConfigAsync(_configPath, ProtectLegacy(userId, DataProtectionScope.LocalMachine));
+
+        var config = await _store.LoadAsync();
+
+        Assert.Single(config.Profiles);
+        Assert.Equal(userId, config.Profiles[0].UserId);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AfterLegacyLoad_RewritesProtectedUserIdWithVersionedFormat()
+    {
+        const string userId = "legacy-machine-secret";
+        var legacyProtectedValue = ProtectLegacy(userId, DataProtectionScope.LocalMachine);
+        await WriteSingleProfileConfigAsync(_configPath, legacyProtectedValue);
+
+        var config = await _store.LoadAsync();
+        await _store.SaveAsync(config);
+
+        var rewrittenProtectedValue = await ReadEncryptedUserIdAsync(_configPath);
+        Assert.StartsWith(ProtectedConfigField.MachineDpapiV1Prefix, rewrittenProtectedValue);
+        Assert.NotEqual(legacyProtectedValue, rewrittenProtectedValue);
+        Assert.Equal(userId, ConfigStore.DecryptField(rewrittenProtectedValue));
+    }
+
+    [Fact]
+    public async Task LoadAsync_UnreadableProtectedUserId_ThrowsControlledDiagnostic()
+    {
+        await WriteSingleProfileConfigAsync(
+            _configPath,
+            ProtectedConfigField.MachineDpapiV1Prefix + "not-base64");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _store.LoadAsync());
+
+        Assert.Contains("Failed to load config", ex.Message);
+        Assert.Contains("profiles[0].encryptedUserId", ex.InnerException?.Message);
+        Assert.Contains("could not be decrypted", ex.InnerException?.Message);
+    }
+
+    [Fact]
     public void EncryptField_Then_DecryptField_Roundtrip()
     {
         const string plaintext = "my-secret-uuid";
@@ -172,5 +244,49 @@ public class ConfigStoreTests : IDisposable
         var decrypted = ConfigStore.DecryptField(encrypted);
         Assert.Equal(plaintext, decrypted);
         Assert.NotEqual(plaintext, encrypted);
+        Assert.StartsWith(ProtectedConfigField.MachineDpapiV1Prefix, encrypted);
+    }
+
+    private static string ProtectLegacy(string plaintext, DataProtectionScope scope)
+    {
+        var bytes = Encoding.UTF8.GetBytes(plaintext);
+        var encrypted = ProtectedData.Protect(bytes, optionalEntropy: null, scope);
+        return Convert.ToBase64String(encrypted);
+    }
+
+    private static async Task WriteSingleProfileConfigAsync(string configPath, string encryptedUserId)
+    {
+        await File.WriteAllTextAsync(configPath, $$"""
+        {
+          "rules": [],
+          "profiles": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "name": "Profile",
+              "serverAddress": "vpn.example.com",
+              "serverPort": 443,
+              "userId": "",
+              "encryptedUserId": "{{encryptedUserId}}",
+              "network": "tcp",
+              "security": "tls",
+              "flow": "",
+              "isActive": true
+            }
+          ],
+          "activeProfileId": null,
+          "socksPort": 2080,
+          "startCaptureOnServiceStart": false,
+          "useTunMode": true
+        }
+        """);
+    }
+
+    private static async Task<string> ReadEncryptedUserIdAsync(string configPath)
+    {
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(configPath));
+        return document.RootElement
+            .GetProperty("profiles")[0]
+            .GetProperty("encryptedUserId")
+            .GetString()!;
     }
 }

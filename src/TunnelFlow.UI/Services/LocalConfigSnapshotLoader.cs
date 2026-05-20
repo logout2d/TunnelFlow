@@ -1,9 +1,9 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.IO;
 using TunnelFlow.Core;
+using TunnelFlow.Core.Configuration;
 using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.UI.Services;
@@ -48,16 +48,25 @@ public sealed class LocalConfigSnapshotLoader
             var json = await File.ReadAllTextAsync(configPath, cancellationToken);
             var persisted = JsonSerializer.Deserialize<PersistedConfig>(json, JsonOptions)
                             ?? new PersistedConfig();
+            var migrations = new List<ProtectedFieldMigration>();
 
-            return new LocalConfigSnapshot
+            var snapshot = new LocalConfigSnapshot
             {
                 Rules = persisted.Rules,
-                Profiles = persisted.Profiles.Select(ToVlessProfile).ToList(),
+                Profiles = persisted.Profiles.Select((profile, index) => ToVlessProfile(profile, configPath, index, migrations)).ToList(),
                 ActiveProfileId = persisted.ActiveProfileId,
-                UseTunMode = persisted.UseTunMode ?? true
+                UseTunMode = persisted.UseTunMode ?? true,
+                RequiresProtectedConfigMigration = migrations.Count > 0
             };
+
+            if (migrations.Count > 0)
+            {
+                await RewriteProtectedFieldsAsync(json, configPath, migrations, cancellationToken);
+            }
+
+            return snapshot;
         }
-        catch (Exception ex) when (ex is JsonException or CryptographicException)
+        catch (Exception ex) when (ex is JsonException or ProtectedConfigFieldException)
         {
             throw new InvalidOperationException($"Failed to load local config from {configPath}", ex);
         }
@@ -78,7 +87,11 @@ public sealed class LocalConfigSnapshotLoader
         return _configPath;
     }
 
-    private static VlessProfile ToVlessProfile(PersistedVlessProfile profile) => new()
+    private static VlessProfile ToVlessProfile(
+        PersistedVlessProfile profile,
+        string configPath,
+        int index,
+        List<ProtectedFieldMigration> migrations) => new()
     {
         Id = profile.Id,
         Name = profile.Name,
@@ -86,7 +99,7 @@ public sealed class LocalConfigSnapshotLoader
         ServerPort = profile.ServerPort,
         UserId = string.IsNullOrEmpty(profile.EncryptedUserId)
             ? profile.UserId
-            : DecryptField(profile.EncryptedUserId),
+            : DecryptField(profile.EncryptedUserId, configPath, index, migrations),
         Flow = profile.Flow,
         Network = profile.Network,
         Security = profile.Security,
@@ -97,12 +110,75 @@ public sealed class LocalConfigSnapshotLoader
         IsActive = profile.IsActive
     };
 
-    private static string DecryptField(string base64)
+    private static string DecryptField(
+        string protectedValue,
+        string configPath,
+        int index,
+        List<ProtectedFieldMigration> migrations)
     {
-        var encrypted = Convert.FromBase64String(base64);
-        var bytes = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.LocalMachine);
-        return Encoding.UTF8.GetString(bytes);
+        try
+        {
+            var result = ProtectedConfigField.UnprotectFromSharedConfig(protectedValue);
+            if (result.RequiresMigration)
+            {
+                migrations.Add(new ProtectedFieldMigration(index, result.Plaintext, result.Scheme));
+            }
+
+            return result.Plaintext;
+        }
+        catch (ProtectedConfigFieldException ex)
+        {
+            throw new ProtectedConfigFieldException(
+                $"Unreadable protected config field profiles[{index}].encryptedUserId in {configPath}. The shared config secret could not be decrypted in this security context.",
+                ex);
+        }
     }
+
+    private async Task RewriteProtectedFieldsAsync(
+        string json,
+        string sourceConfigPath,
+        IReadOnlyList<ProtectedFieldMigration> migrations,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var root = JsonNode.Parse(json)?.AsObject()
+                       ?? throw new JsonException("Config root must be a JSON object.");
+            var profiles = root["profiles"]?.AsArray()
+                           ?? throw new JsonException("Config profiles field must be a JSON array.");
+
+            foreach (var migration in migrations)
+            {
+                if (migration.ProfileIndex < 0 || migration.ProfileIndex >= profiles.Count)
+                {
+                    throw new JsonException($"Config profile index {migration.ProfileIndex} is out of range.");
+                }
+
+                var profile = profiles[migration.ProfileIndex]?.AsObject()
+                              ?? throw new JsonException($"Config profile at index {migration.ProfileIndex} must be a JSON object.");
+                profile["encryptedUserId"] = ProtectedConfigField.ProtectForSharedConfig(migration.Plaintext);
+            }
+
+            var dir = Path.GetDirectoryName(_configPath)!;
+            Directory.CreateDirectory(dir);
+
+            var tmpPath = _configPath + ".tmp";
+            await File.WriteAllTextAsync(tmpPath, root.ToJsonString(JsonOptions), cancellationToken);
+            File.Move(tmpPath, _configPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            var schemes = string.Join(", ", migrations.Select(m => m.Scheme).Distinct());
+            throw new InvalidOperationException(
+                $"Protected config migration failed after reading legacy protected values from {sourceConfigPath}. Destination {_configPath}; legacy schemes: {schemes}.",
+                ex);
+        }
+    }
+
+    private sealed record ProtectedFieldMigration(
+        int ProfileIndex,
+        string Plaintext,
+        ProtectedConfigFieldScheme Scheme);
 
     private sealed class PersistedConfig
     {
@@ -182,4 +258,6 @@ public sealed record LocalConfigSnapshot
     public Guid? ActiveProfileId { get; init; }
 
     public bool UseTunMode { get; init; } = true;
+
+    public bool RequiresProtectedConfigMigration { get; init; }
 }

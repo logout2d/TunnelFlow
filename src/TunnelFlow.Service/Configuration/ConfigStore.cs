@@ -1,8 +1,8 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using TunnelFlow.Core;
+using TunnelFlow.Core.Configuration;
 using TunnelFlow.Core.Models;
 
 namespace TunnelFlow.Service.Configuration;
@@ -21,15 +21,24 @@ public class ConfigStore
 
     private readonly string _configPath;
     private readonly string? _legacyConfigPath;
+    private readonly ILogger<ConfigStore>? _logger;
 
     public ConfigStore() : this(DefaultConfigPath, LegacyConfigPath) { }
 
     public ConfigStore(string configPath) : this(configPath, legacyConfigPath: null) { }
 
+    public ConfigStore(ILogger<ConfigStore> logger) : this(DefaultConfigPath, LegacyConfigPath, logger) { }
+
     public ConfigStore(string configPath, string? legacyConfigPath)
+        : this(configPath, legacyConfigPath, logger: null)
+    {
+    }
+
+    private ConfigStore(string configPath, string? legacyConfigPath, ILogger<ConfigStore>? logger)
     {
         _configPath = configPath;
         _legacyConfigPath = legacyConfigPath;
+        _logger = logger;
     }
 
     public async Task<TunnelFlowConfig> LoadAsync()
@@ -47,14 +56,14 @@ public class ConfigStore
             return new TunnelFlowConfig
             {
                 Rules = persisted.Rules,
-                Profiles = persisted.Profiles.Select(ToVlessProfile).ToList(),
+                Profiles = persisted.Profiles.Select((profile, index) => ToVlessProfile(profile, configPath, index)).ToList(),
                 ActiveProfileId = persisted.ActiveProfileId,
                 SocksPort = persisted.SocksPort,
                 StartCaptureOnServiceStart = persisted.StartCaptureOnServiceStart,
                 UseTunMode = persisted.UseTunMode ?? true
             };
         }
-        catch (Exception ex) when (ex is JsonException or CryptographicException)
+        catch (Exception ex) when (ex is JsonException or ProtectedConfigFieldException)
         {
             throw new InvalidOperationException($"Failed to load config from {configPath}", ex);
         }
@@ -99,16 +108,12 @@ public class ConfigStore
 
     public static string EncryptField(string plaintext)
     {
-        var bytes = Encoding.UTF8.GetBytes(plaintext);
-        var encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.LocalMachine);
-        return Convert.ToBase64String(encrypted);
+        return ProtectedConfigField.ProtectForSharedConfig(plaintext);
     }
 
-    public static string DecryptField(string base64)
+    public static string DecryptField(string protectedValue)
     {
-        var encrypted = Convert.FromBase64String(base64);
-        var bytes = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.LocalMachine);
-        return Encoding.UTF8.GetString(bytes);
+        return ProtectedConfigField.UnprotectFromSharedConfig(protectedValue).Plaintext;
     }
 
     private static PersistedVlessProfile ToPersistedProfile(VlessProfile p) => new()
@@ -129,22 +134,63 @@ public class ConfigStore
         IsActive = p.IsActive
     };
 
-    private static VlessProfile ToVlessProfile(PersistedVlessProfile p) => new()
+    private VlessProfile ToVlessProfile(PersistedVlessProfile p, string configPath, int index)
     {
-        Id = p.Id,
-        Name = p.Name,
-        ServerAddress = p.ServerAddress,
-        ServerPort = p.ServerPort,
-        UserId = string.IsNullOrEmpty(p.EncryptedUserId) ? string.Empty : DecryptField(p.EncryptedUserId),
-        Network = p.Network,
-        Security = p.Security,
-        Flow = p.Flow,
-        Tls = p.Tls,
-        SubscriptionSourceUrl = p.SubscriptionSourceUrl,
-        SubscriptionProfileKey = p.SubscriptionProfileKey,
-        SubscriptionMissingFromSource = p.SubscriptionMissingFromSource,
-        IsActive = p.IsActive
-    };
+        var userId = string.Empty;
+        if (!string.IsNullOrEmpty(p.EncryptedUserId))
+        {
+            userId = DecryptProfileUserId(p, configPath, index);
+        }
+
+        return new VlessProfile
+        {
+            Id = p.Id,
+            Name = p.Name,
+            ServerAddress = p.ServerAddress,
+            ServerPort = p.ServerPort,
+            UserId = userId,
+            Network = p.Network,
+            Security = p.Security,
+            Flow = p.Flow,
+            Tls = p.Tls,
+            SubscriptionSourceUrl = p.SubscriptionSourceUrl,
+            SubscriptionProfileKey = p.SubscriptionProfileKey,
+            SubscriptionMissingFromSource = p.SubscriptionMissingFromSource,
+            IsActive = p.IsActive
+        };
+    }
+
+    private string DecryptProfileUserId(PersistedVlessProfile p, string configPath, int index)
+    {
+        var fieldPath = $"profiles[{index}].encryptedUserId";
+        try
+        {
+            var result = ProtectedConfigField.UnprotectFromSharedConfig(p.EncryptedUserId);
+            if (result.RequiresMigration)
+            {
+                _logger?.LogInformation(
+                    "Config field {FieldPath} for profile {ProfileId} uses legacy protected format {Scheme}; it will be rewritten with the current machine-scoped format on the next save.",
+                    fieldPath,
+                    p.Id,
+                    result.Scheme);
+            }
+
+            return result.Plaintext;
+        }
+        catch (ProtectedConfigFieldException ex)
+        {
+            _logger?.LogError(
+                ex,
+                "Unreadable protected config field {FieldPath} for profile {ProfileId} in {ConfigPath}. The shared config secret could not be decrypted in this security context.",
+                fieldPath,
+                p.Id,
+                configPath);
+
+            throw new ProtectedConfigFieldException(
+                $"Unreadable protected config field {fieldPath} in {configPath}. The shared config secret could not be decrypted in this security context.",
+                ex);
+        }
+    }
 
     // --- Persistence DTOs ---
 

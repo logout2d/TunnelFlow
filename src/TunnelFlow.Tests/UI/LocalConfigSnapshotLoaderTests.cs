@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using TunnelFlow.Core.Configuration;
 using TunnelFlow.Core.Models;
 using TunnelFlow.Service.Configuration;
 using TunnelFlow.UI.Services;
@@ -73,6 +77,105 @@ public sealed class LocalConfigSnapshotLoaderTests : IDisposable
         Assert.Equal(@"C:\Apps\Floorp.exe", snapshot.Rules[0].ExePath);
         Assert.Equal("Offline Profile", snapshot.Profiles[0].Name);
         Assert.Equal("11111111-1111-1111-1111-111111111111", snapshot.Profiles[0].UserId);
+        Assert.False(snapshot.RequiresProtectedConfigMigration);
+    }
+
+    [Fact]
+    public async Task LoadAsync_ReadsLegacyMachineScopedProtectedUserId()
+    {
+        await File.WriteAllTextAsync(_configPath, $$"""
+        {
+          "rules": [],
+          "profiles": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "name": "Legacy Profile",
+              "serverAddress": "vpn.example.com",
+              "serverPort": 443,
+              "userId": "",
+              "encryptedUserId": "{{ProtectLegacy("legacy-shared-secret", DataProtectionScope.LocalMachine)}}",
+              "network": "tcp",
+              "security": "tls",
+              "flow": "",
+              "isActive": true
+            }
+          ],
+          "activeProfileId": null,
+          "useTunMode": true
+        }
+        """);
+
+        var loader = new LocalConfigSnapshotLoader(_configPath);
+        var snapshot = await loader.LoadAsync();
+
+        Assert.Single(snapshot.Profiles);
+        Assert.Equal("legacy-shared-secret", snapshot.Profiles[0].UserId);
+        Assert.True(snapshot.RequiresProtectedConfigMigration);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LegacyCurrentUserProtectedUserId_RewritesToVersionedMachineScopedFormat()
+    {
+        const string userId = "legacy-current-user-secret";
+        await WriteSingleProfileConfigAsync(
+            _configPath,
+            ProtectLegacy(userId, DataProtectionScope.CurrentUser),
+            socksPort: 4040);
+
+        var loader = new LocalConfigSnapshotLoader(_configPath);
+        var snapshot = await loader.LoadAsync();
+
+        Assert.Single(snapshot.Profiles);
+        Assert.Equal(userId, snapshot.Profiles[0].UserId);
+        Assert.True(snapshot.RequiresProtectedConfigMigration);
+
+        var rewrittenProtectedValue = await ReadEncryptedUserIdAsync(_configPath);
+        Assert.StartsWith(ProtectedConfigField.MachineDpapiV1Prefix, rewrittenProtectedValue);
+        Assert.Equal(userId, ConfigStore.DecryptField(rewrittenProtectedValue));
+        Assert.Equal(4040, await ReadIntPropertyAsync(_configPath, "socksPort"));
+
+        var serviceConfig = await new ConfigStore(_configPath).LoadAsync();
+        Assert.Single(serviceConfig.Profiles);
+        Assert.Equal(userId, serviceConfig.Profiles[0].UserId);
+        Assert.Equal(4040, serviceConfig.SocksPort);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenLegacyConfigFallbackRequiresMigration_WritesCurrentSharedConfig()
+    {
+        var appLocalConfigPath = Path.Combine(_tempDir, "config", "config.json");
+        var legacyConfigPath = Path.Combine(_tempDir, "legacy", "config.json");
+        const string userId = "legacy-fallback-secret";
+
+        Directory.CreateDirectory(Path.GetDirectoryName(legacyConfigPath)!);
+        await WriteSingleProfileConfigAsync(
+            legacyConfigPath,
+            ProtectLegacy(userId, DataProtectionScope.CurrentUser),
+            socksPort: 5050);
+
+        var loader = new LocalConfigSnapshotLoader(appLocalConfigPath, legacyConfigPath);
+        var snapshot = await loader.LoadAsync();
+
+        Assert.True(snapshot.RequiresProtectedConfigMigration);
+        Assert.Equal(userId, Assert.Single(snapshot.Profiles).UserId);
+        Assert.True(File.Exists(appLocalConfigPath));
+        Assert.StartsWith(ProtectedConfigField.MachineDpapiV1Prefix, await ReadEncryptedUserIdAsync(appLocalConfigPath));
+        Assert.Equal(5050, await ReadIntPropertyAsync(appLocalConfigPath, "socksPort"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_UnreadableProtectedUserId_ThrowsControlledDiagnostic()
+    {
+        await WriteSingleProfileConfigAsync(
+            _configPath,
+            ProtectedConfigField.MachineDpapiV1Prefix + "not-base64",
+            socksPort: 2080);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new LocalConfigSnapshotLoader(_configPath).LoadAsync());
+
+        Assert.Contains("Failed to load local config", ex.Message);
+        Assert.Contains("profiles[0].encryptedUserId", ex.InnerException?.Message);
+        Assert.Contains("could not be decrypted", ex.InnerException?.Message);
     }
 
     [Fact]
@@ -122,5 +225,55 @@ public sealed class LocalConfigSnapshotLoaderTests : IDisposable
         var snapshot = await loader.LoadAsync();
 
         Assert.True(snapshot.UseTunMode);
+    }
+
+    private static string ProtectLegacy(string plaintext, DataProtectionScope scope)
+    {
+        var bytes = Encoding.UTF8.GetBytes(plaintext);
+        var encrypted = ProtectedData.Protect(bytes, optionalEntropy: null, scope);
+        return Convert.ToBase64String(encrypted);
+    }
+
+    private static async Task WriteSingleProfileConfigAsync(string configPath, string encryptedUserId, int socksPort)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        await File.WriteAllTextAsync(configPath, $$"""
+        {
+          "rules": [],
+          "profiles": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "name": "Legacy Profile",
+              "serverAddress": "vpn.example.com",
+              "serverPort": 443,
+              "userId": "",
+              "encryptedUserId": "{{encryptedUserId}}",
+              "network": "tcp",
+              "security": "tls",
+              "flow": "",
+              "isActive": true
+            }
+          ],
+          "activeProfileId": null,
+          "socksPort": {{socksPort}},
+          "startCaptureOnServiceStart": true,
+          "useTunMode": true
+        }
+        """);
+    }
+
+    private static async Task<string> ReadEncryptedUserIdAsync(string configPath)
+    {
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(configPath));
+        return document.RootElement
+            .GetProperty("profiles")[0]
+            .GetProperty("encryptedUserId")
+            .GetString()!;
+    }
+
+    private static async Task<int> ReadIntPropertyAsync(string configPath, string propertyName)
+    {
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(configPath));
+        return document.RootElement.GetProperty(propertyName).GetInt32();
     }
 }
