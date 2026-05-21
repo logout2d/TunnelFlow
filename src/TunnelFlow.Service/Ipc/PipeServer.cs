@@ -22,6 +22,7 @@ public sealed class PipeServer
     private static readonly JsonSerializerOptions _serializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         Converters =
         {
             new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
@@ -32,6 +33,7 @@ public sealed class PipeServer
     private static readonly JsonSerializerOptions _compactOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         Converters =
         {
             new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),

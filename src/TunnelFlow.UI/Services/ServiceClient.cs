@@ -20,6 +20,7 @@ public sealed class ServiceClient : IDisposable
     private readonly JsonSerializerOptions _options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         Converters =
         {
             new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),

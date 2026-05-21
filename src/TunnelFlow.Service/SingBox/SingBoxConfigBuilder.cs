@@ -121,38 +121,38 @@ public class SingBoxConfigBuilder
     }
 
     private static IReadOnlyList<AppRule> GetEnabledTunRules(SingBoxConfig config) =>
-        config.Rules
+        AppRuleMatcher.OrderByMatchPrecedence(config.Rules
             .Where(rule =>
                 rule.IsEnabled &&
-                !string.IsNullOrWhiteSpace(rule.ExePath))
-            .ToArray();
+                !string.IsNullOrWhiteSpace(rule.ExePath)));
 
     private static JsonObject BuildTunRouteRule(AppRule rule)
     {
-        var processPath = new JsonArray(rule.ExePath);
+        var processMatchProperty = GetProcessMatchProperty(rule.MatchType);
+        var processMatchValue = new JsonArray(rule.ExePath);
 
         return rule.Mode switch
         {
             RuleMode.Proxy => new JsonObject
             {
-                ["process_path"] = processPath,
+                [processMatchProperty] = processMatchValue,
                 ["action"] = "route",
                 ["outbound"] = "vless-out"
             },
             RuleMode.Direct => new JsonObject
             {
-                ["process_path"] = processPath,
+                [processMatchProperty] = processMatchValue,
                 ["action"] = "route",
                 ["outbound"] = "direct"
             },
             RuleMode.Block => new JsonObject
             {
-                ["process_path"] = processPath,
+                [processMatchProperty] = processMatchValue,
                 ["action"] = "reject"
             },
             _ => new JsonObject
             {
-                ["process_path"] = processPath,
+                [processMatchProperty] = processMatchValue,
                 ["action"] = "route",
                 ["outbound"] = "direct"
             }
@@ -161,24 +161,28 @@ public class SingBoxConfigBuilder
 
     private static JsonObject? BuildTunDnsRule(AppRule rule)
     {
-        var processPath = new JsonArray(rule.ExePath);
+        var processMatchProperty = GetProcessMatchProperty(rule.MatchType);
+        var processMatchValue = new JsonArray(rule.ExePath);
 
         return rule.Mode switch
         {
             RuleMode.Proxy => new JsonObject
             {
-                ["process_path"] = processPath,
+                [processMatchProperty] = processMatchValue,
                 ["action"] = "route",
                 ["server"] = "remote-dns"
             },
             RuleMode.Block => new JsonObject
             {
-                ["process_path"] = processPath,
+                [processMatchProperty] = processMatchValue,
                 ["action"] = "reject"
             },
             _ => null
         };
     }
+
+    private static string GetProcessMatchProperty(AppRuleMatchType matchType) =>
+        matchType == AppRuleMatchType.ExeName ? "process_name" : "process_path";
 
     private static JsonObject BuildVlessOutbound(VlessProfile profile)
     {

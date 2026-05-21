@@ -595,14 +595,14 @@ public sealed class OrchestratorService : BackgroundService
             : TunnelStatusMode.Legacy;
 
     internal static IReadOnlyList<TunPolicySummary> BuildTunPolicySummaries(IReadOnlyList<AppRule> rules) =>
-        rules
-            .Where(rule => rule.IsEnabled && !string.IsNullOrWhiteSpace(rule.ExePath))
+        AppRuleMatcher.OrderByMatchPrecedence(rules
+            .Where(rule => rule.IsEnabled && !string.IsNullOrWhiteSpace(rule.ExePath)))
             .Select(rule => rule.Mode switch
             {
-                RuleMode.Proxy => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "vless-out"),
-                RuleMode.Direct => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "direct"),
-                RuleMode.Block => new TunPolicySummary(rule.ExePath, rule.Mode, "reject", null),
-                _ => new TunPolicySummary(rule.ExePath, rule.Mode, "route", "direct")
+                RuleMode.Proxy => new TunPolicySummary(rule.ExePath, rule.MatchType, rule.Mode, "route", "vless-out"),
+                RuleMode.Direct => new TunPolicySummary(rule.ExePath, rule.MatchType, rule.Mode, "route", "direct"),
+                RuleMode.Block => new TunPolicySummary(rule.ExePath, rule.MatchType, rule.Mode, "reject", null),
+                _ => new TunPolicySummary(rule.ExePath, rule.MatchType, rule.Mode, "route", "direct")
             })
             .ToArray();
 
@@ -1038,6 +1038,7 @@ internal readonly record struct ServiceStatusSummary(
 
 internal readonly record struct TunPolicySummary(
     string AppPath,
+    AppRuleMatchType MatchType,
     RuleMode RuleMode,
     string MappedAction,
     string? MappedOutbound);

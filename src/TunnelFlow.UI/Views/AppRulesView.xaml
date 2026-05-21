@@ -28,6 +28,18 @@
                     BorderThickness="0"
                     Cursor="Hand"
                     VerticalAlignment="Center"/>
+
+            <Button Content="Add Exe"
+                    Command="{Binding AddExeRuleCommand}"
+                    IsEnabled="{Binding IsEditingEnabled}"
+                    Margin="8,0,0,0"
+                    Padding="12,6"
+                    MinHeight="32"
+                    Background="#0F766E"
+                    Foreground="White"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    VerticalAlignment="Center"/>
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Top"
@@ -104,13 +116,16 @@
         <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="32"/>
+                <ColumnDefinition Width="54"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="108"/>
                 <ColumnDefinition Width="80"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="1" Text="Application" FontWeight="SemiBold"
+            <TextBlock Grid.Column="1" Text="Type" FontWeight="SemiBold"
                        Foreground="#64748B" FontSize="11"/>
-            <TextBlock Grid.Column="2" Text="Mode" FontWeight="SemiBold"
+            <TextBlock Grid.Column="2" Text="Application" FontWeight="SemiBold"
+                       Foreground="#64748B" FontSize="11"/>
+            <TextBlock Grid.Column="3" Text="Mode" FontWeight="SemiBold"
                        Foreground="#64748B" FontSize="11" HorizontalAlignment="Center"/>
         </Grid>
 
@@ -141,6 +156,7 @@
                     <Grid Margin="0,4" MinHeight="36">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="54"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="80"/>
                             <ColumnDefinition Width="80"/>
@@ -150,14 +166,25 @@
                                   IsEnabled="{Binding DataContext.IsEditingEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
 
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Border Grid.Column="1"
+                                Background="#E2E8F0"
+                                CornerRadius="4"
+                                Padding="6,2"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding MatchTypeLabel}"
+                                       FontSize="10"
+                                       Foreground="#475569"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,8,0">
                             <TextBlock Text="{Binding DisplayName}" FontWeight="Medium"
                                        Foreground="#1E293B"/>
                             <TextBlock Text="{Binding ExePath}" FontSize="10"
                                        Foreground="#94A3B8" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 
-                        <ComboBox Grid.Column="2" SelectedItem="{Binding Mode, Mode=TwoWay}"
+                        <ComboBox Grid.Column="3" SelectedItem="{Binding Mode, Mode=TwoWay}"
                                   IsEnabled="{Binding DataContext.IsEditingEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   VerticalAlignment="Center" MinHeight="26" Margin="0,0,8,0">
                             <sys:String>Proxy</sys:String>
@@ -165,7 +192,7 @@
                             <sys:String>Block</sys:String>
                         </ComboBox>
 
-                        <Button Grid.Column="3" Content="Remove"
+                        <Button Grid.Column="4" Content="Remove"
                                 Command="{Binding DataContext.RemoveRuleCommand,
                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                 CommandParameter="{Binding}"

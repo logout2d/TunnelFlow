@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -14,7 +15,9 @@ public partial class AppRulesViewModel : ObservableObject
 {
     private readonly ServiceClient _client;
     private readonly Func<string, object?, CancellationToken, Task<JsonElement?>> _sendCommandAsync;
+    private readonly Func<string?> _promptExeName;
     private readonly RelayCommand _addRuleCmd;
+    private readonly RelayCommand _addExeRuleCmd;
     private readonly RelayCommand<AppRuleItemViewModel> _removeRuleCmd;
     private readonly RelayCommand _applyPendingRulesCmd;
     private readonly List<AppRule> _lastServiceRules = [];
@@ -29,6 +32,7 @@ public partial class AppRulesViewModel : ObservableObject
     public ObservableCollection<AppRuleItemViewModel> Rules { get; } = [];
 
     public IRelayCommand AddRuleCommand { get; }
+    public IRelayCommand AddExeRuleCommand { get; }
     public IRelayCommand<AppRuleItemViewModel> RemoveRuleCommand { get; }
     public IRelayCommand ApplyPendingRulesCommand { get; }
     public bool ShowEditHint => !IsEditingEnabled;
@@ -50,14 +54,19 @@ public partial class AppRulesViewModel : ObservableObject
 
     public AppRulesViewModel(
         ServiceClient client,
-        Func<string, object?, CancellationToken, Task<JsonElement?>>? sendCommandAsync = null)
+        Func<string, object?, CancellationToken, Task<JsonElement?>>? sendCommandAsync = null,
+        Func<string?>? promptExeName = null)
     {
         _client = client;
         _sendCommandAsync = sendCommandAsync ?? ((type, payload, cancellationToken) =>
             _client.SendCommandAsync(type, payload, cancellationToken));
+        _promptExeName = promptExeName ?? ShowExeNameDialog;
 
         _addRuleCmd = new RelayCommand(
             async () => await AddRuleAsync(),
+            () => IsEditingEnabled);
+        _addExeRuleCmd = new RelayCommand(
+            async () => await AddExeRuleAsync(),
             () => IsEditingEnabled);
         _removeRuleCmd = new RelayCommand<AppRuleItemViewModel>(
             async item => await RemoveRuleAsync(item!),
@@ -67,6 +76,7 @@ public partial class AppRulesViewModel : ObservableObject
             CanExecuteApplyPendingRules);
 
         AddRuleCommand = _addRuleCmd;
+        AddExeRuleCommand = _addExeRuleCmd;
         RemoveRuleCommand = _removeRuleCmd;
         ApplyPendingRulesCommand = _applyPendingRulesCmd;
     }
@@ -74,6 +84,7 @@ public partial class AppRulesViewModel : ObservableObject
     partial void OnIsEditingEnabledChanged(bool value)
     {
         _addRuleCmd.NotifyCanExecuteChanged();
+        _addExeRuleCmd.NotifyCanExecuteChanged();
         _removeRuleCmd.NotifyCanExecuteChanged();
         _applyPendingRulesCmd.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ShowEditHint));
@@ -216,10 +227,44 @@ public partial class AppRulesViewModel : ObservableObject
             Id = Guid.NewGuid(),
             ExePath = exePath,
             DisplayName = displayName,
+            MatchType = AppRuleMatchType.FullPath,
             Mode = RuleMode.Proxy,
             IsEnabled = true
         };
 
+        await AddRuleCoreAsync(rule);
+    }
+
+    private async Task AddExeRuleAsync()
+    {
+        var input = _promptExeName();
+        if (input is null)
+        {
+            return;
+        }
+
+        if (!TryNormalizeExeName(input, out var exeName, out var error))
+        {
+            MessageBox.Show(error, "Invalid executable name",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var rule = new AppRule
+        {
+            Id = Guid.NewGuid(),
+            ExePath = exeName,
+            DisplayName = System.IO.Path.GetFileNameWithoutExtension(exeName),
+            MatchType = AppRuleMatchType.ExeName,
+            Mode = RuleMode.Proxy,
+            IsEnabled = true
+        };
+
+        await AddRuleCoreAsync(rule);
+    }
+
+    private async Task AddRuleCoreAsync(AppRule rule)
+    {
         try
         {
             var item = new AppRuleItemViewModel(rule);
@@ -353,9 +398,92 @@ public partial class AppRulesViewModel : ObservableObject
         Id = rule.Id,
         ExePath = rule.ExePath,
         DisplayName = rule.DisplayName,
+        MatchType = rule.MatchType,
         Mode = rule.Mode,
         IsEnabled = rule.IsEnabled
     };
+
+    public static bool TryNormalizeExeName(string? input, out string normalized, out string error)
+    {
+        normalized = string.Empty;
+        error = string.Empty;
+
+        var trimmed = input?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
+        {
+            error = "Enter an executable name.";
+            return false;
+        }
+
+        if (trimmed.Contains('\\') || trimmed.Contains('/'))
+        {
+            error = "Enter only the executable file name, not a path.";
+            return false;
+        }
+
+        normalized = trimmed.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : trimmed + ".exe";
+        return true;
+    }
+
+    private static string? ShowExeNameDialog()
+    {
+        var window = new Window
+        {
+            Title = "Add Exe Rule",
+            Width = 320,
+            Height = 150,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Owner = Application.Current?.MainWindow
+        };
+
+        var input = new TextBox
+        {
+            Margin = new Thickness(0, 0, 0, 12),
+            MinHeight = 28
+        };
+
+        var ok = new Button
+        {
+            Content = "Add",
+            MinWidth = 72,
+            Margin = new Thickness(0, 0, 8, 0),
+            IsDefault = true
+        };
+        var cancel = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 72,
+            IsCancel = true
+        };
+
+        ok.Click += (_, _) =>
+        {
+            window.DialogResult = true;
+            window.Close();
+        };
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { ok, cancel }
+        };
+
+        window.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Children =
+            {
+                input,
+                buttons
+            }
+        };
+
+        return window.ShowDialog() == true ? input.Text : null;
+    }
 
     private static void Dispatch(Action action)
     {
@@ -374,6 +502,7 @@ public partial class AppRuleItemViewModel : ObservableObject
 {
     [ObservableProperty] private string _exePath;
     [ObservableProperty] private string _displayName;
+    [ObservableProperty] private AppRuleMatchType _matchType;
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private string _mode;
 
@@ -384,15 +513,19 @@ public partial class AppRuleItemViewModel : ObservableObject
         Id = rule.Id;
         _exePath = rule.ExePath;
         _displayName = rule.DisplayName;
+        _matchType = rule.MatchType;
         _isEnabled = rule.IsEnabled;
         _mode = rule.Mode.ToString();
     }
+
+    public string MatchTypeLabel => MatchType == AppRuleMatchType.ExeName ? "Exe" : "Path";
 
     public AppRule ToAppRule() => new()
     {
         Id = Id,
         ExePath = ExePath,
         DisplayName = DisplayName,
+        MatchType = MatchType,
         IsEnabled = IsEnabled,
         Mode = Enum.TryParse<RuleMode>(Mode, out var m) ? m : RuleMode.Proxy
     };

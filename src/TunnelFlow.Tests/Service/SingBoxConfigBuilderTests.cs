@@ -178,6 +178,66 @@ public class SingBoxConfigBuilderTests
     }
 
     [Fact]
+    public void Build_UseTunModeTrue_AddsExeNameRouteRules()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = "game.exe",
+                DisplayName = "game",
+                MatchType = AppRuleMatchType.ExeName,
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var routeRules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        Assert.Contains(routeRules.EnumerateArray(), rule =>
+            rule.TryGetProperty("process_name", out var processNames) &&
+            processNames[0].GetString() == "game.exe" &&
+            rule.GetProperty("action").GetString() == "route" &&
+            rule.GetProperty("outbound").GetString() == "vless-out");
+    }
+
+    [Fact]
+    public void Build_UseTunModeTrue_OrdersFullPathRulesBeforeExeNameRules()
+    {
+        var rules = new[]
+        {
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = "game.exe",
+                DisplayName = "game",
+                MatchType = AppRuleMatchType.ExeName,
+                Mode = RuleMode.Proxy,
+                IsEnabled = true
+            },
+            new AppRule
+            {
+                Id = Guid.NewGuid(),
+                ExePath = @"C:\Games\game.exe",
+                DisplayName = "game path",
+                MatchType = AppRuleMatchType.FullPath,
+                Mode = RuleMode.Direct,
+                IsEnabled = true
+            }
+        };
+
+        var json = _builder.Build(MakeProfile(), MakeConfig(useTunMode: true, rules: rules));
+
+        using var doc = JsonDocument.Parse(json);
+        var routeRules = doc.RootElement.GetProperty("route").GetProperty("rules");
+        Assert.True(routeRules[1].TryGetProperty("process_path", out _));
+        Assert.True(routeRules[2].TryGetProperty("process_name", out _));
+    }
+
+    [Fact]
     public void Build_UseTunModeTrue_AddsBlockProcessPathRejectRules()
     {
         var rules = new[]

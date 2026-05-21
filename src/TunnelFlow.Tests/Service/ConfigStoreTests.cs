@@ -72,6 +72,7 @@ public class ConfigStoreTests : IDisposable
         Assert.Equal(config.ActiveProfileId, loaded.ActiveProfileId);
         Assert.Single(loaded.Rules);
         Assert.Equal(config.Rules[0].ExePath, loaded.Rules[0].ExePath);
+        Assert.Equal(AppRuleMatchType.FullPath, loaded.Rules[0].MatchType);
         Assert.Equal(config.Rules[0].Mode, loaded.Rules[0].Mode);
         Assert.Single(loaded.Profiles);
         Assert.Equal(config.Profiles[0].Name, loaded.Profiles[0].Name);
@@ -166,6 +167,88 @@ public class ConfigStoreTests : IDisposable
         var config = await _store.LoadAsync();
 
         Assert.True(config.UseTunMode);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RuleMissingMatchType_DefaultsToFullPath()
+    {
+        await File.WriteAllTextAsync(_configPath, """
+        {
+          "rules": [
+            {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "exePath": "C:\\Apps\\Game.exe",
+              "displayName": "Game",
+              "mode": "proxy",
+              "isEnabled": true
+            }
+          ],
+          "profiles": [],
+          "activeProfileId": null,
+          "useTunMode": true
+        }
+        """);
+
+        var config = await _store.LoadAsync();
+
+        Assert.Single(config.Rules);
+        Assert.Equal(AppRuleMatchType.FullPath, config.Rules[0].MatchType);
+    }
+
+    [Fact]
+    public async Task SaveAndLoad_ExeNameRule_PreservesMatchType()
+    {
+        var config = new TunnelFlowConfig
+        {
+            Rules =
+            [
+                new AppRule
+                {
+                    Id = Guid.NewGuid(),
+                    ExePath = "game.exe",
+                    DisplayName = "game",
+                    MatchType = AppRuleMatchType.ExeName,
+                    Mode = RuleMode.Proxy,
+                    IsEnabled = true
+                }
+            ]
+        };
+
+        await _store.SaveAsync(config);
+        var rawJson = await File.ReadAllTextAsync(_configPath);
+        var loaded = await _store.LoadAsync();
+
+        Assert.Contains("\"matchType\": \"exeName\"", rawJson);
+        Assert.Single(loaded.Rules);
+        Assert.Equal("game.exe", loaded.Rules[0].ExePath);
+        Assert.Equal(AppRuleMatchType.ExeName, loaded.Rules[0].MatchType);
+    }
+
+    [Fact]
+    public async Task LoadAsync_PascalCasedMatchType_PreservesExeName()
+    {
+        await File.WriteAllTextAsync(_configPath, """
+        {
+          "rules": [
+            {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "exePath": "Discord.exe",
+              "displayName": "Discord",
+              "MatchType": "ExeName",
+              "mode": "proxy",
+              "isEnabled": true
+            }
+          ],
+          "profiles": [],
+          "activeProfileId": null,
+          "useTunMode": true
+        }
+        """);
+
+        var config = await _store.LoadAsync();
+
+        Assert.Single(config.Rules);
+        Assert.Equal(AppRuleMatchType.ExeName, config.Rules[0].MatchType);
     }
 
     [Fact]

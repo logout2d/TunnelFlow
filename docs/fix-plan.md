@@ -3,6 +3,66 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 88
+Fix App Rules executable-name match type persistence across save/reload.
+Status: completed
+Scope:
+- narrow persistence/reload fix for the existing `FullPath` / `ExeName` App
+  Rules feature
+- no service architecture, tray, packaging, wildcard, regex, or process-picker
+  changes
+Outcome:
+- App Rule match type now writes through a dedicated converter with stable
+  shared-config values:
+  - `fullPath`
+  - `exeName`
+- config and IPC JSON readers now accept property names case-insensitively, so
+  a persisted `MatchType` property does not silently fall back to `FullPath`
+- missing `matchType` remains backward-compatible and defaults to `FullPath`
+- focused regression coverage now verifies:
+  - service save writes `matchType: "exeName"`
+  - service reload preserves `ExeName`
+  - UI local snapshot reload preserves `ExeName`
+  - a reloaded `ExeName` rule still generates sing-box `process_name`
+  - Pascal-cased `MatchType` config is accepted instead of losing the rule type
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests|FullyQualifiedName~TunnelFlow.Tests.Core.AppRuleMatcherTests|FullyQualifiedName~TunnelFlow.Tests.UI.AppRulesViewModelTests" --logger "console;verbosity=minimal"`
+
+## Step 87
+Add executable-name App Rules matching and a simple manual build/run script.
+Status: completed
+Scope:
+- App Rules `Add Exe` and match-type support only
+- preserve existing full-path App Rules behavior
+- no tray/minimize behavior, packaging changes, or service architecture redesign
+Outcome:
+- added `AppRuleMatchType` with:
+  - `FullPath`
+  - `ExeName`
+- existing persisted rules without `matchType` now continue as `FullPath`
+- added deterministic matching helper with:
+  - case-insensitive full-path matching
+  - case-insensitive executable-basename matching
+  - `FullPath` precedence over `ExeName`
+- sing-box TUN config now emits:
+  - `process_path` for full-path rules
+  - `process_name` for exe-name rules
+  - full-path rules before exe-name rules
+- App Rules UI now has:
+  - `Add Application`
+  - `Add Exe`
+  - compact `Path` / `Exe` rule type labels
+- `Add Exe` normalizes and validates input:
+  - trims whitespace
+  - rejects empty values
+  - rejects `\` and `/`
+  - appends `.exe` when omitted
+- added `scripts/build-and-run.ps1` for simple local build and UI launch
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Core.AppRuleMatcherTests|FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests|FullyQualifiedName~TunnelFlow.Tests.UI.AppRulesViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 86
 Audit and clean up stale current-release `0.1.0` references after the `0.2.0`
 version bump.

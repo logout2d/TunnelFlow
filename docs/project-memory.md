@@ -1,5 +1,101 @@
 # TunnelFlow project memory
 
+## App Rules executable-name persistence fix
+- Scope:
+  - narrow fix for `ExeName` App Rules surviving save/reload and continuing to
+    generate the correct sing-box rule after restart
+  - no service architecture, packaging, tray, wildcard, regex, or process-picker
+    changes
+- Changes made:
+  - added a dedicated `AppRuleMatchType` JSON converter:
+    - writes `fullPath` / `exeName`
+    - reads those values case-insensitively
+    - keeps numeric enum reads for compatibility
+  - made the `matchType` App Rule JSON property explicit
+  - made config and IPC JSON readers property-name case-insensitive so a saved
+    `MatchType` property does not silently deserialize as the default
+    `FullPath`
+  - kept legacy rules without `matchType` defaulting to `FullPath`
+  - added regression coverage for:
+    - `ExeName` save/load through `ConfigStore`
+    - UI local snapshot reload preserving `ExeName`
+    - generated sing-box config using `process_name` after reload
+    - Pascal-cased `MatchType` config preserving `ExeName`
+- Exact files changed in this step:
+  - `src/TunnelFlow.Core/Models/AppRule.cs`
+  - `src/TunnelFlow.Service/Configuration/ConfigStore.cs`
+  - `src/TunnelFlow.Service/Ipc/PipeServer.cs`
+  - `src/TunnelFlow.UI/Services/LocalConfigSnapshotLoader.cs`
+  - `src/TunnelFlow.UI/Services/ServiceClient.cs`
+  - `src/TunnelFlow.UI/ViewModels/MainViewModel.cs`
+  - `src/TunnelFlow.Tests/Service/ConfigStoreTests.cs`
+  - `src/TunnelFlow.Tests/UI/LocalConfigSnapshotLoaderTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.UI.LocalConfigSnapshotLoaderTests|FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests|FullyQualifiedName~TunnelFlow.Tests.Core.AppRuleMatcherTests|FullyQualifiedName~TunnelFlow.Tests.UI.AppRulesViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 57
+    - failed: 0
+    - skipped: 0
+
+## App Rules executable-name matching + manual build/run script
+- Scope:
+  - narrow App Rules feature patch only
+  - preserve the current service-based TUN-only runtime path
+  - no tray/minimize behavior, packaging changes, or runtime architecture changes
+- Changes made:
+  - added explicit App Rule match types:
+    - `FullPath`
+    - `ExeName`
+  - kept backward compatibility:
+    - missing persisted `matchType` defaults to `FullPath`
+    - existing full-path rules continue using `process_path`
+  - added `AppRuleMatcher` helper for deterministic local rule matching:
+    - case-insensitive full-path matching
+    - case-insensitive executable-basename matching
+    - `FullPath` wins over `ExeName`
+  - updated sing-box TUN config generation:
+    - `FullPath` rules emit `process_path`
+    - `ExeName` rules emit `process_name`
+    - full-path rules are ordered before exe-name rules for precedence
+  - updated App Rules UI:
+    - added `Add Exe` beside `Add Application`
+    - added a small exe-name dialog path
+    - normalized exe-name input by trimming and appending `.exe` when omitted
+    - rejected empty input and values containing `\` or `/`
+    - displayed a compact `Path` / `Exe` type label per rule
+  - added `scripts/build-and-run.ps1`:
+    - builds `TunnelFlow.sln`
+    - defaults to Debug and optionally accepts Release
+    - prints and launches the UI executable after a successful build
+- Exact files changed in this step:
+  - `src/TunnelFlow.Core/Models/AppRule.cs`
+  - `src/TunnelFlow.Core/Models/AppRuleMatcher.cs`
+  - `src/TunnelFlow.Service/OrchestratorService.cs`
+  - `src/TunnelFlow.Service/SingBox/SingBoxConfigBuilder.cs`
+  - `src/TunnelFlow.UI/ViewModels/AppRulesViewModel.cs`
+  - `src/TunnelFlow.UI/Views/AppRulesView.xaml`
+  - `src/TunnelFlow.Tests/Core/AppRuleMatcherTests.cs`
+  - `src/TunnelFlow.Tests/Service/ConfigStoreTests.cs`
+  - `src/TunnelFlow.Tests/Service/SingBoxConfigBuilderTests.cs`
+  - `src/TunnelFlow.Tests/UI/AppRulesViewModelTests.cs`
+  - `scripts/build-and-run.ps1`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.Core.AppRuleMatcherTests|FullyQualifiedName~TunnelFlow.Tests.Service.ConfigStoreTests|FullyQualifiedName~TunnelFlow.Tests.Service.SingBoxConfigBuilderTests|FullyQualifiedName~TunnelFlow.Tests.UI.AppRulesViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 46
+    - failed: 0
+    - skipped: 0
+
 ## Version-audit cleanup for stale current-release 0.1.0 references
 - Scope:
   - very small version-audit cleanup only
