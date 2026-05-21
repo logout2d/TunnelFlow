@@ -1,5 +1,73 @@
 # TunnelFlow project memory
 
+## Tray minimize behavior follow-up
+- Scope:
+  - very small follow-up to tray behavior only
+  - preserve service-based TUN runtime, App Rules logic, packaging, and Add Exe
+    autofocus behavior
+- Changes made:
+  - removed the main-window minimize-to-tray hook
+  - minimizing the main window now follows normal taskbar behavior
+  - close button still hides the app to tray unless tray `Exit` requested a real
+    shutdown
+  - tray `Open`, tray `Exit`, double-click restore, and tray resource disposal
+    remain unchanged
+  - updated focused tray lifecycle tests to cover only close-to-tray versus
+    explicit-exit state
+- Exact files changed in this step:
+  - `src/TunnelFlow.UI/MainWindow.xaml.cs`
+  - `src/TunnelFlow.UI/Services/TrayWindowLifecycle.cs`
+  - `src/TunnelFlow.Tests/UI/TrayWindowLifecycleTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.TrayWindowLifecycleTests" --logger "console;verbosity=minimal"`
+    - passed: 2
+    - failed: 0
+    - skipped: 0
+
+## WPF tray behavior and Add Exe autofocus polish
+- Scope:
+  - small WPF desktop-shell polish patch only
+  - preserve the current service-based TUN-only runtime path
+  - no packaging, runtime/service architecture, App Rules matching, wildcard, or
+    regex changes
+- Changes made:
+  - main window now owns one system tray icon backed by the app executable icon
+    when available
+  - tray menu actions:
+    - `Open` restores, shows, activates, and focuses the main window
+    - `Exit` requests a real application exit
+  - normal close button behavior now hides the app to tray
+  - minimizing the main window hides it to tray
+  - explicit tray exit reuses the existing graceful shutdown path before final
+    close when a tunnel is active
+  - tray icon/menu resources are disposed when the window actually closes
+  - Add Exe dialog now focuses the executable-name text box when the dialog
+    opens
+  - added focused logic tests for hide-to-tray versus explicit-exit behavior
+- Exact files changed in this step:
+  - `src/TunnelFlow.UI/MainWindow.xaml.cs`
+  - `src/TunnelFlow.UI/TunnelFlow.UI.csproj`
+  - `src/TunnelFlow.UI/Services/TrayWindowLifecycle.cs`
+  - `src/TunnelFlow.UI/ViewModels/AppRulesViewModel.cs`
+  - `src/TunnelFlow.Tests/UI/TrayWindowLifecycleTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.TrayWindowLifecycleTests|FullyQualifiedName~TunnelFlow.Tests.UI.AppRulesViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 12
+    - failed: 0
+    - skipped: 0
+
 ## App Rules executable-name persistence fix
 - Scope:
   - narrow fix for `ExeName` App Rules surviving save/reload and continuing to

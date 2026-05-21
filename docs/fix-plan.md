@@ -3,6 +3,48 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 90
+Adjust tray behavior so minimize stays on the taskbar while close hides to tray.
+Status: completed
+Scope:
+- very small follow-up to tray window behavior only
+- no runtime/service behavior, App Rules matching, or packaging changes
+Outcome:
+- removed the minimize-to-tray state-change hook
+- minimizing now uses normal WPF taskbar behavior
+- close button still hides the app to tray unless tray `Exit` requested a real
+  shutdown
+- tray `Open`, tray `Exit`, double-click restore, tray disposal, and Add Exe
+  autofocus behavior remain intact
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.TrayWindowLifecycleTests" --logger "console;verbosity=minimal"`
+
+## Step 89
+Add WPF desktop tray behavior and Add Exe autofocus polish.
+Status: completed
+Scope:
+- tray icon and tray-friendly main-window close/minimize behavior only
+- Add Exe dialog autofocus only
+- no runtime/service architecture, packaging, App Rules matching, wildcard, or
+  regex changes
+Outcome:
+- main window now creates a single system tray icon with:
+  - `Open`
+  - `Exit`
+  - double-click restore
+- ordinary window close now hides the app to tray instead of exiting
+- minimizing the main window hides it to tray
+- tray `Open` restores, shows the taskbar entry, activates, and focuses the
+  main window
+- tray `Exit` marks an explicit exit and reuses the existing graceful
+  application shutdown path
+- tray resources are disposed when the window actually closes
+- Add Exe dialog focuses its text box on load so typing can begin immediately
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.TrayWindowLifecycleTests|FullyQualifiedName~TunnelFlow.Tests.UI.AppRulesViewModelTests" --logger "console;verbosity=minimal"`
+
 ## Step 88
 Fix App Rules executable-name match type persistence across save/reload.
 Status: completed

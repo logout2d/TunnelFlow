@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -480,6 +481,11 @@ public partial class AppRulesViewModel : ObservableObject
                 input,
                 buttons
             }
+        };
+        window.Loaded += (_, _) =>
+        {
+            input.Focus();
+            Keyboard.Focus(input);
         };
 
         return window.ShowDialog() == true ? input.Text : null;
