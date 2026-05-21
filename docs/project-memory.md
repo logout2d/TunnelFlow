@@ -1,5 +1,55 @@
 # TunnelFlow project memory
 
+## Release preparation for v1.0.1
+- Scope:
+  - release-facing repo preparation only
+  - no runtime/service architecture, packaging-flow redesign, or product feature
+    changes
+- Changes made:
+  - bumped shared version metadata in `Directory.Build.props`:
+    - `Version = 1.0.1`
+    - `InformationalVersion = 1.0.1`
+    - `AssemblyVersion = 1.0.1.0`
+    - `FileVersion = 1.0.1.0`
+  - updated current package names in:
+    - `README.md`
+    - `QUICK_START.txt`
+  - added `docs/release-notes-v1.0.1.md` as the active public release-note
+    draft
+  - release notes cover:
+    - shared-config encryption migration for UI/service compatibility on
+      Windows 10 and Windows 11
+    - executable-name App Rules
+    - Add Exe dialog
+    - manual build-and-run script
+    - tray behavior and Add Exe autofocus
+    - TUN-only/service architecture, admin privilege, and third-party license
+      notes
+  - kept older version-specific release-note files as historical pointers to
+    the active v1.0.1 draft
+  - updated the focused About version assertion for `Version 1.0.1`
+- Exact files changed in this step:
+  - `Directory.Build.props`
+  - `README.md`
+  - `QUICK_START.txt`
+  - `docs/release-notes-v1.0.1.md`
+  - `docs/release-notes-v0.2.0.md`
+  - `docs/release-notes-v0.1.0.md`
+  - `src/TunnelFlow.Tests/UI/AboutViewModelTests.cs`
+  - `docs/project-memory.md`
+  - `docs/fix-plan.md`
+- Validation:
+  - `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+    - passed
+    - warnings: 0
+    - errors: 0
+  - `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+    - passed: 1
+    - failed: 0
+    - skipped: 0
+  - `git diff --check`
+    - no diff errors
+
 ## Tray minimize behavior follow-up
 - Scope:
   - very small follow-up to tray behavior only

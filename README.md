@@ -22,9 +22,9 @@ TunnelFlow is meant to keep the workflow simple:
 
 ## Downloads
 
-- `TunnelFlow-win-x64-v0.2.0.zip`
+- `TunnelFlow-win-x64-v1.0.1.zip`
   - Main Windows x64 package without a bundled `sing-box.exe`
-- `TunnelFlow-win-x64-with-core-v0.2.0.zip`
+- `TunnelFlow-win-x64-with-core-v1.0.1.zip`
   - Convenience Windows x64 package with a bundled `sing-box.exe` for easier
     first-time setup
 
@@ -44,8 +44,11 @@ licenses.
   profiles
 - Per-application tunneling rules with explicit `Proxy`, `Direct`, and `Block`
   behavior
+- Full-path and executable-name App Rules for apps with changing install paths
 - TUN-only runtime path built around Wintun and sing-box
 - Service-managed lifecycle for start, stop, restart, install, and repair flows
+- Shared config secret handling for UI/service access on Windows 10 and 11
+- System tray behavior with close-to-tray and explicit tray exit
 - Honest runtime state:
   - local runtime state is shown clearly
   - conservative warning evidence can be shown when runtime problems are

@@ -3,6 +3,36 @@
 ## Current stage
 Environment prepared for Codex-guided debugging and patching.
 
+## Step 91
+Prepare release-facing repo files for TunnelFlow v1.0.1.
+Status: completed
+Scope:
+- narrow release-preparation patch only
+- no runtime/service architecture, packaging-flow redesign, or product feature
+  changes
+Outcome:
+- bumped shared version metadata to:
+  - `Version=1.0.1`
+  - `InformationalVersion=1.0.1`
+  - `AssemblyVersion=1.0.1.0`
+  - `FileVersion=1.0.1.0`
+- updated current download/package names in:
+  - `README.md`
+  - `QUICK_START.txt`
+- added `docs/release-notes-v1.0.1.md` with public-facing notes for:
+  - shared-config encryption migration and Windows 10/11 compatibility
+  - executable-name App Rules and Add Exe flow
+  - manual build-and-run script
+  - tray behavior and Add Exe autofocus
+  - TUN-only/service architecture and admin/licensing notes
+- kept older version-specific release-note files as historical pointers to the
+  active v1.0.1 draft
+- updated the focused About version assertion for `1.0.1`
+Validation:
+- `dotnet build src\TunnelFlow.Tests\TunnelFlow.Tests.csproj`
+- `dotnet test src\TunnelFlow.Tests\TunnelFlow.Tests.csproj --no-build --filter "FullyQualifiedName~TunnelFlow.Tests.UI.AboutViewModelTests" --logger "console;verbosity=minimal"`
+- `git diff --check`
+
 ## Step 90
 Adjust tray behavior so minimize stays on the taskbar while close hides to tray.
 Status: completed
